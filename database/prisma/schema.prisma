@@ -1,0 +1,2537 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// User Roles and OrderStatus managed as String for compatibility
+
+model User {
+  id                      String    @id @default(uuid())
+  email                   String    @unique
+  passwordHash            String
+  fullName                String
+  role                    String    @default("BUYER")
+  avatarUrl               String?
+  phone                   String?
+  isVerified              Boolean   @default(false)
+  kycTier                 Int       @default(1) // Tier 1: Email Verified, Tier 2: ID Verified, Tier 3: Business Verified
+  verificationLevel       String    @default("BASIC") // BASIC, VERIFIED, ELITE
+  hasPaidAccess           Boolean   @default(false)
+  subscriptionTier        String    @default("NONE") // NONE, MONTHLY, YEARLY
+  accessExpiry            DateTime?
+  verificationCode        String?
+  verificationCodeExpires DateTime?
+  balance                 Decimal   @default(0.0)
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  country String? // User's country for activity broadcasts
+
+  // Social Login
+  googleId     String? @unique
+  appleId      String? @unique
+  authProvider String  @default("LOCAL") // LOCAL, GOOGLE, APPLE
+
+  // Security
+  failedLoginAttempts Int       @default(0)
+  lockoutUntil        DateTime?
+  isFlagged           Boolean   @default(false) // Admin: flagged for suspicious activity
+
+  // GDPR
+  deletionScheduledAt DateTime?
+  deletionReason      String?
+
+  // Nigerian Bank Details (for Paystack payouts)
+  bankName           String?
+  accountNumber      String?
+  accountName        String?
+  bankCode           String? // Nigerian bank code
+  paystackSubaccount String? // Paystack subaccount code
+
+  // Stripe Connect Account (for global payouts)
+  stripeConnectId             String? // Stripe Connect account ID
+  stripeConnectStatus         String? // pending, verified, failed
+  stripeConnectChargesEnabled Boolean @default(false)
+  stripeConnectPayoutsEnabled Boolean @default(false)
+
+  // Relations
+  addresses            Address[]
+  orders               Order[]                   @relation("BuyerOrders")
+  consolidatedPackages ConsolidatedPackage[]     @relation("BuyerConsolidatedPackages")
+  sellerOrders         Order[]                   @relation("SellerOrders")
+  store                Store?
+  reviewsWritten       Review[]                  @relation("UserReviews")
+  reviewsReceived      Review[]                  @relation("SellerReviews")
+  cart                 Cart?
+  buyerRequests        BuyerRequest[]
+  productInteractions  BuyerProductInteraction[]
+
+  // Group Buys
+  poolEntries PoolParticipant[]
+
+  // Disputes & Verification
+  disputesRaised       Dispute[]             @relation("BuyerDisputes")
+  disputesAgainst      Dispute[]             @relation("SellerDisputes")
+  verificationRequests VerificationRequest[]
+
+  // Chat
+  sentMessages     Message[]                 @relation("SentMessages")
+  receivedMessages Message[]                 @relation("ReceivedMessages")
+  conversations    ConversationParticipant[]
+  requestResponses RequestResponse[]         @relation("SellerRequestResponses")
+
+  // System
+  notifications         Notification[]
+  notificationPrefs     String                      @default("{\"email\":true,\"orderUpdates\":true,\"marketing\":false}")
+  pushSubscription      String?
+  buyerNotifications    BuyerNotification[]
+  followedSellers       SellerFollow[]              @relation("BuyerFollowsSeller")
+  sellerFollowers       SellerFollow[]              @relation("SellerHasFollowers")
+  analyticsEvents       MarketplaceAnalyticsEvent[]
+  createdPromoCampaigns PromoCampaign[]             @relation("CampaignCreator")
+  buyerProfiles         BuyerSellerProfile[]        @relation("BuyerSellerProfiles")
+  sellerBuyerProfiles   BuyerSellerProfile[]        @relation("SellerBuyerProfiles")
+  buyerPackingIssues    PackingIssue[]              @relation("BuyerPackingIssues")
+  sellerPackingIssues   PackingIssue[]              @relation("SellerPackingIssues")
+
+  // Review Engagement
+  reviewLikes        ReviewLike[]   @relation("UserReviewLikes")
+  reviewReports      ReviewReport[] @relation("ReviewReports")
+  adminReviewReports ReviewReport[] @relation("AdminReviewReports")
+
+  // Restock Notifications
+  restockNotifications RestockNotification[]
+
+  // Wishlist
+  wishlists Wishlist[] @relation("UserWishlist")
+
+  // Seller Performance
+  performanceRecords SellerPerformance[] @relation("SellerPerformanceRecords")
+  sellerInsights     SellerInsight[]     @relation("SellerInsights")
+
+  // Financials
+  wallet             Wallet?
+  payouts            Payout[]
+  transactions       Transaction[]
+  systemLogs         SystemLog[]
+  subscriptions      Subscription[]
+  rewardGrants       RewardGrant[]
+  productOffers      ProductOffer[]      @relation("BuyerProductOffers")
+  sellerOffers       ProductOffer[]      @relation("SellerProductOffers")
+  productQuestions   ProductQuestion[]
+  productComparisons ProductComparison[]
+
+  // Promo Codes
+  promoCodes PromoCode[]
+
+  // Nigerian Payment Relations
+  buyerPayments   Payment[]        @relation("BuyerPayments")
+  sellerPayments  Payment[]        @relation("SellerPayments")
+  paymentDisputes PaymentDispute[]
+
+  // Flash Deals
+  flashDeals FlashDeal[]
+
+  // Trial Subscription Fields
+  trialStartDate      DateTime? // When the trial started
+  trialEndDate        DateTime? // When the trial expires (6 months from start)
+  trialStatus         String    @default("NONE") // NONE, ACTIVE, EXPIRED, CONVERTED, CANCELLED
+  isTrialActive       Boolean   @default(false) // Quick check if trial is currently active
+  trialConversionDate DateTime? // When trial was converted to paid
+  trialPlan           String? // Plan user had during trial (MONTHLY, YEARLY)
+  trialPromoCode      String? // Promo code used for trial signup
+
+  feedComments         FeedComment[]     @relation("UserFeedComments")
+  feedCommentsReceived FeedComment[]     @relation("FeedCommentSeller")
+  feedPosts            FeedPost[]        @relation("SellerFeedPosts")
+  likes                Like[]            @relation("UserLikes")
+  events               EngagementEvent[] @relation("UserEvents")
+
+  // Template Marketplace
+  templatePurchases TemplatePurchase[]
+  ownedTemplates    SellerTemplate[]
+
+  // Delivery OS
+  courierProfile CourierProfile?
+
+  // Sessions & WebAuthn
+  userSessions        UserSession[]
+  webAuthnCredentials WebAuthnCredential[]
+
+  marketplaceOrders   MarketplaceOrder[] @relation("MarketplaceOrderBuyer")
+  fulfillmentAsBuyer  FulfillmentOrder[] @relation("FulfillmentBuyer")
+  fulfillmentAsSeller FulfillmentOrder[] @relation("FulfillmentSeller")
+
+  @@index([email])
+}
+
+model Address {
+  id                String             @id @default(uuid())
+  userId            String
+  user              User               @relation(fields: [userId], references: [id])
+  type              String             @default("SHIPPING") // SHIPPING, BILLING
+  street            String
+  city              String
+  state             String
+  postalCode        String
+  country           String
+  isDefault         Boolean            @default(false)
+  marketplaceOrders MarketplaceOrder[] @relation("MarketplaceOrderAddress")
+}
+
+model Store {
+  id       String @id @default(uuid())
+  sellerId String @unique
+  user     User   @relation(fields: [sellerId], references: [id])
+
+  storeName   String
+  category    String?
+  description String?
+  logoUrl     String?
+  bannerUrl   String?
+  country     String
+
+  isVerified Boolean @default(false)
+  kycTier    Int     @default(1)
+  trustScore Int     @default(50) // 0-100
+
+  // Store Approval Workflow
+  approvalStatus      String    @default("PENDING") // PENDING, APPROVED, REJECTED, SUSPENDED
+  approvedAt          DateTime? // When store was approved
+  rejectionReason     String? // Why store was rejected
+  complianceScore     Int? // Compliance check score (0-100)
+  lastComplianceCheck DateTime? // When last compliance check was done
+
+  // Performance Score (0-100) - composite of rating, trust, metrics
+  performanceScore Int @default(50)
+
+  // Premium Features
+  isPremium       Boolean @default(false)
+  portfolioLayout String?
+  portfolioSlug   String? @unique
+  portfolioConfig String?
+  brandStory      String?
+
+  // Store DNA Engine
+  storeDna          String?
+  storeDnaDraft     String?
+  storeDnaVersion   Int       @default(1)
+  storeDnaUpdatedAt DateTime?
+
+  // Ratings
+  averageRating Float @default(0.0)
+  totalReviews  Int   @default(0)
+
+  // Fulfillment metrics
+  defaultDeliveryDays Int     @default(5)
+  onTimeDeliveryRate  Decimal @default(0.0)
+  avgResponseMinutes  Int     @default(45)
+
+  // Business Intelligence
+  totalSales            Decimal @default(0)
+  totalOrders           Int     @default(0)
+  repeatBuyerRate       Decimal @default(0)
+  topSellingProductId   String?
+  topSellingProductName String?
+
+  // Alerts
+  hasPendingAlerts Boolean   @default(false)
+  alertMessage     String?
+  lastAlertAt      DateTime?
+
+  // Tier-based benefits
+  sellerTier   String      @default("STANDARD") // STANDARD, PREMIUM, ELITE
+  sellerPlanId String?
+  sellerPlan   SellerPlan? @relation(fields: [sellerPlanId], references: [id])
+
+  // Seller-configured plan benefits and payout rails
+  enabledBenefits       String?
+  bankName              String?
+  accountNumber         String?
+  accountName           String?
+  bankCode              String?
+  paystackRecipientCode String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products     Product[]
+  integrations StoreIntegration[]
+  planBenefits SellerPlanBenefit[]
+  Conversation Conversation[]
+
+  // Template Marketplace
+  appliedTemplates SellerTemplate[]
+
+  @@index([sellerId])
+  @@index([performanceScore])
+  @@index([hasPendingAlerts])
+}
+
+model BuyerRequest {
+  id                 String    @id @default(uuid())
+  buyerId            String    @map("buyer_id")
+  buyer              User      @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  productName        String    @map("product_name")
+  description        String
+  budget             Decimal
+  preferredBudgetMax Decimal?
+  quantity           Int       @default(1)
+  urgency            String    @default("STANDARD")
+  category           String?
+  location           String?
+  neededBy           DateTime?
+  isBulkRequest      Boolean   @default(false)
+  demandScore        Int       @default(0)
+  status             String    @default("OPEN") // OPEN, RESPONDED, QUOTED, ACCEPTED
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  responses RequestResponse[]
+
+  @@index([buyerId, createdAt])
+  @@index([status, createdAt])
+  @@map("buyer_requests")
+}
+
+model RequestResponse {
+  id                    String       @id @default(uuid())
+  requestId             String       @map("request_id")
+  request               BuyerRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  sellerId              String       @map("seller_id")
+  seller                User         @relation("SellerRequestResponses", fields: [sellerId], references: [id], onDelete: Cascade)
+  responseType          String       @map("response_type") // ACCEPT, DECLINE, QUOTE
+  message               String?
+  quotedPrice           Decimal?     @map("quoted_price")
+  alternativeSuggestion String?
+  estimatedDeliveryDays Int?
+  createdAt             DateTime     @default(now()) @map("created_at")
+  updatedAt             DateTime     @updatedAt @map("updated_at")
+
+  @@unique([requestId, sellerId])
+  @@index([requestId, createdAt])
+  @@index([sellerId, createdAt])
+  @@map("request_responses")
+}
+
+// External Platform Integration (Shopify, WooCommerce)
+model StoreIntegration {
+  id          String    @id @default(uuid())
+  store       Store     @relation(fields: [storeId], references: [id])
+  storeId     String
+  platform    String // "shopify" or "woocommerce"
+  credentials String // Encrypted JSON: API keys, tokens
+  status      String    @default("pending") // pending, connected, error
+  lastSync    DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([storeId])
+}
+
+model Product {
+  id      String @id @default(uuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id])
+
+  title       String
+  description String?
+  price       Decimal
+  stock       Int
+
+  // Low stock threshold (default 5)
+  lowStockThreshold Int @default(5)
+
+  category              String
+  subCategory           String?
+  tags                  String?
+  sku                   String?
+  hsCode                String?
+  weightKg              Float?
+  originHub             String?
+  estimatedDeliveryDays Int     @default(5)
+
+  // Product Grouping
+  productGroupId  String?
+  normalizedTitle String?
+
+  // Flash Sales
+  isFlashSale      Boolean   @default(false)
+  flashPrice       Decimal?
+  flashEndsAt      DateTime?
+  earlyAccessTiers String?
+  exclusiveTier    String?
+
+  // Urgency & Boost
+  urgencyLevel           String    @default("NORMAL")
+  autoBoostExpiresAt     DateTime?
+  isUrgencyBannerVisible Boolean   @default(false)
+
+  viewCount  Int     @default(0)
+  soldCount  Int     @default(0)
+  rating     Float   @default(0.0)
+  isArchived Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  images            ProductImage[]
+  videos            ProductVideo[]
+  options           ProductOption[]
+  orderItems        OrderItem[]
+  cartItems         CartItem[]
+  feedPosts         FeedPost[]
+  events            EngagementEvent[]         @relation("ProductEvents")
+  pool              Pool?
+  reviews           Review[]
+  offers            ProductOffer[]
+  questions         ProductQuestion[]
+  comparisons       ProductComparison[]       @relation("ComparisonPrimary")
+  comparedIn        ProductComparison[]       @relation("ComparisonCompared")
+  modelAssets       ProductModelAsset[]
+  pageViews         PageView[]
+  buyerInteractions BuyerProductInteraction[]
+
+  // Promo Codes
+  promoCodes PromoCode[]
+
+  // Flash Deals
+  flashDeals FlashDeal[]
+
+  // Messages
+  messages Message[]
+
+  // Wishlist reference (reverse)
+  wishlistedBy Wishlist[] @relation("ProductWishlists")
+
+  // Urgency tracking
+  urgency ProductUrgency?
+
+  // Restock notifications
+  restockNotifications RestockNotification[] @relation("ProductRestockNotifications")
+
+  fulfillmentItems      FulfillmentItem[]      @relation("FulfillmentItemProduct")
+  inventoryReservations InventoryReservation[] @relation("InventoryReservationProduct")
+
+  @@index([category, createdAt])
+  @@index([category, price])
+  @@index([storeId])
+  @@index([title])
+  @@index([sku])
+  @@index([productGroupId])
+  @@index([normalizedTitle])
+  @@index([urgencyLevel])
+  @@index([isUrgencyBannerVisible])
+}
+
+model ProductImage {
+  id        String  @id @default(uuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  altText   String?
+  isPrimary Boolean @default(false)
+  position  Int     @default(0)
+
+  @@index([productId])
+}
+
+model ProductVideo {
+  id           String   @id @default(uuid())
+  productId    String
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  videoUrl     String
+  thumbnailUrl String?
+  caption      String?
+  viewCount    Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  @@index([productId])
+}
+
+model ProductOption {
+  id        String  @id @default(uuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name      String // e.g. "Color", "Size"
+  value     String // e.g. "Midnight Blue", "XL"
+  priceAdj  Decimal @default(0.0) // Extra cost for this option
+
+  @@index([productId])
+}
+
+model ProductOffer {
+  id          String    @id @default(uuid())
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  buyerId     String
+  buyer       User      @relation("BuyerProductOffers", fields: [buyerId], references: [id], onDelete: Cascade)
+  sellerId    String
+  seller      User      @relation("SellerProductOffers", fields: [sellerId], references: [id], onDelete: Cascade)
+  offerAmount Decimal
+  quantity    Int       @default(1)
+  message     String?
+  status      String    @default("PENDING") // PENDING, ACCEPTED, DECLINED, EXPIRED, CANCELLED
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([productId, createdAt])
+  @@index([buyerId, createdAt])
+  @@index([sellerId, status])
+}
+
+model ProductQuestion {
+  id           String    @id @default(uuid())
+  productId    String
+  product      Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question     String
+  answer       String?
+  answeredById String?
+  answeredAt   DateTime?
+  status       String    @default("OPEN") // OPEN, ANSWERED, HIDDEN
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([productId, createdAt])
+  @@index([userId, createdAt])
+  @@index([status])
+}
+
+model ProductComparison {
+  id                String   @id @default(uuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId         String
+  product           Product  @relation("ComparisonPrimary", fields: [productId], references: [id], onDelete: Cascade)
+  comparedProductId String
+  comparedProduct   Product  @relation("ComparisonCompared", fields: [comparedProductId], references: [id], onDelete: Cascade)
+  metadata          String?
+  createdAt         DateTime @default(now())
+
+  @@unique([userId, productId, comparedProductId])
+  @@index([userId, createdAt])
+}
+
+model ProductModelAsset {
+  id           String   @id @default(uuid())
+  productId    String
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  assetUrl     String
+  format       String   @default("GLB")
+  thumbnailUrl String?
+  fileSizeKb   Int?
+  status       String   @default("ACTIVE")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([productId])
+  @@index([status])
+}
+
+model Pool {
+  id        String  @id @default(uuid())
+  productId String  @unique
+  product   Product @relation(fields: [productId], references: [id])
+
+  title       String // e.g. "Community Buy #102"
+  targetSize  Int // e.g. 20 members
+  currentSize Int      @default(0)
+  minBuyIn    Decimal
+  expiresAt   DateTime
+
+  status String @default("ACTIVE") // ACTIVE, FILLED, COMPLETED, EXPIRED, CANCELLED
+
+  participants PoolParticipant[]
+  createdAt    DateTime          @default(now())
+}
+
+model PoolParticipant {
+  id       String   @id @default(uuid())
+  poolId   String
+  pool     Pool     @relation(fields: [poolId], references: [id])
+  userId   String
+  user     User     @relation(fields: [userId], references: [id])
+  joinedAt DateTime @default(now())
+  status   String   @default("COMMITTED") // COMMITTED, PAID, REFUNDED
+
+  @@unique([poolId, userId])
+}
+
+model Order {
+  id      String @id @default(uuid())
+  buyerId String
+  buyer   User   @relation("BuyerOrders", fields: [buyerId], references: [id])
+
+  // Multi-seller parent/child relation
+  parentOrderId String?
+  parentOrder   Order?  @relation("SubOrders", fields: [parentOrderId], references: [id])
+  subOrders     Order[] @relation("SubOrders")
+
+  // Financials
+  totalAmount      Decimal
+  currency         String   @default("USD")
+  shippingCost     Decimal
+  taxAmount        Decimal
+  commissionRate   Float    @default(0.10)
+  commissionAmount Decimal?
+  sellerAmount     Decimal?
+
+  // Fulfillment Status (order lifecycle)
+  status String @default("PENDING") // PENDING, PAID, PACKED, CONFIRMED, SHIPPED, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED, COMPLETED, CANCELLED
+
+  // Payment/Escrow Status (fund lifecycle - separate from fulfillment)
+  paymentStatus String @default("PENDING") // PENDING, HELD, RELEASED, DISPUTED, REFUNDED
+
+  paymentMethod   String?
+  stripePaymentId String?
+  proofUrl        String?
+  escrowId        String?
+  orderType       String  @default("PHYSICAL")
+  idempotencyKey  String? @unique
+
+  // Seller Reference
+  sellerId                String?
+  seller                  User?     @relation("SellerOrders", fields: [sellerId], references: [id])
+  packingSerial           String?   @unique
+  packingConfirmationCode String?
+  packedAt                DateTime?
+  packageConfirmedAt      DateTime?
+  readyToShipAt           DateTime?
+  responseDueAt           DateTime?
+  escalatedAt             DateTime?
+
+  // Delivery Intelligence
+  estimatedDeliveryDate    DateTime?
+  deliveryConfirmationCode String?
+  deliveryConfirmedAt      DateTime?
+  lastTrackingUpdateAt     DateTime?
+  isDeliveryDelayed        Boolean   @default(false)
+  delayReason              String?
+
+  // Escrow Timing
+  deliveredAt      DateTime?
+  escrowReleaseAt  DateTime?
+  escrowReleasedAt DateTime?
+
+  // Consolidation
+  isConsolidated        Boolean              @default(false)
+  hubLocation           String?
+  consolidatedPackageId String?
+  consolidatedPackage   ConsolidatedPackage? @relation(fields: [consolidatedPackageId], references: [id], onDelete: SetNull)
+
+  // Shipping
+  shippingAddressId  String?
+  shippingAddress    String?
+  trackingNumber     String?
+  carrier            String?
+  carrierService     String?
+  originCountry      String?
+  destinationCountry String?
+
+  items              OrderItem[]
+  trackingEvents     TrackingEvent[]
+  dispute            Dispute?
+  paymentProof       PaymentProof?
+  escrowPayment      EscrowPayment?
+  payments           Payment[]
+  buyerNotifications BuyerNotification[]
+  packingResponse    PackingResponse?
+  packingIssue       PackingIssue?
+  messages           Message[]
+  deliveryAssignment DeliveryAssignment?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  expiresAt          DateTime? // For PENDING order checkout expiration
+
+  @@index([buyerId, createdAt])
+  @@index([status, createdAt])
+  @@index([paymentStatus])
+  @@index([escrowReleaseAt])
+  @@index([sellerId])
+  @@index([estimatedDeliveryDate])
+  @@index([isDeliveryDelayed])
+}
+
+// Payment Proof for Direct Bank Transfers
+model PaymentProof {
+  id      String @id @default(uuid())
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id])
+
+  // Buyer Information
+  buyerId   String
+  buyerName String
+
+  // Seller Information (assigned seller)
+  sellerId   String
+  sellerName String
+
+  // Payment Details
+  amount         Decimal
+  currency       String  @default("USD")
+  bankName       String
+  accountNumber  String? // Last 4 digits only for security
+  transactionRef String // Buyer\'s transaction reference
+
+  // Proof Image
+  proofImageUrl String
+  proofImageId  String? // CDN/Cloud storage ID
+
+  // Status Workflow
+  status String @default("PENDING") // PENDING, SUBMITTED, UNDER_REVIEW, VERIFIED, REJECTED, COMPLETED
+
+  // Seller Response
+  sellerResponse   String? // Notes from seller
+  sellerVerifiedAt DateTime?
+
+  // Admin Review
+  adminReviewedAt DateTime?
+  adminNotes      String?
+
+  // Receipt
+  receiptUrl         String?
+  receiptNumber      String?   @unique
+  receiptGeneratedAt DateTime?
+
+  // Audit Trail
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Notifications
+  buyerNotified  Boolean @default(false)
+  sellerNotified Boolean @default(false)
+  adminNotified  Boolean @default(false)
+
+  // Audit Logs Relation
+  auditLogs PaymentAuditLog[]
+
+  @@index([buyerId])
+  @@index([sellerId])
+  @@index([status])
+}
+
+// Payment Audit Log for complete audit trail
+model PaymentAuditLog {
+  id             String       @id @default(uuid())
+  paymentProofId String
+  paymentProof   PaymentProof @relation(fields: [paymentProofId], references: [id])
+
+  // User who performed the action
+  userId   String
+  userName String
+  userRole String // BUYER, SELLER, ADMIN
+
+  // Action details
+  action         String // STATUS_CHANGE, SUBMITTED, VERIFIED, REJECTED, RECEIPT_SENT, etc.
+  previousStatus String?
+  newStatus      String?
+  notes          String?
+
+  // Tracking
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  @@index([paymentProofId])
+  @@index([userId])
+  @@index([action])
+}
+
+model OrderItem {
+  id        String  @id @default(uuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id])
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  quantity    Int
+  priceAtTime Decimal
+  variants    String? // JSON or text: "Size: XL, Color: Blue"
+
+  // Status per item (for multi-seller orders)
+  status String @default("PENDING")
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model Dispute {
+  id      String @id @default(uuid())
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id])
+
+  buyerId String
+  buyer   User   @relation("BuyerDisputes", fields: [buyerId], references: [id])
+
+  sellerId String
+  seller   User   @relation("SellerDisputes", fields: [sellerId], references: [id])
+
+  reason       String // WRONG_ITEM, DAMAGED, NOT_AS_DESCRIBED, NOT_RECEIVED, OTHER
+  description  String
+  evidenceUrls String // JSON array
+  status       String  @default("OPEN") // OPEN, SELLER_RESPONSE, MEDIATION, RESOLVED_REFUNDED, RESOLVED_REPLACEMENT, RESOLVED_REJECTED
+  resolution   String?
+  adminNotes   String?
+  adminId      String?
+
+  sellerResponse   String? // SELLER_REFUND_APPROVED, SELLER_REPLACEMENT, SELLER_NEED_PROOF, SELLER_REJECTED
+  sellerResponseAt DateTime?
+  buyerResponse    String? // BUYER_ACCEPT, BUYER_REJECT, BUYER_ESCALATE
+
+  responseDeadline DateTime? // 48 hours from creation
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  messages DisputeMessage[]
+
+  @@index([buyerId])
+  @@index([sellerId])
+  @@index([status])
+}
+
+model DisputeMessage {
+  id        String  @id @default(uuid())
+  disputeId String
+  dispute   Dispute @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+
+  senderId   String
+  senderType String // BUYER, SELLER, ADMIN
+
+  message     String
+  evidenceUrl String? // Optional image evidence
+
+  createdAt DateTime @default(now())
+
+  @@index([disputeId])
+}
+
+model PackingIssue {
+  id                     String    @id @default(uuid())
+  orderId                String    @unique
+  order                  Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  buyerId                String
+  buyer                  User      @relation("BuyerPackingIssues", fields: [buyerId], references: [id], onDelete: Cascade)
+  sellerId               String
+  seller                 User      @relation("SellerPackingIssues", fields: [sellerId], references: [id], onDelete: Cascade)
+  issueType              String
+  buyerMessage           String?
+  status                 String    @default("OPEN") // OPEN, SELLER_RESPONDED, ESCALATED, CLOSED
+  responseDeadline       DateTime?
+  sellerRespondedAt      DateTime?
+  escalatedAt            DateTime?
+  responseLatencyMinutes Int?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  @@index([sellerId, status])
+  @@index([buyerId, createdAt])
+  @@index([responseDeadline])
+}
+
+model VerificationRequest {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  type         String // KYC (Buyer/Personal), KYB (Business/Store)
+  status       String  @default("PENDING") // PENDING, APPROVED, REJECTED
+  idType       String? // PASSPORT, DRIVERS_LICENSE, NATIONAL_ID
+  idNumber     String?
+  documentUrls String // JSON array of uploaded docs
+
+  adminNotes String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+model Review {
+  id        String  @id @default(uuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  userId    String
+  user      User    @relation("UserReviews", fields: [userId], references: [id])
+  sellerId  String
+  seller    User    @relation("SellerReviews", fields: [sellerId], references: [id])
+
+  rating     Int
+  comment    String?
+  images     String
+  isFeatured Boolean   @default(false)
+  reply      String?
+  repliedAt  DateTime?
+
+  // Engagement
+  helpfulCount Int     @default(0)
+  reportCount  Int     @default(0)
+  isTopReview  Boolean @default(false)
+
+  // Verification
+  verifiedPurchase Boolean @default(true)
+  orderId          String?
+  transactionHash  String?
+
+  // Relations
+  likes   ReviewLike[]   @relation("ReviewLikes")
+  reports ReviewReport[] @relation("ReviewReportsOnReview")
+
+  createdAt DateTime @default(now())
+
+  @@index([productId])
+  @@index([userId])
+  @@index([sellerId])
+  @@index([rating])
+  @@index([isTopReview])
+  @@index([createdAt])
+}
+
+// Messaging System
+model Conversation {
+  id        String   @id @default(uuid())
+  storeId   String?
+  store     Store?   @relation(fields: [storeId], references: [id])
+  type      String   @default("DIRECT") // DIRECT, GROUP, SUPPORT
+  status    String   @default("ACTIVE") // ACTIVE, ARCHIVED, CLOSED
+  context   String? // GENERAL, ORDER, PRODUCT
+  contextId String? // Order ID or Product ID related to chat
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  participants ConversationParticipant[]
+  messages     Message[]
+}
+
+model ConversationParticipant {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  userId         String
+  user           User         @relation(fields: [userId], references: [id])
+
+  lastReadAt DateTime @default(now())
+
+  @@unique([conversationId, userId])
+  @@index([userId, lastReadAt])
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+
+  senderId String
+  sender   User   @relation("SentMessages", fields: [senderId], references: [id])
+
+  recipientId String? // Optional direct reference for quick lookup
+  recipient   User?   @relation("ReceivedMessages", fields: [recipientId], references: [id])
+
+  // Context: linked product and/or order
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id])
+  orderId   String?
+  order     Order?   @relation(fields: [orderId], references: [id])
+
+  content       String
+  attachmentUrl String?
+  metadata      String?
+  feedComment   FeedComment? @relation("FeedCommentMessage")
+
+  isSystemMessage     Boolean  @default(false)
+  isAutoReply         Boolean  @default(false)
+  responseTimeMinutes Int?
+  createdAt           DateTime @default(now())
+
+  @@index([conversationId, createdAt])
+  @@index([recipientId, createdAt])
+}
+
+// Quick Reply Templates for Sellers
+model QuickReplyTemplate {
+  id       String @id @default(uuid())
+  sellerId String
+  title    String // Short title shown in quick reply menu
+  content  String // The actual message template
+
+  // Category for organizing templates
+  category String @default("general") // general, shipping, payment, thanks, custom
+
+  isActive   Boolean  @default(true)
+  usageCount Int      @default(0) // Track how often used
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([sellerId])
+  @@index([category])
+}
+
+model Notification {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  title   String
+  body    String
+  type    String // INFO, ORDER, POOL, ALERT
+  isRead  Boolean @default(false)
+  linkUrl String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+}
+
+model SellerFollow {
+  id        String   @id @default(uuid())
+  buyerId   String
+  buyer     User     @relation("BuyerFollowsSeller", fields: [buyerId], references: [id], onDelete: Cascade)
+  sellerId  String
+  seller    User     @relation("SellerHasFollowers", fields: [sellerId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([buyerId, sellerId])
+  @@index([sellerId, createdAt])
+}
+
+model BuyerProductInteraction {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  interactionType String // VIEW, RECENT_VIEW, CART, PURCHASE, WISHLIST
+  weight          Int      @default(1)
+  source          String?
+  metadata        String?
+  createdAt       DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([productId, createdAt])
+  @@index([interactionType, createdAt])
+}
+
+// Buyer Notifications for Seller Dashboard
+model BuyerNotification {
+  id      String  @id @default(uuid())
+  userId  String // Buyer ID
+  user    User    @relation(fields: [userId], references: [id])
+  orderId String? // Nullable for non-order-specific alerts
+  order   Order?  @relation(fields: [orderId], references: [id])
+
+  message     String // Notification text
+  type        String // order_due, delivery_update, product_availability
+  channel     String    @default("in_app") // in_app, email, sms, push
+  readStatus  Boolean   @default(false)
+  isVisible   Boolean   @default(true)
+  deliveredAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([userId, readStatus])
+  @@index([orderId])
+  @@index([type])
+}
+
+// Financial Ledger
+model Transaction {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  type        String // DEPOSIT, WITHDRAWAL, PURCHASE, REFUND, ESCROW_RELEASE, SELLER_EARNING
+  amount      Decimal
+  currency    String   @default("USD")
+  status      String   @default("COMPLETED") // PENDING, COMPLETED, FAILED
+  referenceId String? // OrderID or PayoutID
+  description String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([referenceId])
+}
+
+// Multi-coin wallet account. GONG is the real-value base coin (1 GONG = $1).
+model Wallet {
+  id            String   @id @default(uuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gongAvailable Decimal  @default(0)
+  gongHeld      Decimal  @default(0)
+  gxAvailable   Decimal  @default(0)
+  gxHeld        Decimal  @default(0)
+  xpAvailable   Decimal  @default(0)
+  xpHeld        Decimal  @default(0)
+  status        String   @default("ACTIVE") // ACTIVE, FROZEN, CLOSED
+  freezeReason  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  ledgerEntries WalletLedgerEntry[]
+  holds         WalletHold[]
+
+  @@index([status])
+}
+
+model WalletLedgerEntry {
+  id             String   @id @default(uuid())
+  walletId       String
+  wallet         Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  userId         String
+  coin           String // GONG, GX, XP
+  direction      String // CREDIT, DEBIT, HOLD, RELEASE, CONVERT_IN, CONVERT_OUT
+  amount         Decimal
+  balanceAfter   Decimal
+  status         String   @default("COMPLETED") // PENDING, COMPLETED, FAILED, REVERSED
+  referenceType  String? // ORDER, PAYMENT, PAYOUT, REWARD, CONVERSION, ADMIN
+  referenceId    String?
+  idempotencyKey String?
+  metadata       String?
+  description    String?
+  createdAt      DateTime @default(now())
+
+  @@unique([idempotencyKey])
+  @@index([walletId, createdAt])
+  @@index([userId, createdAt])
+  @@index([coin, createdAt])
+  @@index([referenceType, referenceId])
+}
+
+model WalletHold {
+  id             String    @id @default(uuid())
+  walletId       String
+  wallet         Wallet    @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  userId         String
+  coin           String    @default("GONG")
+  amount         Decimal
+  reason         String // ESCROW, WITHDRAWAL, DISPUTE, BOOST
+  status         String    @default("HELD") // HELD, RELEASED, REFUNDED, CANCELLED, DISPUTED
+  referenceType  String?
+  referenceId    String?
+  idempotencyKey String?
+  releaseAt      DateTime?
+  releasedAt     DateTime?
+  metadata       String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([idempotencyKey])
+  @@index([userId, status])
+  @@index([referenceType, referenceId])
+  @@index([releaseAt])
+}
+
+model CoinConversionRate {
+  id          String   @id @default(uuid())
+  fromCoin    String
+  toCoin      String
+  rate        Decimal
+  minAmount   Decimal  @default(0)
+  maxAmount   Decimal?
+  isActive    Boolean  @default(true)
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([fromCoin, toCoin])
+  @@index([isActive])
+}
+
+model RewardRule {
+  id             String   @id @default(uuid())
+  eventType      String   @unique // PURCHASE, REVIEW, REFERRAL, DAILY_LOGIN, WISHLIST, PROFILE_COMPLETE, SELLER_RESPONSE, REPEAT_PURCHASE
+  xpAmount       Decimal  @default(0)
+  gxAmount       Decimal  @default(0)
+  discountAmount Decimal  @default(0)
+  cooldownHours  Int      @default(0)
+  isActive       Boolean  @default(true)
+  metadata       String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  grants RewardGrant[]
+}
+
+model RewardGrant {
+  id            String      @id @default(uuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ruleId        String?
+  rule          RewardRule? @relation(fields: [ruleId], references: [id])
+  eventType     String
+  eventKey      String
+  xpAmount      Decimal     @default(0)
+  gxAmount      Decimal     @default(0)
+  status        String      @default("GRANTED") // GRANTED, REVERSED
+  referenceType String?
+  referenceId   String?
+  metadata      String?
+  createdAt     DateTime    @default(now())
+
+  @@unique([eventKey])
+  @@index([userId, createdAt])
+  @@index([eventType, createdAt])
+}
+
+model Payout {
+  id                 String    @id @default(uuid())
+  sellerId           String
+  seller             User      @relation(fields: [sellerId], references: [id])
+  amount             Decimal
+  currency           String    @default("USD")
+  status             String    @default("PENDING") // PENDING, PROCESSING, PAID, FAILED
+  method             String // BANK_TRANSFER, CRYPTO, STRIPE_CONNECT, PAYSTACK_TRANSFER
+  paystackTransferId String? // Paystack transfer reference
+  adminNote          String? // Admin notes for rejection/approval
+  createdAt          DateTime  @default(now())
+  processedAt        DateTime?
+}
+
+model Cart {
+  id        String     @id @default(uuid())
+  userId    String     @unique
+  user      User       @relation(fields: [userId], references: [id])
+  items     CartItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model CartItem {
+  id        String  @id @default(uuid())
+  cartId    String
+  cart      Cart    @relation(fields: [cartId], references: [id])
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Int     @default(1)
+  variants  String? // JSON or text: "Size: XL"
+
+  @@index([cartId])
+  @@index([productId])
+}
+
+model TrackingEvent {
+  id          String   @id @default(uuid())
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id])
+  status      String // e.g., "Hub Received", "Customs Cleared", "Out for Delivery"
+  location    String? // e.g., "Dubai Hub", "London Heathrow"
+  description String?
+  createdAt   DateTime @default(now())
+
+  @@index([orderId])
+}
+
+model SystemLog {
+  id        String   @id @default(uuid())
+  adminId   String
+  admin     User     @relation(fields: [adminId], references: [id])
+  action    String // e.g. "RESOLVE_DISPUTE", "PROCESS_PAYOUT"
+  targetId  String // ID of the object being acted on (Order, User, Payout)
+  details   String? // JSON string or description
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@index([adminId])
+}
+
+model PageView {
+  id        String   @id @default(uuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  viewerId  String? // User ID if logged in
+  ipHash    String? // Anonymized IP for unique view counting
+  createdAt DateTime @default(now())
+
+  @@index([productId])
+  @@index([createdAt])
+}
+
+model Subscription {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  tier       String // MONTHLY, YEARLY
+  status     String   @default("ACTIVE") // ACTIVE, EXPIRED, CANCELLED
+  startDate  DateTime @default(now())
+  endDate    DateTime
+  paymentRef String?
+  amount     Decimal
+  currency   String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model SellerPlan {
+  id               String   @id @default(uuid())
+  name             String   @unique // Basic, Plus, Pro, Elite, Enterprise
+  displayName      String
+  monthlyPriceGong Decimal  @default(0)
+  commissionRate   Float    @default(0.10)
+  visibilityWeight Int      @default(0)
+  analyticsLevel   String   @default("BASIC")
+  prioritySupport  Boolean  @default(false)
+  includedBoosts   Int      @default(0)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  stores   Store[]
+  benefits SellerPlanBenefit[]
+  invoices SubscriptionInvoice[]
+}
+
+model SellerPlanBenefit {
+  id              String     @id @default(uuid())
+  sellerPlanId    String
+  sellerPlan      SellerPlan @relation(fields: [sellerPlanId], references: [id], onDelete: Cascade)
+  storeId         String?
+  store           Store?     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  benefitType     String // COMMISSION_DISCOUNT, PRODUCT_BOOST, FEATURED_LISTING, BUYER_DISCOUNT, ANALYTICS
+  value           Decimal    @default(0)
+  isSellerEnabled Boolean    @default(false)
+  startsAt        DateTime   @default(now())
+  endsAt          DateTime?
+  metadata        String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@index([sellerPlanId])
+  @@index([storeId, benefitType])
+  @@index([isSellerEnabled])
+}
+
+model SubscriptionInvoice {
+  id           String      @id @default(uuid())
+  userId       String
+  sellerPlanId String?
+  sellerPlan   SellerPlan? @relation(fields: [sellerPlanId], references: [id])
+  tier         String
+  amountGong   Decimal
+  status       String      @default("PENDING") // PENDING, PAID, FAILED, REFUNDED
+  provider     String?
+  paymentRef   String?
+  periodStart  DateTime
+  periodEnd    DateTime
+  metadata     String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([status])
+}
+
+// Escrow Payment Tracking
+// Holds detailed record of funds held in escrow between buyer payment and seller payout
+model EscrowPayment {
+  id      String @id @default(uuid())
+  orderId String? @unique
+  order   Order?  @relation(fields: [orderId], references: [id])
+  
+  fulfillmentOrderId String? @unique
+  fulfillmentOrder   FulfillmentOrder? @relation(fields: [fulfillmentOrderId], references: [id])
+
+  // Participants
+  buyerId  String
+  sellerId String
+
+  // Amounts (all in platform currency - USD equivalent)
+  totalAmount      Decimal // Full amount charged to buyer
+  commissionRate   Float   @default(0.10) // Platform commission percentage
+  commissionAmount Decimal // Platform's cut
+  sellerAmount     Decimal // Amount seller receives after commission
+
+  // Payment Reference
+  paymentReference String? // Paystack/Stripe reference from original payment
+  paymentProvider  String? // PAYSTACK, STRIPE, WALLET, BANK_TRANSFER
+
+  // Escrow Status Lifecycle
+  // HELD: Payment received, funds locked
+  // RELEASE_PENDING: Auto-release triggered, awaiting transfer
+  // RELEASED: Funds transferred to seller
+  // DISPUTED: Buyer raised dispute, funds frozen
+  // REFUNDED: Funds returned to buyer (full or partial)
+  status String @default("HELD") // HELD, RELEASE_PENDING, RELEASED, DISPUTED, REFUNDED
+
+  // Payout tracking
+  payoutReference String? // Paystack transfer code when released
+  payoutMethod    String? // PAYSTACK_TRANSFER, MANUAL, WALLET_CREDIT
+
+  // Timing
+  heldAt             DateTime  @default(now()) // When funds were held
+  releaseScheduledAt DateTime? // When auto-release is scheduled (deliveredAt + 72h)
+  releasedAt         DateTime? // When funds were actually released
+  disputedAt         DateTime? // When dispute was raised
+  refundedAt         DateTime? // When refund was processed
+
+  // Audit
+  releaseTriggeredBy String? // 'SYSTEM_AUTO', 'BUYER_CONFIRM', 'ADMIN_MANUAL'
+  adminNote          String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([sellerId])
+  @@index([releaseScheduledAt])
+}
+
+// ============================================
+// NIGERIAN COMPLIANCE PAYMENT TABLES
+// ============================================
+
+// Main Payment Table - Nigerian NGN transactions
+model Payment {
+  id      String  @id @default(uuid())
+  orderId String?
+  order   Order?  @relation(fields: [orderId], references: [id])
+
+  // Buyer and Seller
+  buyerId  String
+  buyer    User    @relation("BuyerPayments", fields: [buyerId], references: [id])
+  sellerId String?
+  seller   User?   @relation("SellerPayments", fields: [sellerId], references: [id])
+
+  // Amount in Naira (NGN) - Nigerian regulatory requirement
+  amount   Decimal
+  currency String  @default("NGN")
+
+  // Commission tracking
+  platformFee    Decimal @default(0)
+  sellerPayout   Decimal @default(0)
+  commissionRate Float   @default(0.10)
+
+  // Paystack references
+  paystackTransactionId  String?
+  paystackReference      String? @unique
+  paystackSubaccountCode String?
+
+  // Status state machine
+  status String @default("PENDING") // PENDING, SUCCESSFUL, HELD, RELEASED, DISPUTED, REFUNDED, FAILED
+
+  // Delivery confirmation
+  deliveryConfirmedAt DateTime?
+  releaseAt           DateTime?
+
+  // Dispute tracking
+  disputeReason     String?
+  disputeStatus     String? // OPEN, RESOLVED, CLOSED
+  disputeResolvedBy String?
+  disputeResolvedAt DateTime?
+  disputeResolution String?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  commissions    Commission[]
+  paymentDispute PaymentDispute?
+
+  @@index([buyerId])
+  @@index([sellerId])
+  @@index([status])
+  @@index([paystackReference])
+  @@index([createdAt])
+}
+
+// Commission Ledger
+model Commission {
+  id        String  @id @default(uuid())
+  paymentId String
+  payment   Payment @relation(fields: [paymentId], references: [id])
+
+  percentage Float
+  amount     Decimal
+  currency   String  @default("NGN")
+
+  // Reference for audit
+  transactionRef String?
+
+  createdAt DateTime @default(now())
+
+  @@index([paymentId])
+}
+
+// Payment Disputes
+model PaymentDispute {
+  id        String  @id @default(uuid())
+  paymentId String  @unique
+  payment   Payment @relation(fields: [paymentId], references: [id])
+
+  buyerId String
+  buyer   User   @relation(fields: [buyerId], references: [id])
+
+  reason      String
+  description String?
+  evidence    String? // JSON with evidence URLs
+
+  status String @default("OPEN") // OPEN, UNDER_REVIEW, RESOLVED, CLOSED
+
+  resolution      String? // REFUND, RELEASE, PARTIAL_REFUND
+  resolvedBy      String? // Admin ID
+  resolvedAt      DateTime?
+  resolutionNotes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([buyerId])
+  @@index([status])
+}
+
+// Webhook Event Log for Paystack
+model WebhookEvent {
+  id          String    @id @default(uuid())
+  eventType   String
+  eventId     String    @unique // Paystack event ID
+  reference   String? // Payment reference
+  payload     String // JSON payload
+  processed   Boolean   @default(false)
+  processedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([eventType])
+  @@index([reference])
+  @@index([processed])
+}
+
+// Seller Promo Codes for product discounts
+model PromoCode {
+  id          String  @id @default(uuid())
+  code        String  @unique // The promo code (e.g., "SUMMER20")
+  description String? // Optional description
+
+  // Creator (Seller)
+  sellerId String
+  seller   User   @relation(fields: [sellerId], references: [id])
+
+  // Discount configuration
+  discountType  String // "PERCENTAGE" or "FIXED"
+  discountValue Decimal // The discount amount or percentage
+
+  // Product scope - can be null for store-wide, or specific product
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id])
+
+  // Usage limits
+  maxUses   Int? // Maximum total uses (null = unlimited)
+  usedCount Int  @default(0)
+
+  // Per-user limit
+  maxUsesPerUser Int @default(1) // Uses per customer
+
+  // Validity period
+  startsAt  DateTime  @default(now())
+  expiresAt DateTime?
+
+  // Status
+  isActive Boolean @default(true)
+
+  // Track usage
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  usages            PromoCodeUsage[]
+  marketplaceOrders MarketplaceOrder[] @relation("MarketplaceOrderPromo")
+
+  @@index([sellerId])
+  @@index([productId])
+  @@index([code])
+  @@index([isActive])
+  @@index([expiresAt])
+}
+
+// Track each time a promo code is used
+model PromoCodeUsage {
+  id          String    @id @default(uuid())
+  promoCode   PromoCode @relation(fields: [promoCodeId], references: [id])
+  promoCodeId String
+
+  userId          String // Customer who used the code
+  orderId         String // Order where it was applied
+  discountApplied Decimal // Actual discount given
+
+  usedAt DateTime @default(now())
+
+  @@index([promoCodeId])
+  @@index([userId])
+  @@index([orderId])
+}
+
+// Analytics - Daily seller statistics
+model SellerAnalytics {
+  id       String @id @default(uuid())
+  sellerId String
+
+  // Date for the metrics
+  date DateTime @default(now())
+
+  // Sales metrics
+  totalRevenue      Decimal @default(0)
+  totalOrders       Int     @default(0)
+  totalProductsSold Int     @default(0)
+  averageOrderValue Decimal @default(0)
+
+  // Customer metrics
+  newCustomers       Int @default(0)
+  returningCustomers Int @default(0)
+
+  // Product performance
+  topSellingProductId   String?
+  topSellingProductName String?
+  topSellingProductQty  Int     @default(0)
+
+  // Traffic
+  pageViews      Int @default(0)
+  uniqueVisitors Int @default(0)
+
+  // Conversion
+  conversionRate Decimal @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([sellerId, date])
+  @@index([sellerId])
+  @@index([date])
+}
+
+model BuyerSellerProfile {
+  id                 String    @id @default(uuid())
+  sellerId           String
+  seller             User      @relation("SellerBuyerProfiles", fields: [sellerId], references: [id], onDelete: Cascade)
+  buyerId            String
+  buyer              User      @relation("BuyerSellerProfiles", fields: [buyerId], references: [id], onDelete: Cascade)
+  totalOrders        Int       @default(0)
+  totalSpend         Decimal   @default(0.0)
+  repeatOrders       Int       @default(0)
+  averageOrderValue  Decimal   @default(0.0)
+  lastOrderAt        DateTime?
+  favoriteCategories String?
+  intelligenceLabels String?
+  intelligenceScore  Float     @default(0.0)
+  lastNotifiedAt     DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@unique([sellerId, buyerId])
+  @@index([sellerId, intelligenceScore])
+  @@index([buyerId, lastOrderAt])
+}
+
+model PromoCampaign {
+  id            String      @id @default(uuid())
+  title         String
+  promoType     String      @default("FLASH_DEAL") // FLASH_DEAL, DEAL_OF_MONTH, FESTIVAL_PROMO, WEEKEND_PROMO, PLATFORM_CAMPAIGN
+  status        String      @default("SCHEDULED") // SCHEDULED, ACTIVE, EXPIRED
+  bannerImage   String?
+  startDate     DateTime
+  endDate       DateTime
+  audienceScope String      @default("SELLER") // SELLER, ADMIN, PLATFORM
+  seasonTag     String?
+  targetRegion  String?
+  priority      Int         @default(0)
+  autoSuggested Boolean     @default(false)
+  clicks        Int         @default(0)
+  conversions   Int         @default(0)
+  revenue       Decimal     @default(0.0)
+  createdById   String?
+  createdBy     User?       @relation("CampaignCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  deals         FlashDeal[]
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([promoType, status])
+  @@index([startDate, endDate])
+  @@index([audienceScope, priority])
+}
+
+model MarketplaceAnalyticsEvent {
+  id         String   @id @default(uuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  eventType  String
+  entityType String
+  entityId   String
+  metadata   String?
+  createdAt  DateTime @default(now())
+
+  @@index([eventType, createdAt])
+  @@index([entityType, entityId])
+  @@index([userId, createdAt])
+}
+
+// Flash Deals - Time-based promotional deals
+model FlashDeal {
+  id         String         @id @default(uuid())
+  productId  String
+  product    Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sellerId   String
+  seller     User           @relation(fields: [sellerId], references: [id])
+  campaignId String?
+  campaign   PromoCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  discount    Int // Percentage discount (0-100)
+  promoType   String   @default("FLASH_DEAL")
+  promoTitle  String?
+  bannerImage String?
+  startDate   DateTime
+  endDate     DateTime
+
+  isActive     Boolean @default(false) // Auto-managed by scheduler
+  isFeatured   Boolean @default(false)
+  targetRegion String?
+  priority     Int     @default(0)
+
+  // Stock countdown feature
+  maxStock  Int? // Maximum stock available for deal
+  soldCount Int  @default(0) // How many sold during deal
+
+  // Live viewer tracking
+  viewerCount Int     @default(0) // Current viewers
+  clicks      Int     @default(0)
+  conversions Int     @default(0)
+  revenue     Decimal @default(0.0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([sellerId, productId]) // Prevent duplicate deals per seller-product
+  @@index([isActive])
+  @@index([endDate])
+  @@index([sellerId, startDate])
+  @@index([startDate])
+  @@index([promoType, isActive])
+  @@index([campaignId])
+}
+
+// Predefined Seller Responses for Packing Confirmations
+model PackingResponse {
+  id      String @id @default(uuid())
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  type                String // "out_of_stock", "shipping_tomorrow", "refund_issued"
+  message             String // Predefined message text
+  buyerMessage        String? // Additional buyer message from issue report
+  templateKey         String?
+  issueType           String?
+  respondedAt         DateTime?
+  responseTimeMinutes Int?
+  escalated           Boolean   @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([type])
+}
+
+// Restock Notifications
+model RestockNotification {
+  id        String  @id @default(uuid())
+  productId String
+  product   Product @relation("ProductRestockNotifications", fields: [productId], references: [id], onDelete: Cascade)
+  buyerId   String
+  buyer     User    @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+
+  isNotified Boolean   @default(false)
+  notifiedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@unique([productId, buyerId])
+  @@index([productId])
+  @@index([buyerId])
+}
+
+// ============================================
+// FEATURE 6-11 ADDITIONS
+// ============================================
+
+// Wishlist - Buyer's saved items with demand signals
+model Wishlist {
+  id        String  @id @default(uuid())
+  buyerId   String
+  buyer     User    @relation("UserWishlist", fields: [buyerId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation("ProductWishlists", fields: [productId], references: [id], onDelete: Cascade)
+  priority  String  @default("MEDIUM") // HIGH, MEDIUM, LOW
+  notes     String?
+
+  // Price drop alert preferences
+  priceDropAlertEnabled Boolean   @default(true)
+  lastPriceNotifiedAt   DateTime?
+  targetPrice           Decimal?
+
+  // Back in stock alerts
+  restockAlertEnabled   Boolean   @default(true)
+  lastRestockNotifiedAt DateTime?
+
+  // Conversion tracking
+  addedToCartAt           DateTime?
+  purchasedAt             DateTime?
+  convertedToBuyerRequest Boolean   @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([buyerId, productId])
+  @@index([buyerId, createdAt])
+  @@index([productId])
+  @@index([priority])
+  @@index([createdAt])
+}
+
+// Review Likes/Helpful votes
+model ReviewLike {
+  id        String   @id @default(uuid())
+  reviewId  String
+  review    Review   @relation("ReviewLikes", fields: [reviewId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation("UserReviewLikes", fields: [userId], references: [id], onDelete: Cascade)
+  isHelpful Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@unique([reviewId, userId])
+  @@index([reviewId])
+  @@index([userId])
+}
+
+// Review Reports (for fake review detection)
+model ReviewReport {
+  id          String    @id @default(uuid())
+  reviewId    String
+  review      Review    @relation("ReviewReportsOnReview", fields: [reviewId], references: [id], onDelete: Cascade)
+  reporterId  String
+  reporter    User      @relation("ReviewReports", fields: [reporterId], references: [id], onDelete: Cascade)
+  reason      String
+  description String?
+  status      String    @default("PENDING")
+  adminId     String?
+  admin       User?     @relation("AdminReviewReports", fields: [adminId], references: [id])
+  adminNotes  String?
+  resolvedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([reviewId, reporterId])
+  @@index([reviewId])
+  @@index([reporterId])
+  @@index([status])
+}
+
+// Seller Performance Metrics (Aggregated daily/weekly/monthly)
+model SellerPerformance {
+  id       String @id @default(uuid())
+  sellerId String
+  seller   User   @relation("SellerPerformanceRecords", fields: [sellerId], references: [id])
+
+  // Period
+  periodType  String // DAILY, WEEKLY, MONTHLY
+  periodStart DateTime // Start of period
+  periodEnd   DateTime // End of period
+
+  // Sales Performance
+  totalRevenue      Decimal @default(0)
+  totalOrders       Int     @default(0)
+  totalItemsSold    Int     @default(0)
+  averageOrderValue Decimal @default(0)
+
+  // Customer Metrics
+  newBuyers              Int     @default(0)
+  returningBuyers        Int     @default(0)
+  repeatBuyerRate        Decimal @default(0)
+  buyerSatisfactionScore Float   @default(0)
+
+  // Fulfillment Metrics
+  onTimeDeliveryRate    Decimal @default(0)
+  averageShippingDays   Int     @default(0)
+  disputeRate           Decimal @default(0)
+  disputeResolutionTime Float   @default(0)
+
+  // Response Metrics
+  averageResponseMinutes Int     @default(0)
+  responseRate           Decimal @default(0)
+
+  // Trust Score Components
+  trustScore  Int    @default(50)
+  ratingTrend String @default("STABLE")
+
+  // Flags & Alerts
+  hasNegativeTrend  Boolean @default(false)
+  alertMessage      String?
+  requiresAttention Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([sellerId, periodType, periodStart])
+  @@index([sellerId, periodStart])
+  @@index([requiresAttention])
+}
+
+// Seller Insights (AI-generated actionable insights)
+model SellerInsight {
+  id       String @id @default(uuid())
+  sellerId String
+  seller   User   @relation("SellerInsights", fields: [sellerId], references: [id])
+
+  // Insight metadata
+  type            String // OPPORTUNITY, RISK, TREND, ACTION_ITEM
+  category        String // SALES, CUSTOMER, PRODUCT, OPERATIONS, FINANCIAL
+  priority        String  @default("MEDIUM") // HIGH, MEDIUM, LOW
+  title           String
+  description     String
+  dataSnapshot    String?
+  suggestedAction String?
+
+  // Tracking
+  isRead      Boolean   @default(false)
+  isActedUpon Boolean   @default(false)
+  actedAt     DateTime?
+  dismissedAt DateTime?
+  expiresAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sellerId, priority])
+  @@index([type])
+  @@index([isActedUpon])
+}
+
+// Product Urgency Flags (cached for performance)
+model ProductUrgency {
+  id        String  @id @default(uuid())
+  productId String  @unique
+  product   Product @relation(fields: [productId], references: [id])
+
+  stockLevel   Int    @default(0)
+  urgencyLevel String @default("NORMAL") // CRITICAL, HIGH, MEDIUM, NORMAL, OVERSTOCK
+  urgencyScore Int    @default(0) // 0-100
+
+  // Scarcity signals
+  daysUntilStockout Int?
+  lastRestockAt     DateTime?
+  restockInProgress Boolean   @default(false)
+
+  // Demand signals
+  wishlistCount Int @default(0)
+  viewCount24h  Int @default(0)
+  cartAdds24h   Int @default(0)
+
+  // Automated actions
+  autoBoostActive Boolean   @default(false)
+  autoBoostUntil  DateTime?
+  bannerMessage   String?
+
+  lastCalculatedAt DateTime @default(now())
+
+  @@index([urgencyLevel])
+  @@index([autoBoostActive])
+}
+
+// Feed Post (Social/Content Object)
+model FeedPost {
+  id        String   @id @default(uuid())
+  sellerId  String
+  seller    User     @relation("SellerFeedPosts", fields: [sellerId], references: [id], onDelete: Cascade)
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  caption   String?
+  mediaUrl  String?
+  status    String   @default("ACTIVE")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  comments FeedComment[]     @relation("FeedPostComments")
+  likes    Like[]            @relation("FeedPostLikes")
+  events   EngagementEvent[] @relation("FeedPostEvents")
+
+  @@index([sellerId, createdAt])
+  @@index([productId, createdAt])
+}
+
+// Post Likes
+model Like {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation("UserLikes", fields: [userId], references: [id], onDelete: Cascade)
+  postId    String
+  post      FeedPost @relation("FeedPostLikes", fields: [postId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, postId])
+  @@index([postId, createdAt])
+}
+
+// Event Ledger for Views, Clicks, etc.
+model EngagementEvent {
+  id        String    @id @default(uuid())
+  userId    String?
+  user      User?     @relation("UserEvents", fields: [userId], references: [id], onDelete: SetNull)
+  sessionId String?
+  postId    String?
+  post      FeedPost? @relation("FeedPostEvents", fields: [postId], references: [id], onDelete: SetNull)
+  productId String?
+  product   Product?  @relation("ProductEvents", fields: [productId], references: [id], onDelete: SetNull)
+  action    String // VIEW, CLICK, SHARE
+  target    String?
+  metadata  String?
+  createdAt DateTime  @default(now())
+
+  @@index([postId, action, createdAt])
+  @@index([productId, action, createdAt])
+  @@index([userId, action, createdAt])
+}
+
+// Feed Comments
+model FeedComment {
+  id        String   @id @default(uuid())
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Comment author
+  userId String
+  user   User   @relation("UserFeedComments", fields: [userId], references: [id], onDelete: Cascade)
+
+  // Feed post being commented on
+  postId String
+  post   FeedPost @relation("FeedPostComments", fields: [postId], references: [id], onDelete: Cascade)
+
+  // Seller receiving the comment (denormalized for quick access)
+  sellerId String
+  seller   User   @relation("FeedCommentSeller", fields: [sellerId], references: [id], onDelete: Cascade)
+
+  // Optional link to the generated DM
+  messageId String?  @unique
+  message   Message? @relation("FeedCommentMessage", fields: [messageId], references: [id])
+
+  // Support for nested replies
+  parentId String?
+  parent   FeedComment?  @relation("FeedCommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies  FeedComment[] @relation("FeedCommentReplies")
+
+  @@index([postId, createdAt])
+  @@index([sellerId, createdAt])
+  @@index([userId, createdAt])
+}
+
+// ============================================================================
+// TEMPLATE MARKETPLACE MODELS
+// ============================================================================
+
+model Template {
+  id            String   @id @default(uuid())
+  name          String
+  slug          String   @unique
+  description   String
+  category      String
+  type          String   @default("popup")
+  price         Decimal
+  currency      String   @default("NGN")
+  thumbnail     String?
+  previewImage  String?
+  configuration String // JSON string containing Template DNA
+  version       String   @default("1.0")
+  status        String   @default("PUBLISHED") // PUBLISHED, DRAFT, ARCHIVED
+  isFeatured    Boolean  @default(false)
+  isFree        Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  purchases       TemplatePurchase[]
+  sellerTemplates SellerTemplate[]
+
+  @@index([category])
+  @@index([status])
+  @@index([type])
+}
+
+model SellerTemplate {
+  id                      String    @id @default(uuid())
+  sellerId                String
+  seller                  User      @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  templateId              String
+  template                Template  @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  storeId                 String?
+  store                   Store?    @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  customizedConfiguration String? // JSON string of seller's customized DNA
+  status                  String    @default("OWNED") // OWNED, CUSTOMIZED, APPLIED, DISABLED, ARCHIVED
+  version                 String    @default("1.0")
+  appliedAt               DateTime?
+  purchasedAt             DateTime  @default(now())
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  @@unique([sellerId, templateId]) // A seller shouldn't purchase the same template twice
+  @@index([sellerId])
+  @@index([storeId])
+  @@index([status])
+}
+
+model TemplatePurchase {
+  id               String   @id @default(uuid())
+  sellerId         String
+  seller           User     @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  templateId       String
+  template         Template @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  amount           Decimal
+  currency         String   @default("NGN")
+  paymentMethod    String   @default("WALLET")
+  paymentReference String?
+  idempotencyKey   String?  @unique
+  status           String   @default("PENDING") // PENDING, COMPLETED, FAILED, REFUNDED, CANCELLED
+  purchasedAt      DateTime @default(now())
+  createdAt        DateTime @default(now())
+
+  @@index([sellerId])
+  @@index([templateId])
+  @@index([status])
+}
+
+model AIUsage {
+  id            String   @id @default(uuid())
+  userId        String
+  storeId       String?
+  tool          String
+  provider      String   @default("gemini")
+  inputTokens   Int      @default(0)
+  outputTokens  Int      @default(0)
+  estimatedCost Decimal  @default(0.0)
+  status        String   @default("SUCCESS") // SUCCESS, ERROR
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+  @@index([storeId])
+  @@index([createdAt])
+}
+
+model StoreAsset {
+  id        String   @id @default(uuid())
+  storeId   String
+  assetUrl  String
+  publicId  String? // Cloudinary public ID
+  type      String   @default("BANNER") // BANNER, LOGO, THEME_ASSET
+  createdAt DateTime @default(now())
+
+  @@index([storeId])
+}
+
+// ============================================================================
+// W-DELIVERY OS MODELS
+// ============================================================================
+
+model CourierProfile {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  status          String   @default("OFFLINE") // OFFLINE, ONLINE, BUSY, SUSPENDED
+  rating          Float    @default(5.0)
+  totalDeliveries Int      @default(0)
+  activeVehicleId String?
+  activeVehicle   Vehicle? @relation("ActiveVehicle", fields: [activeVehicleId], references: [id], onDelete: SetNull)
+
+  // Real-time tracking
+  currentLat     Float?
+  currentLng     Float?
+  lastLocationAt DateTime?
+
+  // KYC & Onboarding
+  driversLicenseUrl String?
+  guarantorName     String?
+  guarantorPhone    String?
+  guarantorAddress  String?
+  kycStatus         String    @default("PENDING") // PENDING, SUBMITTED, APPROVED, REJECTED
+  kycSubmittedAt    DateTime?
+
+  vehicles    Vehicle[]            @relation("CourierVehicles")
+  assignments DeliveryAssignment[]
+  earnings    CourierEarning[]
+  offers      DeliveryOffer[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Vehicle {
+  id               String         @id @default(uuid())
+  courierProfileId String
+  courierProfile   CourierProfile @relation("CourierVehicles", fields: [courierProfileId], references: [id], onDelete: Cascade)
+
+  type        String  @default("MOTORCYCLE") // MOTORCYCLE, CAR, VAN, BICYCLE
+  plateNumber String
+  make        String?
+  model       String?
+  color       String?
+  capacityKg  Float?
+
+  isActive Boolean @default(true)
+
+  activeForCourier CourierProfile[]     @relation("ActiveVehicle")
+  assignments      DeliveryAssignment[] // Historical tracking of which vehicle did which assignment
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([courierProfileId])
+}
+
+model Hub {
+  id       String  @id @default(uuid())
+  name     String
+  address  String
+  lat      Float
+  lng      Float
+  isActive Boolean @default(true)
+  capacity Int     @default(1000)
+
+  packages ConsolidatedPackage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ConsolidatedPackage {
+  id      String @id @default(uuid())
+  buyerId String
+  buyer   User   @relation("BuyerConsolidatedPackages", fields: [buyerId], references: [id])
+  hubId   String
+  hub     Hub    @relation(fields: [hubId], references: [id])
+
+  status         String  @default("AWAITING_ITEMS") // AWAITING_ITEMS, READY_FOR_DISPATCH, DISPATCHED, DELIVERED
+  trackingNumber String? @unique
+
+  // Final mile delivery
+  finalDeliveryAssignmentId String?             @unique
+  finalDelivery             DeliveryAssignment? @relation("FinalMileDelivery", fields: [finalDeliveryAssignmentId], references: [id])
+
+  orders Order[]
+
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  fulfillmentOrders FulfillmentOrder[] @relation("FulfillmentPackage")
+}
+
+model DeliveryRoute {
+  id     String  @id @default(uuid())
+  name   String? // e.g., "Wuse Zone 5 Morning Batch"
+  status String  @default("PENDING") // PENDING, ACTIVE, COMPLETED, CANCELLED
+
+  assignments DeliveryAssignment[]
+  stops       DeliveryStop[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
+
+model DeliveryStop {
+  id           String             @id @default(uuid())
+  routeId      String
+  route        DeliveryRoute      @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  assignmentId String
+  assignment   DeliveryAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  type     String // PICKUP, DROPOFF
+  address  String
+  lat      Float?
+  lng      Float?
+  sequence Int    @default(0) // Order in the route
+  status   String @default("PENDING") // PENDING, ARRIVED, COMPLETED, FAILED
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([routeId])
+  @@index([assignmentId])
+}
+
+model DeliveryAssignment {
+  id      String @id @default(uuid())
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  courierId String?
+  courier   CourierProfile? @relation(fields: [courierId], references: [id], onDelete: SetNull)
+
+  vehicleId String?
+  vehicle   Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+
+  routeId String?
+  route   DeliveryRoute? @relation(fields: [routeId], references: [id], onDelete: SetNull)
+
+  consolidatedPackageFinal ConsolidatedPackage? @relation("FinalMileDelivery")
+
+  status String @default("PENDING") // PENDING, ASSIGNED, COURIER_ACCEPTED, EN_ROUTE_TO_PICKUP, ARRIVED_AT_PICKUP, PICKED_UP, IN_TRANSIT, ARRIVED_AT_DESTINATION, DELIVERY_VERIFICATION, DELIVERED, REJECTED, CANCELLED, FAILED, RESCHEDULED
+
+  estimatedDistance Float? // in km
+  estimatedDuration Int? // in minutes
+
+  fulfillmentOrderId  String?
+  pickupLat           Float?
+  pickupLng           Float?
+  dropoffLat          Float?
+  dropoffLng          Float?
+  customerDeliveryFee Decimal?
+  pricingSnapshot     String?
+
+  pickupQrCode String?
+  deliveryPin  String?
+
+  trackingEvents DeliveryTrackingEvent[]
+  proofs         DeliveryProof[]
+  incidents      DeliveryIncident[]
+  stops          DeliveryStop[]
+  offers         DeliveryOffer[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([courierId, status])
+  @@index([status])
+}
+
+model DeliveryOffer {
+  id           String             @id @default(uuid())
+  assignmentId String
+  assignment   DeliveryAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  courierId    String
+  courier      CourierProfile     @relation(fields: [courierId], references: [id], onDelete: Cascade)
+  status       String             @default("PENDING") // PENDING, ACCEPTED, REJECTED, EXPIRED
+  offeredAt    DateTime           @default(now())
+  expiresAt    DateTime?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([assignmentId])
+  @@index([courierId, status])
+}
+
+model DeliveryTrackingEvent {
+  id           String             @id @default(uuid())
+  assignmentId String
+  assignment   DeliveryAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  status   String
+  lat      Float?
+  lng      Float?
+  metadata String? // JSON context
+
+  createdAt DateTime @default(now())
+
+  @@index([assignmentId, createdAt])
+}
+
+model DeliveryProof {
+  id           String             @id @default(uuid())
+  assignmentId String
+  assignment   DeliveryAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  type     String // PHOTO, SIGNATURE, OTP, QR_SCAN
+  proofUrl String?
+  notes    String?
+
+  verifiedAt DateTime @default(now())
+
+  @@index([assignmentId])
+}
+
+model DeliveryIncident {
+  id           String             @id @default(uuid())
+  assignmentId String
+  assignment   DeliveryAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  type        String // CUSTOMER_UNAVAILABLE, DAMAGED_PARCEL, VEHICLE_BREAKDOWN, WEATHER, OTHER
+  description String
+  photoUrl    String?
+
+  status     String    @default("OPEN") // OPEN, RESOLVED
+  resolvedAt DateTime?
+  adminNotes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([assignmentId])
+  @@index([status])
+}
+
+model CourierEarning {
+  id        String         @id @default(uuid())
+  courierId String
+  courier   CourierProfile @relation(fields: [courierId], references: [id], onDelete: Cascade)
+
+  assignmentId String? @unique
+
+  reference   String?
+  description String?
+
+  type     String  @default("DELIVERY_FEE") // DELIVERY_FEE, BONUS, TIP, DEDUCTION
+  amount   Decimal
+  currency String  @default("NGN")
+
+  status    String    @default("PENDING") // PENDING, CLEARED, PAID
+  clearedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([courierId, status])
+}
+
+model NotificationOutbox {
+  id            String    @id @default(uuid())
+  eventType     String
+  payload       String // JSON payload
+  status        String    @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
+  attempts      Int       @default(0)
+  lastAttemptAt DateTime?
+  error         String?
+
+  createdAt DateTime @default(now())
+
+  @@index([status, createdAt])
+}
+
+model UserSession {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  userAgent String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  isActive  Boolean  @default(true)
+
+  @@index([userId])
+}
+
+model WebAuthnCredential {
+  id         String   @id // credentialID
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  publicKey  Bytes
+  counter    BigInt
+  transports String?
+  deviceType String?
+  backedUp   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+}
+
+model MarketplaceOrder {
+  id                String     @id @default(uuid())
+  buyerId           String
+  buyer             User       @relation("MarketplaceOrderBuyer", fields: [buyerId], references: [id])
+  subtotal          Decimal
+  shippingCost      Decimal
+  discountTotal     Decimal    @default(0)
+  grandTotal        Decimal
+  currency          String     @default("NGN")
+  promoCodeId       String?
+  promoCode         PromoCode? @relation("MarketplaceOrderPromo", fields: [promoCodeId], references: [id])
+  promoDiscount     Decimal?   @default(0)
+  shippingAddressId String?
+  shippingAddress   Address?   @relation("MarketplaceOrderAddress", fields: [shippingAddressId], references: [id])
+  shippingSnapshot  String?
+  paymentMethod     String?
+  paymentReference  String?
+  paymentStatus     String     @default("PENDING")
+  paidAt            DateTime?
+  status            String     @default("PENDING")
+  idempotencyKey    String?    @unique
+  notes             String?
+  expiresAt         DateTime?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  fulfillmentOrders FulfillmentOrder[]
+}
+
+model FulfillmentOrder {
+  inventoryReservations InventoryReservation[] @relation("InventoryReservationFO")
+  escrowPayment         EscrowPayment?
+
+  id                    String               @id @default(uuid())
+  marketplaceOrderId    String
+  marketplaceOrder      MarketplaceOrder     @relation(fields: [marketplaceOrderId], references: [id])
+  buyerId               String
+  buyer                 User                 @relation("FulfillmentBuyer", fields: [buyerId], references: [id])
+  sellerId              String
+  seller                User                 @relation("FulfillmentSeller", fields: [sellerId], references: [id])
+  subtotal              Decimal
+  shippingCost          Decimal
+  discountAmount        Decimal              @default(0)
+  grandTotal            Decimal
+  currency              String               @default("NGN")
+  commissionRate        Float
+  commissionAmount      Decimal
+  sellerAmount          Decimal
+  status                String               @default("PENDING")
+  paymentStatus         String               @default("PENDING")
+  isConsolidated        Boolean              @default(false)
+  hubLocation           String?
+  consolidatedPackageId String?
+  consolidatedPackage   ConsolidatedPackage? @relation("FulfillmentPackage", fields: [consolidatedPackageId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items FulfillmentItem[]
+}
+
+model FulfillmentItem {
+  id                 String           @id @default(uuid())
+  fulfillmentOrderId String
+  fulfillmentOrder   FulfillmentOrder @relation(fields: [fulfillmentOrderId], references: [id], onDelete: Cascade)
+  productId          String
+  product            Product          @relation("FulfillmentItemProduct", fields: [productId], references: [id])
+  quantity           Int
+  priceAtTime        Decimal
+  subtotal           Decimal
+  variants           String?
+  itemDiscount       Decimal          @default(0)
+  weightKg           Float?
+  dimensionsCm       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model InventoryReservation {
+  id                 String            @id @default(uuid())
+  productId          String
+  product            Product           @relation("InventoryReservationProduct", fields: [productId], references: [id])
+  fulfillmentOrderId String?
+  fulfillmentOrder   FulfillmentOrder? @relation("InventoryReservationFO", fields: [fulfillmentOrderId], references: [id])
+  quantity           Int
+  status             String            @default("ACTIVE")
+  expiresAt          DateTime
+  releasedAt         DateTime?
+  deductedAt         DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+}

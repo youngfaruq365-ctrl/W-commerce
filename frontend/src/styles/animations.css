@@ -1,0 +1,345 @@
+/* Premium Store Animations */
+
+/* 1. Gemini Glow Border */
+@keyframes gemini-glow {
+  0%, 100% { box-shadow: 0 0 15px rgba(138, 43, 226, 0.4), inset 0 0 10px rgba(138, 43, 226, 0.2); border-color: rgba(138, 43, 226, 0.5); }
+  50% { box-shadow: 0 0 25px rgba(75, 192, 192, 0.6), inset 0 0 15px rgba(75, 192, 192, 0.3); border-color: rgba(75, 192, 192, 0.7); }
+}
+.anim-gemini-glow {
+  animation: gemini-glow 3s infinite ease-in-out;
+}
+
+/* 2. WhatsApp Green Pulse */
+@keyframes wa-pulse {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(37, 211, 102, 0.7); }
+  70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(37, 211, 102, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(37, 211, 102, 0); }
+}
+.anim-wa-pulse {
+  animation: wa-pulse 2s infinite;
+}
+
+/* 3. AI Shimmer Border */
+@keyframes ai-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.anim-ai-shimmer {
+  background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.8) 50%, rgba(255,255,255,0) 100%);
+  background-size: 200% 100%;
+  animation: ai-shimmer 2.5s infinite linear;
+}
+
+/* 4. Breathing Glow */
+@keyframes breathing-glow {
+  0%, 100% { opacity: 0.8; filter: drop-shadow(0 0 5px rgba(255,255,255,0.3)); }
+  50% { opacity: 1; filter: drop-shadow(0 0 15px rgba(255,255,255,0.7)); }
+}
+.anim-breathing-glow {
+  animation: breathing-glow 4s infinite ease-in-out;
+}
+
+/* 5. Neon Border Sweep */
+.anim-neon-sweep {
+  position: relative;
+  overflow: hidden;
+}
+.anim-neon-sweep::before {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%;
+  width: 50%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(0, 255, 255, 0.6), transparent);
+  transform: skewX(-20deg);
+  animation: neon-sweep 3s infinite linear;
+}
+@keyframes neon-sweep {
+  0% { left: -100%; }
+  100% { left: 200%; }
+}
+
+/* 6. Gradient Border Rotation */
+@keyframes gradient-rotate {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.anim-gradient-rotate {
+  background: linear-gradient(270deg, #ff007f, #7f00ff, #00ffff);
+  background-size: 600% 600%;
+  animation: gradient-rotate 8s ease infinite;
+}
+
+/* 7. Corner Light Sweep */
+@keyframes corner-sweep {
+  0% { clip-path: polygon(0 0, 0 0, 0 0); }
+  50% { clip-path: polygon(0 0, 100% 0, 0 100%); }
+  100% { clip-path: polygon(100% 100%, 100% 100%, 100% 100%); opacity: 0; }
+}
+.anim-corner-sweep {
+  position: relative;
+}
+.anim-corner-sweep::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(255,255,255,0.1);
+  animation: corner-sweep 3s infinite ease-in-out;
+  pointer-events: none;
+}
+
+/* 8. Glass Glow */
+@keyframes glass-glow {
+  0%, 100% { box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1); }
+  50% { box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.3); }
+}
+.anim-glass-glow {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  animation: glass-glow 4s infinite ease-in-out;
+}
+
+/* 9. Hover Lift */
+.anim-hover-lift {
+  transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.3s ease;
+}
+.anim-hover-lift:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 15px 30px rgba(0,0,0,0.15);
+}
+
+/* 10. Magnetic Button (CSS base, Framer Motion for logic) */
+.anim-magnetic {
+  transition: transform 0.1s linear;
+}
+
+/* 11. Ripple Click */
+.anim-ripple {
+  position: relative;
+  overflow: hidden;
+}
+.anim-ripple .ripple-span {
+  position: absolute;
+  border-radius: 50%;
+  transform: scale(0);
+  animation: ripple 0.6s linear;
+  background-color: rgba(255, 255, 255, 0.7);
+}
+@keyframes ripple {
+  to { transform: scale(4); opacity: 0; }
+}
+
+/* 12. Success Green Pulse */
+@keyframes success-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+.anim-success-pulse {
+  animation: success-pulse 2s infinite;
+}
+
+/* 13. Error Red Shake */
+@keyframes error-shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+  20%, 40%, 60%, 80% { transform: translateX(5px); }
+}
+.anim-error-shake {
+  animation: error-shake 0.6s cubic-bezier(.36,.07,.19,.97) both;
+}
+
+/* 14. Warning Amber Pulse */
+@keyframes warning-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.5); }
+  70% { box-shadow: 0 0 0 12px rgba(245, 158, 11, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}
+.anim-warning-pulse {
+  animation: warning-pulse 2s infinite;
+}
+
+/* 15. Blue Focus Ring */
+.anim-focus-ring {
+  transition: box-shadow 0.2s ease-in-out;
+}
+.anim-focus-ring:focus, .anim-focus-ring:focus-within {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5);
+}
+
+/* 16. Purple AI Pulse */
+@keyframes purple-pulse {
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 5px rgba(168, 85, 247, 0.4)); }
+  50% { transform: scale(1.03); filter: drop-shadow(0 0 15px rgba(168, 85, 247, 0.8)); }
+}
+.anim-purple-pulse {
+  animation: purple-pulse 2.5s infinite ease-in-out;
+}
+
+/* 17. Rainbow AI Sweep */
+@keyframes rainbow-sweep {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+.anim-rainbow-sweep {
+  background: linear-gradient(90deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3, #ff0000);
+  background-size: 200% auto;
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: rainbow-sweep 4s linear infinite;
+}
+
+/* 18. Skeleton Shimmer */
+@keyframes skeleton-shimmer {
+  0% { background-position: -1000px 0; }
+  100% { background-position: 1000px 0; }
+}
+.anim-skeleton-shimmer {
+  background: #f6f7f8;
+  background: linear-gradient(90deg, #eee 8%, #ddd 18%, #eee 33%);
+  background-size: 1000px 100%;
+  animation: skeleton-shimmer 2s infinite linear forwards;
+}
+.dark .anim-skeleton-shimmer {
+  background: linear-gradient(90deg, #2a2a2a 8%, #3a3a3a 18%, #2a2a2a 33%);
+  background-size: 1000px 100%;
+}
+
+/* 19. Progressive Reveal */
+@keyframes progressive-reveal {
+  from { opacity: 0; transform: translateY(20px); filter: blur(5px); }
+  to { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+.anim-reveal {
+  animation: progressive-reveal 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* 20. Slide-In Toast */
+@keyframes toast-slide {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.anim-toast-slide {
+  animation: toast-slide 0.4s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
+}
+
+/* 21. Spring Modal */
+@keyframes spring-modal {
+  0% { transform: scale(0.8); opacity: 0; }
+  60% { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.anim-spring-modal {
+  animation: spring-modal 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+/* 22. Backdrop Blur Fade */
+@keyframes backdrop-fade {
+  from { backdrop-filter: blur(0px); background: rgba(0,0,0,0); }
+  to { backdrop-filter: blur(8px); background: rgba(0,0,0,0.4); }
+}
+.anim-backdrop-fade {
+  animation: backdrop-fade 0.4s ease-out forwards;
+}
+
+/* 23. Confetti Burst (Basic CSS setup, actual particles usually JS) */
+@keyframes confetti-fall {
+  0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+}
+.anim-confetti {
+  position: absolute;
+  animation: confetti-fall 3s ease-out forwards;
+}
+
+/* 24. Checkmark Draw */
+@keyframes checkmark-draw {
+  0% { stroke-dashoffset: 100; }
+  100% { stroke-dashoffset: 0; }
+}
+.anim-checkmark {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: checkmark-draw 0.6s ease-out forwards;
+}
+
+/* 25. Upload Drop Glow */
+@keyframes upload-glow {
+  0%, 100% { border-color: #cbd5e1; background: transparent; }
+  50% { border-color: #3b82f6; background: rgba(59, 130, 246, 0.05); }
+}
+.anim-upload-glow.active {
+  animation: upload-glow 1.5s infinite;
+  border-style: dashed;
+}
+
+/* 26. Image Morph */
+@keyframes image-morph {
+  0% { border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; }
+  50% { border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%; }
+  100% { border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; }
+}
+.anim-image-morph {
+  animation: image-morph 8s ease-in-out infinite;
+  overflow: hidden;
+}
+
+/* 27. Inventory Pulse */
+@keyframes inventory-pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+.anim-inventory-pulse {
+  animation: inventory-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* 28. Live Status Dot */
+@keyframes live-dot {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+.anim-live-dot {
+  border-radius: 50%;
+  background-color: #ef4444;
+  animation: live-dot 2s infinite;
+}
+
+/* 29. Timeline Flow */
+@keyframes timeline-flow {
+  0% { height: 0; }
+  100% { height: 100%; }
+}
+.anim-timeline-flow {
+  position: relative;
+}
+.anim-timeline-flow::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; width: 2px;
+  background: #3b82f6;
+  animation: timeline-flow 1.5s ease-out forwards;
+}
+
+/* 30. Location Ripple */
+@keyframes location-ripple {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(3); opacity: 0; }
+}
+.anim-location-ripple::after, .anim-location-ripple::before {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 100%; height: 100%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: rgba(59, 130, 246, 0.4);
+  animation: location-ripple 2s infinite cubic-bezier(0, 0.2, 0.8, 1);
+}
+.anim-location-ripple::before {
+  animation-delay: -1s;
+}

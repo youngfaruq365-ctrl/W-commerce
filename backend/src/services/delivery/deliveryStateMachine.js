@@ -1,0 +1,117 @@
+// src/backend/services/delivery/deliveryStateMachine.js
+
+const DELIVERY_STATES = {
+    PENDING: 'PENDING',
+    ASSIGNED: 'ASSIGNED',
+    COURIER_ACCEPTED: 'COURIER_ACCEPTED',
+    EN_ROUTE_TO_PICKUP: 'EN_ROUTE_TO_PICKUP',
+    ARRIVED_AT_PICKUP: 'ARRIVED_AT_PICKUP',
+    PICKED_UP: 'PICKED_UP',
+    IN_TRANSIT: 'IN_TRANSIT',
+    ARRIVED_AT_DESTINATION: 'ARRIVED_AT_DESTINATION',
+    DELIVERY_VERIFICATION: 'DELIVERY_VERIFICATION',
+    DELIVERED: 'DELIVERED',
+    REJECTED: 'REJECTED',
+    CANCELLED: 'CANCELLED',
+    FAILED: 'FAILED',
+    RESCHEDULED: 'RESCHEDULED'
+};
+
+const VALID_TRANSITIONS = {
+    [DELIVERY_STATES.PENDING]: [
+        DELIVERY_STATES.ASSIGNED,
+        DELIVERY_STATES.CANCELLED
+    ],
+    [DELIVERY_STATES.ASSIGNED]: [
+        DELIVERY_STATES.COURIER_ACCEPTED,
+        DELIVERY_STATES.REJECTED,
+        DELIVERY_STATES.CANCELLED,
+        DELIVERY_STATES.FAILED
+    ],
+    [DELIVERY_STATES.COURIER_ACCEPTED]: [
+        DELIVERY_STATES.EN_ROUTE_TO_PICKUP,
+        DELIVERY_STATES.CANCELLED,
+        DELIVERY_STATES.FAILED
+    ],
+    [DELIVERY_STATES.EN_ROUTE_TO_PICKUP]: [
+        DELIVERY_STATES.ARRIVED_AT_PICKUP,
+        DELIVERY_STATES.FAILED,
+        DELIVERY_STATES.CANCELLED
+    ],
+    [DELIVERY_STATES.ARRIVED_AT_PICKUP]: [
+        DELIVERY_STATES.PICKED_UP,
+        DELIVERY_STATES.FAILED
+    ],
+    [DELIVERY_STATES.PICKED_UP]: [
+        DELIVERY_STATES.IN_TRANSIT,
+        DELIVERY_STATES.FAILED
+    ],
+    [DELIVERY_STATES.IN_TRANSIT]: [
+        DELIVERY_STATES.ARRIVED_AT_DESTINATION,
+        DELIVERY_STATES.FAILED
+    ],
+    [DELIVERY_STATES.ARRIVED_AT_DESTINATION]: [
+        DELIVERY_STATES.DELIVERY_VERIFICATION,
+        DELIVERY_STATES.FAILED
+    ],
+    [DELIVERY_STATES.DELIVERY_VERIFICATION]: [
+        DELIVERY_STATES.DELIVERED,
+        DELIVERY_STATES.FAILED
+    ],
+    [DELIVERY_STATES.FAILED]: [
+        DELIVERY_STATES.RESCHEDULED,
+        DELIVERY_STATES.CANCELLED
+    ],
+    [DELIVERY_STATES.REJECTED]: [
+        DELIVERY_STATES.ASSIGNED,
+        DELIVERY_STATES.PENDING,
+        DELIVERY_STATES.CANCELLED
+    ],
+    [DELIVERY_STATES.RESCHEDULED]: [
+        DELIVERY_STATES.ASSIGNED,
+        DELIVERY_STATES.PENDING,
+        DELIVERY_STATES.CANCELLED
+    ],
+    [DELIVERY_STATES.DELIVERED]: [],
+    [DELIVERY_STATES.CANCELLED]: []
+};
+
+const canTransition = (currentState, nextState) => {
+    const allowedNextStates = VALID_TRANSITIONS[currentState];
+    if (!allowedNextStates) return false;
+    return allowedNextStates.includes(nextState);
+};
+
+const validateTransition = (currentState, nextState) => {
+    if (!canTransition(currentState, nextState)) {
+        throw new Error(`Invalid delivery state transition from ${currentState} to ${nextState}`);
+    }
+};
+
+const mapToOrderStatus = (deliveryStatus) => {
+    switch (deliveryStatus) {
+        case DELIVERY_STATES.PICKED_UP:
+        case DELIVERY_STATES.IN_TRANSIT:
+        case DELIVERY_STATES.ARRIVED_AT_DESTINATION:
+        case DELIVERY_STATES.DELIVERY_VERIFICATION:
+            return 'OUT_FOR_DELIVERY';
+            
+        case DELIVERY_STATES.DELIVERED:
+            return 'DELIVERED';
+            
+        case DELIVERY_STATES.CANCELLED:
+        case DELIVERY_STATES.FAILED:
+            return null;
+            
+        default:
+            return null;
+    }
+};
+
+module.exports = {
+    DELIVERY_STATES,
+    VALID_TRANSITIONS,
+    canTransition,
+    validateTransition,
+    mapToOrderStatus
+};

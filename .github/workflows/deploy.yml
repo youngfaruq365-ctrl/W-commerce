@@ -1,0 +1,40 @@
+name: Deploy Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build Production Frontend
+        run: npm run build:production
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Verify Docker Compose Build
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          # Copy .env.example to .env.production to satisfy env_file requirement during build
+          cp .env.example .env.production || touch .env.production
+          docker compose build

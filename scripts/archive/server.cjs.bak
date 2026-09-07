@@ -1,0 +1,900 @@
+/**
+ * CRITICAL: Load and validate configuration BEFORE any other code
+ */
+require('dotenv').config();
+
+const configValidator = require('./src/config/validator');
+const validatedConfig = configValidator.validate();
+
+const express = require('express');
+
+// Base path configuration for subfolder deployment
+const BASE_PATH = process.env.BASE_PATH || '';
+
+const logger = require('./src/utils/logger');
+const redisManager = require('./src/utils/redisManager');
+
+const http = require('http');
+const path = require('path');
+const fs = require('fs');
+const { Server } = require('socket.io');
+const jwt = require('jsonwebtoken');
+const prisma = require('./src/utils/prismaClient');
+
+const globalStartup = global.__GLOBALX_STARTUP || (global.__GLOBALX_STARTUP = {
+    app: null,
+    server: null,
+    io: null,
+    serverStarted: false,
+    cronStarted: false,
+    socketStarted: false,
+    redisWarned: false
+});
+
+// ============================================================================
+// GRACEFUL SHUTDOWN HANDLERS
+// ============================================================================
+
+let serverInstance = null;
+
+async function gracefulShutdown() {
+    logger.warn('Received shutdown signal. Starting graceful shutdown...');
+    
+    await redisManager.close();
+    try {
+        const cronJobManager = require('./src/services/cronJobManager');
+        if (cronJobManager && typeof cronJobManager.shutdown === 'function') {
+            await cronJobManager.shutdown();
+            logger.info('Cron jobs shut down gracefully');
+        }
+    } catch (e) {
+        logger.warn(`Cron shutdown error: ${e.message}`);
+    }
+    await prisma.$disconnect();
+    
+    if (serverInstance) {
+        serverInstance.close(() => {
+            logger.info('Server closed');
+            process.exit(0);
+        });
+        
+        // Force shutdown after 30 seconds
+        setTimeout(() => {
+            logger.error('Forced shutdown after 30 seconds');
+            process.exit(1);
+        }, 30000);
+    } else {
+        process.exit(0);
+    }
+}
+
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);
+process.on('unhandledRejection', (reason, promise) => {
+    logger.error(`Unhandled Rejection: ${reason}`);
+});
+process.on('uncaughtException', (error) => {
+    logger.error(`Uncaught Exception: ${error.message}`);
+    if (error.stack) logger.error(error.stack);
+    gracefulShutdown();
+});
+
+// Initialize Redis early and await it before binding the HTTP server.
+const redisReadyPromise = (async () => {
+    try {
+        await redisManager.initialize();
+        logger.info('Redis initialized successfully');
+        return redisManager;
+    } catch (error) {
+        logger.error(`Redis initialization failed: ${error.message}`);
+        if (process.env.NODE_ENV === 'production') {
+            logger.error('FATAL: Redis is required in production. Server shutting down.');
+            process.exit(1);
+        }
+        return redisManager;
+    }
+})();
+
+// CRITICAL SECURITY AUDIT: Enforce Secret Presence
+// JWT Secret — must be provided via environment variable in production
+// Generate with: node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
+const WEAK_SECRETS = ['placeholder_secret', 'secret', 'dev_secret', '123456', 'gx_dev_secret_key_998811'];
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET || WEAK_SECRETS.includes(JWT_SECRET)) {
+    const reason = !JWT_SECRET ? 'NOT DEFINED' : 'WEAK';
+    if (process.env.NODE_ENV === 'production') {
+        logger.error(`❌ FATAL: JWT_SECRET is ${reason}. Production requires a strong secret. Shutting down.`);
+        process.exit(1);
+    }
+    logger.warn(`⚠️ SECURITY: JWT_SECRET is ${reason}. Using dev fallback — never use in production!`);
+}
+
+const helmet = require('helmet');
+const crypto = require('crypto');
+const compression = require('compression');
+const cors = require('cors');
+const cookieParser = require('cookie-parser');
+const session = require('express-session');
+const passport = require('passport');
+const { configureGoogleStrategy } = require('./src/services/passport');
+const RedisSessionStore = require('./src/utils/redisSessionStore');
+
+// Rate limiter (uses shared Redis manager internally)
+const { rateLimiters } = require('./src/middleware/rateLimiter');
+const geoIPMiddleware = require('./src/middleware/geoIP');
+const { validate, sanitizeInput } = require('./src/middleware/inputValidation');
+
+const app = globalStartup.app || express();
+globalStartup.app = app;
+
+const FRONTEND_DIRS = {
+    html: path.join(__dirname, '..', 'frontend', 'public', 'html'),
+    css: path.join(__dirname, '..', 'frontend', 'public', 'css'),
+    js: path.join(__dirname, '..', 'frontend', 'public', 'js'),
+    root: path.join(__dirname, '..')
+};
+
+function directoryExists(dirPath) {
+    try {
+        return fs.existsSync(dirPath) && fs.lstatSync(dirPath).isDirectory();
+    } catch {
+        return false;
+    }
+}
+
+function fileExists(filePath) {
+    try {
+        return fs.existsSync(filePath) && fs.lstatSync(filePath).isFile();
+    } catch {
+        return false;
+    }
+}
+
+function resolveFrontendHtml(fileName) {
+    const publicHtmlPath = path.join(FRONTEND_DIRS.html, fileName);
+    if (fileExists(publicHtmlPath)) return publicHtmlPath;
+    return path.join(FRONTEND_DIRS.root, fileName);
+}
+
+function isBlockedRootStaticPath(requestPath) {
+    const normalizedPath = (requestPath || '').toLowerCase();
+    const blockedPrefixes = [
+        '/src/',
+        '/node_modules/',
+        '/prisma/',
+        '/logs/',
+        '/scripts/',
+        '/tests/',
+        '/backups/',
+        '/.git/',
+        '/.github/',
+        '/.vscode/',
+        '/.idea/'
+    ];
+
+    if (blockedPrefixes.some(prefix => normalizedPath.startsWith(prefix))) {
+        return true;
+    }
+
+    const blockedExactFiles = new Set([
+        '/server.js',
+        '/package.json',
+        '/package-lock.json',
+        '/docker-compose.yml',
+        '/docker-compose.yaml',
+        '/.env',
+        '/.env.local',
+        '/.env.production',
+        '/.env.development'
+    ]);
+
+    if (blockedExactFiles.has(normalizedPath)) {
+        return true;
+    }
+
+    if (normalizedPath.includes('..') || normalizedPath.includes('%2e%2e')) {
+        return true;
+    }
+
+    // Keep the root static fallback limited to typical web assets.
+    const ext = path.extname(normalizedPath);
+    const allowedExtensions = new Set([
+        '',
+        '.html',
+        '.css',
+        '.js',
+        '.mjs',
+        '.map',
+        '.glb',
+        '.gltf',
+        '.bin',
+        '.webp',
+        '.webp',
+        '.webp',
+        '.gif',
+        '.webp',
+        '.svg',
+        '.ico',
+        '.txt',
+        '.xml',
+        '.webmanifest'
+    ]);
+
+    if (!allowedExtensions.has(ext)) {
+        return true;
+    }
+
+    return false;
+}
+
+// 🚀 SECURITY & PERFORMANCE ENHANCEMENTS
+const isProduction = process.env.NODE_ENV === 'production';
+
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'", "'unsafe-inline'", "https://js.stripe.com", "https://cdn.jsdelivr.net", "https://accounts.google.com", "https://appleid.cdn-apple.com"],
+            scriptSrcAttr: ["'unsafe-inline'"],
+            styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdn.jsdelivr.net", "https://cdnjs.cloudflare.com"],
+            fontSrc: ["'self'", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com", "data:"],
+            imgSrc: ["'self'", "data:", "blob:", "https:", "http:"],
+            connectSrc: ["'self'", "https://api.stripe.com", "https://accounts.google.com", "https://api.exchangerate-api.com", "wss:", "ws:"],
+            frameSrc: ["'self'", "https://js.stripe.com", "https://accounts.google.com"],
+            mediaSrc: ["'self'"],
+            objectSrc: ["'none'"],
+            ...(isProduction ? { upgradeInsecureRequests: [] } : {})
+        }
+    },
+    crossOriginEmbedderPolicy: false,
+    // HSTS - Force HTTPS in production
+    hsts: isProduction ? {
+        maxAge: 31536000, // 1 year
+        includeSubDomains: true,
+        preload: true
+    } : false
+}));
+
+// Home-route CSP overlay: tighter defaults without changing global policy for other pages.
+app.use((req, res, next) => {
+    const lowerPath = req.path.toLowerCase();
+    const basePathLower = (BASE_PATH || '').toLowerCase();
+    const isHomeRoute =
+        lowerPath === '/' ||
+        lowerPath === '/index.html' ||
+        (basePathLower && (lowerPath === basePathLower || lowerPath === `${basePathLower}/` || lowerPath === `${basePathLower}/index.html`));
+
+    if (!isHomeRoute) {
+        return next();
+    }
+
+    const homeCsp = [
+        "default-src 'self'",
+        "script-src 'self' 'unsafe-inline' https://js.stripe.com https://cdn.jsdelivr.net https://accounts.google.com https://appleid.cdn-apple.com",
+        "script-src-attr 'unsafe-inline'",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com",
+        "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com data:",
+        "img-src 'self' data: blob: https: http:",
+        "connect-src 'self' https://api.stripe.com https://accounts.google.com https://api.exchangerate-api.com wss: ws:",
+        "frame-src 'self' https://js.stripe.com https://accounts.google.com",
+        "media-src 'self'",
+        "object-src 'none'",
+        "base-uri 'self'",
+        "frame-ancestors 'self'",
+        "form-action 'self'"
+    ];
+
+    if (isProduction) {
+        homeCsp.push('upgrade-insecure-requests');
+    }
+
+    res.setHeader('Content-Security-Policy', homeCsp.join('; '));
+    next();
+});
+app.use(compression()); // Gzip compression
+app.get('/favicon.ico', (req, res) => {
+    res.type('image/svg+xml');
+    res.sendFile(path.join(__dirname, 'assets', 'logo.svg'));
+});
+app.use(geoIPMiddleware); // Auto-detect region
+app.use(cookieParser());
+
+// Session middleware (required for Passport OAuth flow)
+// Use a strong session secret - must be provided in production
+const sessionSecret = process.env.SESSION_SECRET || (process.env.NODE_ENV === 'production' ? (() => { logger.error('SESSION_SECRET required in production'); process.exit(1); })() : 'dev_session_secret_change_in_prod');
+
+// Prefer Redis-backed session store in production if Redis is available
+let sessionOptions = {
+    secret: sessionSecret,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        secure: process.env.NODE_ENV === 'production',
+        httpOnly: true,
+        sameSite: 'lax',
+        maxAge: 24 * 60 * 60 * 1000 // 24 hour session for better UX
+    }
+};
+
+if (isProduction || process.env.REDIS_URL) {
+    sessionOptions.store = new RedisSessionStore({
+        redisManager,
+        prefix: process.env.REDIS_SESSION_PREFIX || 'sess:',
+        ttlSeconds: 24 * 60 * 60
+    });
+    logger.info('Redis-backed session store configured');
+} else {
+    logger.warn('Using in-memory session store in development because REDIS_URL is not configured.');
+}
+
+app.use(session(sessionOptions));
+
+// Initialize Passport for social login
+app.use(passport.initialize());
+app.use(passport.session());
+configureGoogleStrategy(passport);
+
+// --- Production environment validation (fail-fast) ---
+// --- Production environment validation (fail-fast) ---
+if (isProduction) {
+    const requiredVars = ['JWT_SECRET', 'SESSION_SECRET', 'DATABASE_URL', 'FRONTEND_URL', 'STRIPE_SECRET_KEY', 'PAYSTACK_SECRET_KEY'];
+    const missing = requiredVars.filter(v => !process.env[v]);
+    if (missing.length > 0) {
+        logger.error(`❌ FATAL: Missing required environment variables: ${missing.join(', ')}`);
+        process.exit(1);
+    }
+
+    // Disallow SQLite in production
+    if (process.env.DATABASE_URL && process.env.DATABASE_URL.startsWith('file:')) {
+        logger.error('❌ FATAL: DATABASE_URL points to a local SQLite file. Use PostgreSQL in production.');
+        process.exit(1);
+    }
+}
+
+app.use(cors({
+    origin: process.env.NODE_ENV === 'production' ? process.env.FRONTEND_URL : true,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key', 'Paystack-Signature', 'stripe-signature']
+}));
+
+function createServerAndSocket() {
+    if (globalStartup.server && globalStartup.io) {
+        return { server: globalStartup.server, io: globalStartup.io };
+    }
+
+    const server = http.createServer(app);
+    const io = new Server(server, {
+        connectionStateRecovery: {},
+        pingInterval: 10000, // Ping every 10s
+        pingTimeout: 5000    // Timeout after 5s of no response
+    });
+
+    globalStartup.server = server;
+    globalStartup.io = io;
+    return { server, io };
+}
+
+const { server, io } = createServerAndSocket();
+const PORT = process.env.PORT || 3000;
+
+// Middleware
+// Webhook Parser (MUST COME BEFORE GLOBAL express.json for raw body calculation)
+app.post(['/api/payment/webhook', '/api/v1/payment/webhook'], express.raw({ type: 'application/json' }), (req, res) => {
+    // Forward to controller
+    require('./src/controllers/webhookController').handleWebhook(req, res);
+});
+
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+const morgan = require('morgan');
+
+// Morgan Http Logger
+app.use(morgan('combined', { stream: logger.stream }));
+
+// Input sanitization middleware
+app.use(sanitizeInput);
+
+// CSRF Protection (double-submit cookie pattern)
+const { csrfProtection, csrfToken } = require('./src/middleware/csrf');
+app.get(['/api/csrf-token', '/api/v1/csrf-token'], csrfToken);
+
+// Rate limiting
+app.use(['/api', '/api/v1'], rateLimiters.api);
+// AI Assistant Route (Bypass CSRF for demo)
+app.post(['/api/ai-chat', '/api/v1/ai-chat'], (req, res) => {
+    const { message } = req.body;
+    let reply = "I am your GlobalX AI assistant. I'm currently in simulated mode.";
+    const lower = message ? message.toLowerCase() : '';
+    if (lower.includes('hello') || lower.includes('hi')) {
+        reply = "Hello! How can I help you navigate GlobalX today?";
+    } else if (lower.includes('wallet')) {
+        reply = "You can access your wallet securely by clicking the Wallet icon below.";
+    } else if (lower.includes('product') || lower.includes('shop')) {
+        reply = "Looking for products? Try browsing our Flash Sales or Deals of the Month!";
+    } else if (lower.includes('help') || lower.includes('support')) {
+        reply = "For live support, please click the Live Chat bubble in the floating menu to speak with an agent.";
+    }
+    
+    setTimeout(() => {
+        res.json({ reply });
+    }, 800);
+});
+
+// AI Product Generation Route (Bypass CSRF for demo)
+app.post(['/api/ai-chat/generate-product', '/api/v1/ai-chat/generate-product'], (req, res) => {
+    const { prompt } = req.body;
+    
+    setTimeout(() => {
+        res.json({
+            success: true,
+            product: {
+                title: `Premium ${prompt || 'Product'}`,
+                description: `This is a high-quality, AI-generated description for the ${prompt || 'product'}. It features state-of-the-art materials and an ergonomic design built to last.`,
+                price: Math.floor(Math.random() * 50000) + 5000
+            }
+        });
+    }, 1500);
+});
+
+app.use(['/api', '/api/v1'], csrfProtection);
+
+// Health & readiness probe
+app.get('/health', async (req, res) => {
+    const status = {
+        uptime: process.uptime(),
+        redis: redisManager.getStatus(),
+        env: process.env.NODE_ENV || 'development'
+    };
+
+    // Check DB connectivity
+    try {
+        await prisma.$queryRawUnsafe('SELECT 1');
+        status.database = { ok: true };
+    } catch (err) {
+        status.database = { ok: false, error: err.message };
+    }
+
+    const overallUp = status.database.ok && (
+        process.env.NODE_ENV === 'production'
+            ? status.redis.connected
+            : true
+    );
+
+    return res.status(overallUp ? 200 : 503).json({ status: overallUp ? 'ok' : 'degraded', details: status });
+});
+
+app.get(['/api/redis-status', '/api/v1/redis-status'], (req, res) => {
+    return res.json({
+        status: redisManager.getStatus(),
+        timestamp: new Date().toISOString()
+    });
+});
+
+// RBAC Middleware for Admin & Tiered Pages
+app.use(async (req, res, next) => {
+    const lowerPath = req.path.toLowerCase();
+
+    if (lowerPath.startsWith('/admin-') && lowerPath.endsWith('.html')) {
+        const token = req.cookies?.token || null;
+
+        if (!token) {
+            logger.warn(`Admin access blocked: missing token for ${req.path}`);
+            return res.redirect('/login.html?error=unauthorized');
+        }
+
+        try {
+            const decoded = jwt.verify(token, JWT_SECRET);
+            if (decoded.role !== 'ADMIN') {
+                return res.status(403).send('<h1>403 Forbidden</h1><p>Access denied. Admins only.</p>');
+            }
+            res.set('Cache-Control', 'no-store'); // Ensure browser always checks with server
+            next();
+
+        } catch (err) {
+            logger.warn(`Admin access denied: invalid/expired token for ${req.path}`);
+            return res.redirect('/login.html?error=session_expired');
+        }
+    } else if ((lowerPath === '/landing-page.html' || lowerPath === '/portfolio.html') && lowerPath.endsWith('.html')) {
+        const token = req.cookies?.token || null;
+
+        if (!token) {
+            logger.warn(`Tiered page blocked: missing token for ${req.path}`);
+            return res.redirect('/login.html?error=unauthorized');
+        }
+
+        try {
+            const decoded = jwt.verify(token, JWT_SECRET);
+            // We need to fetch the user tier from DB or trust the token if we add tier to token
+            // For now, let's fetch from DB to be secure — using singleton prisma client
+            const user = await prisma.user.findUnique({ where: { id: decoded.id } });
+
+            if (!user) return res.redirect('/login.html?error=user_not_found');
+
+            const tiers = { 'NONE': 0, 'MONTHLY': 1, 'YEARLY': 2 };
+            const userTierValue = tiers[user.subscriptionTier] || 0;
+
+            if (req.path === '/landing-page.html' && userTierValue < 1) {
+                return res.redirect('/access-fee.html?required=MONTHLY');
+            }
+            if (req.path === '/portfolio.html' && userTierValue < 2) {
+                return res.redirect('/access-fee.html?required=YEARLY');
+            }
+
+            next();
+        } catch (err) {
+            logger.warn(`Tiered page denied: invalid/expired token for ${req.path}`);
+            return res.redirect('/login.html?error=session_expired');
+        }
+    } else {
+        next();
+    }
+});
+
+// Static asset cache options
+const staticAssetOptions = { maxAge: '7d', etag: true, lastModified: true };
+const staticHtmlOptions = { maxAge: '0', etag: true, lastModified: true }; // Never cache HTML
+
+// Serve static files from multiple locations
+// Serve at root path
+if (directoryExists(FRONTEND_DIRS.html)) {
+    app.use(express.static(FRONTEND_DIRS.html, staticHtmlOptions));
+} else {
+    logger.warn(`Static directory missing: ${FRONTEND_DIRS.html}`);
+}
+
+if (directoryExists(FRONTEND_DIRS.css)) {
+    app.use(express.static(FRONTEND_DIRS.css, staticAssetOptions));
+    app.use('/public/css', express.static(FRONTEND_DIRS.css, staticAssetOptions));
+} else {
+    logger.warn(`Static directory missing: ${FRONTEND_DIRS.css}`);
+}
+
+if (directoryExists(FRONTEND_DIRS.js)) {
+    app.use(express.static(FRONTEND_DIRS.js, staticAssetOptions));
+    app.use('/public/js', express.static(FRONTEND_DIRS.js, staticAssetOptions));
+} else {
+    logger.warn(`Static directory missing: ${FRONTEND_DIRS.js}`);
+}
+
+if (directoryExists(FRONTEND_DIRS.html)) {
+    app.use('/public/html', express.static(FRONTEND_DIRS.html, staticHtmlOptions));
+}
+
+// Also serve at BASE_PATH if configured (for subfolder deployment)
+if (BASE_PATH) {
+    if (directoryExists(FRONTEND_DIRS.html)) {
+        app.use(BASE_PATH, express.static(FRONTEND_DIRS.html));
+    }
+    if (directoryExists(FRONTEND_DIRS.css)) {
+        app.use(BASE_PATH + '/css', express.static(FRONTEND_DIRS.css));
+    }
+    if (directoryExists(FRONTEND_DIRS.js)) {
+        app.use(BASE_PATH + '/js', express.static(FRONTEND_DIRS.js));
+    }
+}
+
+if (directoryExists(FRONTEND_DIRS.html)) {
+    app.use('/html', express.static(FRONTEND_DIRS.html, staticHtmlOptions)); // Explicit /html route
+}
+
+if (directoryExists(path.join(__dirname, 'models'))) {
+    app.use('/models', express.static(path.join(__dirname, 'models'), staticAssetOptions));
+}
+
+// Guard the root static fallback to avoid exposing backend/source files.
+app.use((req, res, next) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+        return next();
+    }
+
+    if (isBlockedRootStaticPath(req.path)) {
+        return res.status(404).end();
+    }
+
+    return next();
+});
+
+app.use(express.static(__dirname, {
+    dotfiles: 'deny',
+    index: false,
+    redirect: false,
+    fallthrough: true,
+    maxAge: '0'
+})); // Root fallback for legacy frontend assets
+
+// Privacy & Compliance (GDPR/CCPA)
+app.use((req, res, next) => {
+    // Check for consent cookie
+    const hasConsent = req.headers.cookie?.includes('gx_consent=true');
+    req.gdprStatus = hasConsent ? 'CONSENTED' : 'ANONYMOUS';
+
+    // In production, this would trigger different logging/tracking levels
+    next();
+});
+
+// Import Backend Modules
+const authRoutes = require('./src/routes/authRoutes');
+const paymentRoutes = require('./src/routes/paymentRoutes');
+const productRoutes = require('./src/routes/productRoutes');
+const escrowRoutes = require('./src/routes/escrowRoutes');
+const socketService = require('./src/services/socketService');
+const poolEvents = require('./src/services/poolEvents');
+const { startCronJobs } = require('./src/services/cronService');
+const { startEscrowJobs } = require('./src/services/escrowJobs');
+const cronJobManager = require('./src/services/cronJobManager');
+
+// Initialize Real-time Service
+const initializeSocket = () => {
+    if (globalStartup.socketStarted) {
+        return;
+    }
+
+    socketService(io);
+    poolEvents.initializePoolSocket(io);
+    globalStartup.socketStarted = true;
+};
+
+const initializeCron = async () => {
+    if (globalStartup.cronStarted) {
+        return;
+    }
+
+    try {
+        await startCronJobs(cronJobManager);
+        await startEscrowJobs(cronJobManager);
+        globalStartup.cronStarted = true;
+        logger.info('✅ Cron jobs registered and started (singleton)');
+    } catch (error) {
+        logger.error(`Failed to start cron jobs: ${error.message}`);
+    }
+};
+
+initializeSocket();
+initializeCron();
+
+// API Routes
+app.use(['/api/auth', '/api/v1/auth'], require('./src/routes/authRoutes'));
+
+app.get(['/api/health', '/api/v1/health'], async (req, res) => {
+    let status = {
+        database: { ok: true },
+        redis: { connected: redisManager.getStatus() === 'connected' }
+    };
+    try {
+        await prisma.$queryRawUnsafe('SELECT 1');
+        status.database = { ok: true };
+    } catch (err) {
+        status.database = { ok: false, error: err.message };
+    }
+
+    const overallUp = status.database.ok && (
+        process.env.NODE_ENV === 'production'
+            ? status.redis.connected
+            : true
+    );
+
+    return res.status(overallUp ? 200 : 503).json({ status: overallUp ? 'ok' : 'degraded', details: status });
+});
+
+app.get(['/api/redis-status', '/api/v1/redis-status'], (req, res) => {
+    return res.json({
+        status: redisManager.getStatus(),
+        timestamp: new Date().toISOString()
+    });
+});
+
+// API Routes
+app.use(['/api/auth', '/api/v1/auth'], authRoutes);
+app.use(['/api/user', '/api/v1/user'], require('./src/routes/userRoutes'));
+app.use(['/api/ai', '/api/v1/ai'], require('./src/routes/aiRoutes'));
+app.use(['/api/wallet', '/api/v1/wallet'], require('./src/routes/walletRoutes'));
+app.use(['/api/rewards', '/api/v1/rewards'], require('./src/routes/rewardRoutes'));
+app.use(['/api/seller-plans', '/api/v1/seller-plans'], require('./src/routes/sellerPlanRoutes'));
+app.use('/api/admin/economy', require('./src/routes/adminEconomyRoutes'));
+app.use(['/api/payment', '/api/v1/payment'], paymentRoutes);
+app.use(['/api/escrow', '/api/v1/escrow'], escrowRoutes);
+app.use(['/api/products', '/api/v1/products'], productRoutes);
+app.use(['/api/orders', '/api/v1/orders'], require('./src/routes/orderRoutes'));
+app.use(['/api/admin', '/api/v1/admin'], require('./src/routes/adminRoutes'));
+app.use(['/api/upload', '/api/v1/upload'], require('./src/routes/uploadRoutes'));
+app.use(['/api/buyers', '/api/v1/buyers'], require('./src/routes/buyerRoutes'));
+app.use(['/api/buyer-requests', '/api/v1/buyer-requests'], require('./src/routes/buyerRequestRoutes'));
+app.use(['/api/packing', '/api/v1/packing'], require('./src/routes/packingRoutes'));
+app.use(['/api/pools', '/api/v1/pools'], require('./src/routes/poolRoutes'));
+app.use(['/api/notifications', '/api/v1/notifications'], require('./src/routes/notificationRoutes'));
+app.use(['/api/feed', '/api/v1/feed'], require('./src/routes/feedRoutes'));
+app.use(['/api/verification', '/api/v1/verification'], require('./src/routes/verificationRoutes'));
+app.use(['/api/config', '/api/v1/config'], require('./src/routes/configRoutes'));
+app.use(['/api/payments', '/api/v1/payments'], require('./src/routes/paymentProofRoutes'));
+app.use(['/api/logs', '/api/v1/logs'], require('./src/routes/logRoutes'));
+app.use(['/api/stores', '/api/v1/stores'], require('./src/routes/storeRoutes'));
+app.use(['/api/messages', '/api/v1/messages'], require('./src/routes/messageRoutes'));
+app.use(['/api/marketing', '/api/v1/marketing'], require('./src/routes/marketingRoutes'));
+app.use(['/api/cart', '/api/v1/cart'], require('./src/routes/cartRoutes'));
+app.use(['/api/wishlist', '/api/v1/wishlist'], require('./src/routes/wishlistRoutes'));
+app.use(['/api/shipping', '/api/v1/shipping'], require('./src/routes/shippingRoutes'));
+app.use(['/api/seller', '/api/v1/seller'], require('./src/routes/sellerRoutes'));
+app.use(['/api/sellers', '/api/v1/sellers'], require('./src/routes/sellerRoutes'));
+app.use(['/api/seller/analytics', '/api/v1/seller-analytics'], require('./src/routes/sellerAnalyticsRoutes'));
+app.use(['/api/templates', '/api/v1/templates'], require('./src/routes/templateRoutes'));
+app.use(['/api/seller/templates', '/api/v1/seller/templates'], require('./src/routes/sellerTemplateRoutes'));
+app.use(['/api/reviews', '/api/v1/reviews'], require('./src/routes/reviewRoutes'));
+// W-Delivery OS
+app.use(['/api/delivery/earnings', '/api/v1/delivery/earnings'], require('./src/routes/courierEarningsRoutes'));
+app.use(['/api/delivery', '/api/v1/delivery'], require('./src/routes/deliveryRoutes'));
+
+// Trial Routes (6-Month Free Trial)
+app.use(['/api/trial', '/api/v1/trial'], require('./src/routes/trialRoutes'));
+
+// Promo Code Routes
+app.use(['/api/promo', '/api/v1/promo'], require('./src/routes/promoCodeRoutes'));
+
+// Flash Deal Routes
+app.use(['/api/flash-deals', '/api/v1/flash-deals'], require('./src/routes/flashDealRoutes'));
+
+// Dispute Routes
+app.use(['/api/disputes', '/api/v1/disputes'], require('./src/routes/disputeRoutes'));
+
+// 404 Handler
+app.use((req, res) => {
+    res.status(404).json({
+        success: false,
+        message: 'Endpoint not found'
+    });
+});
+
+// Error Handler
+app.use((err, req, res, next) => {
+    logger.error(err.stack);
+    res.status(500).json({
+        success: false,
+        message: 'Internal server error'
+    });
+});
+
+async function startServerWithErrorHandling() {
+    if (globalStartup.serverStarted) {
+        logger.warn('Server start attempted twice in same process - skipping duplicate start');
+        return;
+    }
+    globalStartup.serverStarted = true;
+
+    await redisReadyPromise;
+    const redisStatus = redisManager.getStatus();
+    if (isProduction && (!redisStatus.connected || redisStatus.useFallback)) {
+        logger.error('FATAL: Redis-backed session store is unavailable in production. Server shutting down.');
+        process.exit(1);
+    }
+
+    const basePort = parseInt(process.env.PORT, 10) || 5000;
+    const maxAttempts = 2;
+    let attempts = 0;
+    let currentPort = basePort;
+
+    const tryStart = () => {
+        attempts += 1;
+
+        if (serverInstance) {
+            serverInstance.removeAllListeners('error');
+        }
+
+        serverInstance = server.listen(currentPort, () => {
+            const addr = serverInstance.address();
+            logger.info(`✅ Server listening on port ${addr.port}`);
+        });
+
+        serverInstance.on('error', (err) => {
+            if (err.code === 'EADDRINUSE') {
+                logger.warn(`Port ${currentPort} in use, trying ${currentPort + 1}...`);
+                currentPort += 1;
+                if (attempts < maxAttempts) {
+                    setTimeout(tryStart, 1000);
+                } else {
+                    logger.error(`Failed to bind to any port after ${maxAttempts} attempts`);
+                    process.exit(1);
+                }
+            } else {
+                logger.error(`Server error: ${err.message}`);
+// Serve Uploaded Images
+app.use('/uploads', express.static(path.join(__dirname, 'storage', 'uploads')));
+
+// In development, redirect any direct non-API browser navigation on the backend port to the Vite dev server
+if (process.env.NODE_ENV !== 'production') {
+    app.get('*', (req, res, next) => {
+        if (req.method === 'GET' && !req.path.startsWith('/api') && !req.path.startsWith('/uploads')) {
+            const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5175';
+            return res.redirect(`${frontendUrl}${req.path === '/' ? '' : req.path}`);
+        }
+        next();
+    });
+}
+
+// ============================================================================
+// START SERVER WITH PROPER ERROR HANDLING
+// ============================================================================
+
+async function startServerWithErrorHandling() {
+    if (globalStartup.serverStarted) {
+        logger.warn('Server start attempted twice in same process - skipping duplicate start');
+        return;
+    }
+    globalStartup.serverStarted = true;
+
+    await redisReadyPromise;
+    const redisStatus = redisManager.getStatus();
+    if (isProduction && (!redisStatus.connected || redisStatus.useFallback)) {
+        logger.error('FATAL: Redis-backed session store is unavailable in production. Server shutting down.');
+        process.exit(1);
+    }
+
+    const basePort = parseInt(process.env.PORT, 10) || 5000;
+    const maxAttempts = 2;
+    let attempts = 0;
+    let currentPort = basePort;
+
+    const tryStart = () => {
+        attempts += 1;
+
+        if (serverInstance) {
+            serverInstance.removeAllListeners('error');
+        }
+
+        serverInstance = server.listen(currentPort, () => {
+            const addr = serverInstance.address();
+            const boundPort = addr && addr.port ? addr.port : currentPort;
+            logger.info(`🚀 GlobalX Server running on http://localhost:${boundPort}`);
+            logger.info('✅ Socket.io Real-time engine active');
+            logger.info(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
+            serverInstance.keepAliveTimeout = 65000;
+            serverInstance.headersTimeout = 66000;
+
+            // Start W-Delivery background workers
+            try {
+                require('./src/workers/dispatchOfferWorker').start();
+                require('./src/workers/trackingFlushWorker').start();
+                logger.info('✅ W-Delivery OS background workers started');
+            } catch (err) {
+                logger.error(`Failed to start W-Delivery workers: ${err.message}`);
+            }
+        });
+
+        serverInstance.once('error', (error) => {
+            if (error && error.code === 'EADDRINUSE') {
+                logger.warn(`Port ${currentPort} is already in use.`);
+                if (process.env.NODE_ENV === 'production') {
+                    logger.error('Port in use in production. Exiting to avoid unexpected bind.');
+                    process.exit(1);
+                }
+
+                if (attempts < maxAttempts) {
+                    currentPort += 1;
+                    logger.info(`Trying alternative port ${currentPort} (attempt ${attempts + 1}/${maxAttempts})`);
+                    setTimeout(tryStart, 800);
+                    return;
+                }
+
+                logger.error(`Failed to bind to a port after ${attempts} attempts. Exiting.`);
+                process.exit(1);
+            } else if (error && error.code === 'EACCES') {
+                logger.error(`Permission denied on port ${currentPort}. Try a port above 1024.`);
+                process.exit(1);
+            } else {
+                logger.error(`Server error during bind: ${error ? error.message : String(error)}`);
+                if (error && error.stack) logger.error(error.stack);
+                process.exit(1);
+            }
+        });
+    };
+
+    tryStart();
+}
+
+startServerWithErrorHandling().catch((error) => {
+    logger.error(`Failed to start server: ${error.message}`);
+    logger.error(error.stack);
+    process.exit(1);
+});
+});

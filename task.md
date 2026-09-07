@@ -1,0 +1,6 @@
+- [x] Add `layoutId` support to `frontend/src/components/motion/WImageLoader.jsx`
+- [x] Update `frontend/src/components/shared/SmartProductCard.jsx` to pass the `layoutId` prop down
+- [x] Update `frontend/src/pages/ProductDetails.jsx` to receive and apply the `layoutId` to its hero image
+- [x] Update `LuxuryBento` component in `frontend/src/components/storefront/LayoutEngine.jsx` to use new CSS Bento Grid classes
+- [x] Wrap the routes in `frontend/src/App.tsx` with Framer Motion's `<AnimatePresence mode='wait'>` and add page transition animations
+- [x] Add staggered list animations to `frontend/src/pages/Feed.jsx` using framer-motion variants

@@ -1,0 +1,33 @@
+{
+  "seller": {
+    "dashboard": { "icon": "layout.svg" },
+    "analytics": { "icon": "activity.svg" },
+    "inventory": { "icon": "package.svg" },
+    "orders": { "icon": "shopping-bag.svg" },
+    "wallet": { "icon": "credit-card.svg", "animation": "wallet.json" },
+    "messages": { "icon": "message-square.svg" },
+    "verification": { "icon": "shield-check.svg", "animation": "shield-check.json" },
+    "marketing": { "icon": "megaphone.svg" },
+    "settings": { "icon": "settings.svg" },
+    "store": { "illustration": "store.png" },
+    "performance": { "icon": "zap.svg" }
+  },
+  "buyer": {
+    "wallet": { "icon": "wallet.svg" },
+    "orders": { "icon": "shopping-bag.svg" }
+  },
+  "shared": {
+    "edit": { "icon": "edit.svg" },
+    "delete": { "icon": "trash-2.svg" },
+    "search": { "icon": "search.svg" },
+    "location": { "icon": "map-pin.svg" },
+    "star": { "icon": "star.svg" },
+    "phone": { "icon": "phone.svg" },
+    "menu": { "icon": "menu.svg" },
+    "close": { "icon": "x.svg" },
+    "plus": { "icon": "plus.svg" },
+    "archive": { "icon": "archive.svg" },
+    "bell": { "icon": "bell.svg", "animation": "notification.json" },
+    "success": { "animation": "payment-success.json" }
+  }
+}

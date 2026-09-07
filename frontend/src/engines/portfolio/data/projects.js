@@ -1,0 +1,61 @@
+const placeholder = (label) =>
+  `https://placehold.co/600x400/56738C/FFFFFF?text=${encodeURIComponent(label)}`;
+
+export const PROJECTS = [
+  {
+    title: 'Project One',
+    description: 'Summarize the problem you solved and the impact it created for the user or business.',
+    features: 'Features: React, Node.js, REST APIs',
+    image: placeholder('Project+One'),
+    alt: 'Placeholder screenshot for project one',
+    demoUrl: 'https://example.com/demo-one',
+    codeUrl: 'https://github.com/your-username/project-one',
+  },
+  {
+    title: 'Project Two',
+    description: 'Highlight your role, technologies used, and what makes this build unique.',
+    features: 'Features: TypeScript, GraphQL, PostgreSQL',
+    image: placeholder('Project+Two'),
+    alt: 'Placeholder screenshot for project two',
+    demoUrl: 'https://example.com/demo-two',
+    codeUrl: 'https://github.com/your-username/project-two',
+    cardClass: 'pb-2',
+  },
+  {
+    title: 'Project Three',
+    description: 'Describe how you collaborated, optimized performance, or shipped a notable feature.',
+    features: 'Features: Next.js, Tailwind, CMS',
+    image: placeholder('Project+Three'),
+    alt: 'Placeholder screenshot for project three',
+    demoUrl: 'https://example.com/demo-three',
+    codeUrl: 'https://github.com/your-username/project-three',
+  },
+  {
+    title: 'Project Four',
+    description: 'Use this slot for a hackathon, freelance engagement, or open-source contribution.',
+    features: 'Features: HTML, CSS, JavaScript',
+    image: placeholder('Project+Four'),
+    alt: 'Placeholder screenshot for project four',
+    demoUrl: 'https://example.com/demo-four',
+    codeUrl: 'https://github.com/your-username/project-four',
+    cardClass: 'pb-5',
+  },
+  {
+    title: 'Project Five',
+    description: 'Include results, metrics, or testimonials that quantify the value you delivered.',
+    features: 'Features: React Native, Expo',
+    image: placeholder('Project+Five'),
+    alt: 'Placeholder screenshot for project five',
+    demoUrl: 'https://example.com/demo-five',
+    codeUrl: 'https://github.com/your-username/project-five',
+  },
+  {
+    title: 'Project Six',
+    description: 'Showcase experimentation, learning, or a fun side-project that demonstrates range.',
+    features: 'Features: Python, Flask, SQLite',
+    image: placeholder('Project+Six'),
+    alt: 'Placeholder screenshot for project six',
+    demoUrl: 'https://example.com/demo-six',
+    codeUrl: 'https://github.com/your-username/project-six',
+  },
+];

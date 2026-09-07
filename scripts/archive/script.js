@@ -1,0 +1,1 @@
+const fs = require('fs'); const code = fs.readFileSync('src/backend/controllers/productController.js', 'utf8'); const lines = code.split('\n'); let start = -1; for(let i=0; i<lines.length; i++) { if(lines[i].includes('const productSchema = z.object({')) { start = i; break; } } if(start > -1) { console.log(lines.slice(start, start + 20).join('\n')); }
