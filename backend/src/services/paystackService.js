@@ -22,60 +22,19 @@ const buildQuery = (params = {}) => {
   return query ? `?${query}` : '';
 };
 
+const ApiClient = require('../utils/apiClient');
+
 /**
  * 🔧 Core Paystack Request Function
  */
-const paystackRequest = (endpoint, method = 'GET', data = null) => {
-  return new Promise((resolve, reject) => {
-    if (!PAYSTACK_SECRET) {
-      logger.error('Paystack secret key not configured');
-      return reject(new Error('Paystack not configured'));
-    }
-
-    const options = {
-      hostname: PAYSTACK_BASE_URL,
-      port: 443,
-      path: `/${endpoint}`,
-      method,
-      headers: {
-        Authorization: `Bearer ${PAYSTACK_SECRET}`,
-        'Content-Type': 'application/json'
-      }
-    };
-
-    const req = https.request(options, (res) => {
-      let body = '';
-
-      res.on('data', (chunk) => (body += chunk));
-
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(body);
-
-          if (parsed.status) {
-            resolve(parsed.data);
-          } else {
-            logger.error('Paystack API Error:', parsed);
-            reject(new Error(parsed.message || 'Paystack API error'));
-          }
-        } catch (err) {
-          logger.error('Paystack parse error:', err);
-          reject(err);
-        }
-      });
-    });
-
-    req.on('error', (err) => {
-      logger.error('Paystack request error:', err);
-      reject(err);
-    });
-
-    if (data && method !== 'GET') {
-      req.write(JSON.stringify(data));
-    }
-
-    req.end();
-  });
+const paystackRequest = async (endpoint, method = 'GET', data = null) => {
+  const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  
+  // ApiClient throws on status === false
+  const response = await ApiClient.paystack(path, method, data);
+  
+  // Legacy paystackService methods expect just the unwrapped .data object
+  return response.data;
 };
 
 //////////////////////////////////////////////////////////////////
@@ -209,6 +168,10 @@ exports.createTransferRecipient = async ({
       recipientCode: res.recipient_code
     };
   } catch (err) {
+    if (err.message && err.message.includes('resolve account') && require('../utils/providerConfig').allowMockExternalApis()) {
+      logger.warn('Mocking recipient creation due to Paystack test account resolution limits.');
+      return { recipientCode: `RCP_MOCK_${Date.now()}` };
+    }
     logger.error('Create recipient failed:', err);
     throw err;
   }
@@ -216,6 +179,18 @@ exports.createTransferRecipient = async ({
 
 exports.initiateTransfer = async (amount, recipientCode, reason) => {
   try {
+    if (recipientCode.startsWith('RCP_MOCK_')) {
+      if (!require('../utils/providerConfig').allowMockExternalApis()) {
+        throw new Error('Cannot transfer to a mock recipient. Seller must re-add a valid bank account.');
+      }
+      logger.warn('Short-circuiting transfer for mock recipient.');
+      return {
+        reference: `MOCK_TX_${Date.now()}`,
+        status: 'success',
+        data: { mocked: true }
+      };
+    }
+    
     const payload = {
       source: 'balance',
       amount: Math.round(amount * 100), // Paystack expects amount in kobo
@@ -230,6 +205,14 @@ exports.initiateTransfer = async (amount, recipientCode, reason) => {
       data: res
     };
   } catch (err) {
+    if (err.message && err.message.includes('starter business') && require('../utils/providerConfig').allowMockExternalApis()) {
+      logger.warn('Mocking transfer success due to Paystack Starter Business limitations.');
+      return {
+        reference: `MOCK_TX_${Date.now()}`,
+        status: 'success',
+        data: { mocked: true }
+      };
+    }
     logger.error('Transfer failed:', err);
     throw err;
   }

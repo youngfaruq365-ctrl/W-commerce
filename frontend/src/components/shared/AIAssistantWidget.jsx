@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bot, X, Send, Sparkles, ChevronDown } from 'lucide-react';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 import { WReasoningAnimation } from '../motion/WReasoningAnimation';
 
 const AIAssistantWidget = () => {
@@ -23,18 +23,84 @@ const AIAssistantWidget = () => {
 
   const handleSend = async (e) => {
     e?.preventDefault();
-    if (!input.trim()) return;
+    if (!input.trim() || isTyping) return;
 
-    const userMessage = { id: Date.now(), role: 'user', content: input };
+    const userText = input.trim();
+    const userMessage = { id: Date.now(), role: 'user', content: userText };
+    const aiMessageId = Date.now() + 1;
+    const historyPayload = [...messages, userMessage].slice(-10).map(m => ({
+      role: m.role === 'ai' ? 'assistant' : 'user',
+      content: m.content
+    }));
+
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsTyping(true);
 
     try {
-      const response = await axios.post('/api/v1/ai-chat', { message: userMessage.content });
-      setMessages(prev => [...prev, { id: Date.now(), role: 'ai', content: response.data.reply, image: response.data.image }]);
+      const response = await fetch('/api/v1/ai-chat/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ message: userText, messages: historyPayload })
+      });
+
+      if (!response.ok || !response.body) {
+        throw new Error('Stream unavailable');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let accumulated = '';
+      let buffer = '';
+      let addedPlaceholder = false;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data:')) continue;
+          const jsonStr = trimmed.slice(5).trim();
+          if (!jsonStr) continue;
+          try {
+            const parsed = JSON.parse(jsonStr);
+            if (parsed.delta) {
+              accumulated += parsed.delta;
+              if (!addedPlaceholder) {
+                addedPlaceholder = true;
+                setIsTyping(false);
+                setMessages(prev => [...prev, { id: aiMessageId, role: 'ai', content: accumulated }]);
+              } else {
+                setMessages(prev =>
+                  prev.map(m => (m.id === aiMessageId ? { ...m, content: accumulated } : m))
+                );
+              }
+            } else if (parsed.done && parsed.reply && !accumulated) {
+              accumulated = parsed.reply;
+              setMessages(prev => [...prev, { id: aiMessageId, role: 'ai', content: accumulated }]);
+            }
+          } catch (_) {
+            // Ignore partial chunk parse error
+          }
+        }
+      }
+
+      if (!accumulated) {
+        const fallbackRes = await axios.post('/api/v1/ai-chat', { message: userText, messages: historyPayload });
+        setMessages(prev => [...prev, { id: aiMessageId, role: 'ai', content: fallbackRes.data.reply, image: fallbackRes.data.image }]);
+      }
     } catch (error) {
-      setMessages(prev => [...prev, { id: Date.now(), role: 'ai', content: "Sorry, I'm currently having trouble connecting to the network." }]);
+      try {
+        const fallbackRes = await axios.post('/api/v1/ai-chat', { message: userText, messages: historyPayload });
+        setMessages(prev => [...prev, { id: aiMessageId, role: 'ai', content: fallbackRes.data.reply, image: fallbackRes.data.image }]);
+      } catch (_) {
+        setMessages(prev => [...prev, { id: aiMessageId, role: 'ai', content: "Sorry, I'm currently having trouble connecting to the network." }]);
+      }
     } finally {
       setIsTyping(false);
     }

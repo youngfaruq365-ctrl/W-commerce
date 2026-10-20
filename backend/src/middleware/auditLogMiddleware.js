@@ -62,6 +62,9 @@ function auditLogMiddleware(options = {}) {
         };
 
         // When the response finishes, write the audit log (non-blocking)
+        // Increase the listener limit slightly to prevent MaxListenersExceededWarning
+        // when many concurrent requests are each attaching a 'finish' listener.
+        res.setMaxListeners(res.getMaxListeners() + 1);
         res.on('finish', () => {
             // Skip logging for non-write or non-admin (belt-and-suspenders)
             const actorId   = req.user?.id;

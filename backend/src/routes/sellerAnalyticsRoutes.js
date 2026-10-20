@@ -4,6 +4,7 @@ const analyticsController = require('../controllers/analyticsController');
 const { protect, authorize } = require('../middleware/authMiddleware');
 
 // Get seller performance metrics
+router.get('/', protect, authorize('SELLER', 'ADMIN'), analyticsController.getSellerAnalytics);
 router.get('/performance', protect, authorize('SELLER', 'ADMIN'), analyticsController.getSellerAnalytics);
 router.get('/top-products', protect, authorize('SELLER', 'ADMIN'), analyticsController.getTopProducts);
 router.get('/sales-by-period', protect, authorize('SELLER', 'ADMIN'), analyticsController.getSalesByPeriod);

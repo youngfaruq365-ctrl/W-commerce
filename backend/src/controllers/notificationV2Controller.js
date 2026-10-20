@@ -37,7 +37,7 @@ exports.listNotifications = async (req, res) => {
 exports.getUnreadCount = async (req, res) => {
     try {
         const count = await notificationV2.getUnreadCount(req.user.id);
-        return res.json({ success: true, unreadCount: count });
+        return res.json({ success: true, count, unreadCount: count });
 
     } catch (err) {
         logger.error(`[NotifV2Ctrl] getUnreadCount: ${err.message}`);

@@ -27,7 +27,10 @@ const crypto = require('crypto');
 
 // Initialize Stripe (mock or real based on env variables)
 // In a production environment, this should definitely be provided in the env variables
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_mock_for_development', {
+if (process.env.NODE_ENV === 'production' && !process.env.STRIPE_SECRET_KEY) {
+    require('../utils/logger').error('[CHECKOUT] STRIPE_SECRET_KEY is missing in production — Stripe checkout will fail.');
+}
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_unconfigured', {
     apiVersion: '2023-10-16', // Lock the API version for stable integrations
 });
 
@@ -73,10 +76,10 @@ function calcShipping(/* sellerCount */ _n) {
  * Validate and resolve a promo code.
  * Returns { discount, appliedPromo } — discount is 0 if the code is invalid.
  */
-async function resolvePromoCode({ promoCodeStr, buyerId, sellerIds, subtotalByCode }) {
+async function resolvePromoCode({ promoCodeStr, buyerId, sellerIds, subtotalByCode, items }) {
     if (!promoCodeStr) return { discount: 0, appliedPromo: null };
 
-    const promo = await prisma.promoCode.findUnique({ where: { code: promoCodeStr } });
+    const promo = await prisma.promoCode.findUnique({ where: { code: promoCodeStr.toUpperCase() } });
     const now = new Date();
 
     if (!promo || !promo.isActive || promo.startsAt > now || (promo.expiresAt && promo.expiresAt < now)) {
@@ -85,10 +88,10 @@ async function resolvePromoCode({ promoCodeStr, buyerId, sellerIds, subtotalByCo
 
     const [totalUsage, userUsage] = await Promise.all([
         prisma.promoCodeUsage.count({ where: { promoCodeId: promo.id } }),
-        prisma.promoCodeUsage.count({ where: { promoCodeId: promo.id, userId: buyerId } }),
+        buyerId ? prisma.promoCodeUsage.count({ where: { promoCodeId: promo.id, userId: buyerId } }) : Promise.resolve(0),
     ]);
 
-    if ((promo.maxUses && totalUsage >= promo.maxUses) || userUsage >= promo.maxUsesPerUser) {
+    if ((promo.maxUses && totalUsage >= promo.maxUses) || (buyerId && userUsage >= promo.maxUsesPerUser)) {
         return { discount: 0, appliedPromo: null, error: 'Promo code usage limit reached.' };
     }
 
@@ -97,13 +100,25 @@ async function resolvePromoCode({ promoCodeStr, buyerId, sellerIds, subtotalByCo
         return { discount: 0, appliedPromo: null, error: 'Promo code does not apply to your cart.' };
     }
 
-    const applicableSubtotal = promo.sellerId
-        ? (subtotalByCode[promo.sellerId] || 0)
-        : Object.values(subtotalByCode).reduce((a, b) => a + b, 0);
+    // Product-scoped code: only applies if this specific product is in the cart
+    let applicableSubtotal = 0;
+    if (promo.productId) {
+        const matchingItems = (items || []).filter(i => String(i.productId) === String(promo.productId));
+        if (matchingItems.length === 0) {
+            return { discount: 0, appliedPromo: null, error: 'Promo code is only applicable to its specific product.' };
+        }
+        applicableSubtotal = matchingItems.reduce((acc, i) => acc + (Number(i.subtotal) || (Number(i.priceAtTime || i.price) * Number(i.quantity))), 0);
+    } else if (promo.sellerId) {
+        applicableSubtotal = subtotalByCode[promo.sellerId] || 0;
+    } else if (typeof subtotalByCode === 'number') {
+        applicableSubtotal = subtotalByCode;
+    } else {
+        applicableSubtotal = Object.values(subtotalByCode || {}).reduce((a, b) => a + b, 0);
+    }
 
     const discount = promo.discountType === 'PERCENTAGE'
         ? applicableSubtotal * (Number(promo.discountValue) / 100)
-        : Math.min(Number(promo.discountValue), applicableSubtotal);   // fixed discount capped at subtotal
+        : Math.min(Number(promo.discountValue), applicableSubtotal);
 
     return { discount: Math.round(discount * 100) / 100, appliedPromo: promo };
 }
@@ -160,7 +175,7 @@ exports.processCheckoutV2 = async ({
     // ── 1. Resolve items ───────────────────────────────────────────────────
     let rawItems = explicitItems;
 
-    if (fromCart && !rawItems) {
+    if (fromCart && !rawItems && buyerId) {
         const cart = await prisma.cart.findUnique({
             where: { userId: buyerId },
             include: { items: true },
@@ -197,6 +212,18 @@ exports.processCheckoutV2 = async ({
 
     const productMap = new Map(products.map(p => [p.id, p]));
 
+    // Fetch ad discount sessions for the buyer and these products
+    let adDiscountSessions = [];
+    if (buyerId) {
+        adDiscountSessions = await prisma.adDiscountSession.findMany({
+            where: {
+                buyerId,
+                productId: { in: productIds },
+                currentDiscountPct: { gt: 0 }
+            }
+        });
+    }
+
     // Group items by seller
     // sellerBuckets: Map<sellerId, { sellerId, storeId, items: [] }>
     const sellerBuckets = new Map();
@@ -206,8 +233,16 @@ exports.processCheckoutV2 = async ({
         const pid     = String(raw.productId);
         const product = productMap.get(pid);
 
-        if (!product) {
+        if (!product || product.isArchived) {
             throw Object.assign(new Error(`Product ${pid} not found or no longer available.`), { statusCode: 404 });
+        }
+
+        // Products from stores pending/rejected admin approval cannot be purchased
+        if (!product.store || product.store.approvalStatus !== 'APPROVED') {
+            throw Object.assign(
+                new Error(`"${product.title}" is not currently available for purchase.`),
+                { statusCode: 409 }
+            );
         }
 
         const qty = Math.max(1, Number(raw.quantity || 1));
@@ -226,7 +261,11 @@ exports.processCheckoutV2 = async ({
             throw Object.assign(new Error(`Product "${product.title}" has no associated seller.`), { statusCode: 422 });
         }
 
-        const unitPrice = resolvePrice(product);
+        let unitPrice = resolvePrice(product);
+        const adSession = adDiscountSessions.find(s => s.productId === product.id);
+        if (adSession) {
+            unitPrice = Number((unitPrice * (1 - (adSession.currentDiscountPct / 100))).toFixed(2));
+        }
 
         if (!sellerBuckets.has(sellerId)) {
             const sellerCommissionRate = product.store?.sellerPlan?.commissionRate ?? COMMISSION_RATE;
@@ -271,11 +310,13 @@ exports.processCheckoutV2 = async ({
     for (const s of sellerArr) subtotalByCode[s.sellerId] = s.subtotal;
     const sellerIdSet = new Set(sellerArr.map(s => s.sellerId));
 
+    const allItems = sellerArr.flatMap(s => s.items);
     const { discount: promoDiscount, appliedPromo, error: promoError } = await resolvePromoCode({
         promoCodeStr,
         buyerId,
         sellerIds: sellerIdSet,
         subtotalByCode,
+        items: allItems
     });
 
     if (promoCodeStr && promoError) {
@@ -321,7 +362,7 @@ exports.processCheckoutV2 = async ({
         // 7A. Create MarketplaceOrder
         const marketplaceOrder = await tx.marketplaceOrder.create({
             data: {
-                buyerId,
+                buyerId:          buyerId || 'guest_user',
                 subtotal:         Math.round(marketplaceSubtotal  * 100) / 100,
                 shippingCost:     Math.round(marketplaceShipping   * 100) / 100,
                 discountTotal:    promoDiscount,
@@ -348,7 +389,7 @@ exports.processCheckoutV2 = async ({
             const fo = await tx.fulfillmentOrder.create({
                 data: {
                     marketplaceOrderId: marketplaceOrder.id,
-                    buyerId,
+                    buyerId:          buyerId || 'guest_user',
                     sellerId:         s.sellerId,
                     subtotal:         s.subtotal,
                     shippingCost:     s.shippingCost,
@@ -396,8 +437,8 @@ exports.processCheckoutV2 = async ({
                     promoCodeId:     appliedPromo.id,
                     userId:          buyerId,
                     // PromoCodeUsage.orderId still references legacy Order — nullable migration pending
-                    // For now we store the marketplaceOrder id in the field for traceability
-                    orderId:         marketplaceOrder.id,
+                    // We cannot store marketplaceOrder.id here as it causes an FK constraint failure.
+                    orderId:         null,
                     discountApplied: promoDiscount,
                 },
             });
@@ -408,7 +449,12 @@ exports.processCheckoutV2 = async ({
         }
 
         // 7E. Clear the buyer's cart
-        if (clearCart) {
+        // Online gateway payments (Paystack/Stripe/Flutterwave/Monnify/Card) only clear the cart
+        // once the payment is confirmed (see paymentV2Service.onChargeSuccess). Orders that are
+        // already paid (paymentReference) or use offline methods clear immediately.
+        const OFFLINE_METHODS = ['WALLET', 'COD', 'CASH_ON_DELIVERY', 'BANK_TRANSFER', 'DIRECT_BANK', 'FREE'];
+        const shouldClearNow = !!paymentReference || OFFLINE_METHODS.includes(String(paymentMethod || '').toUpperCase());
+        if (clearCart && buyerId && shouldClearNow) {
             const cart = await tx.cart.findUnique({ where: { userId: buyerId } });
             // BUG-CHECKOUT-01: Was referencing `items` (undefined in this scope) — cart never cleared.
             // Fixed: use `rawItems` which holds the resolved item list.
@@ -550,7 +596,7 @@ exports.previewCheckout = async ({
     for (const ri of rawItems) {
         const product = productMap.get(String(ri.productId));
         if (!product) { validationError = `Product ${ri.productId} not found.`; break; }
-        if (!product.isActive || product.isDeleted) { validationError = `"${product.title}" is no longer available.`; break; }
+        if (product.isArchived) { validationError = `"${product.title}" is no longer available.`; break; }
         if (product.stock < ri.quantity) { validationError = `Insufficient stock for "${product.title}" (${product.stock} available).`; break; }
 
         const unitPrice = resolvePrice(product);
@@ -590,8 +636,9 @@ exports.previewCheckout = async ({
     // ── 4. Resolve promo code ──────────────────────────────────────────────────
     const sellerIds = new Set([...sellerMap.keys()]);
     const totalSubtotal = [...sellerMap.values()].reduce((s, b) => s + b.subtotal, 0);
+    const allItems = [...sellerMap.values()].flatMap(b => b.items);
     const { discount: promoDiscount, appliedPromo, error: promoError } =
-        await resolvePromoCode({ promoCodeStr, buyerId, sellerIds, subtotalByCode: totalSubtotal });
+        await resolvePromoCode({ promoCodeStr, buyerId, sellerIds, subtotalByCode: totalSubtotal, items: allItems });
 
     // ── 5. Compute totals ──────────────────────────────────────────────────────
     const sellerBundles     = [...sellerMap.values()];

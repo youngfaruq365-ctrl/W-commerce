@@ -9,7 +9,7 @@ const GXMetric = ({ label, value, change, trend = 'up', iconName }) => {
         <p className="text-[var(--text-muted)] text-sm mb-1 font-medium">{label}</p>
         <h4 className="text-3xl font-extrabold text-black dark:text-white tracking-tight">{value}</h4>
         {change && (
-          <p className={`text-sm mt-2 font-medium ${isPositive ? 'text-gray-700 400' : 'text-gray-700 400'} flex items-center gap-1`}>
+          <p className={`text-sm mt-2 font-medium ${isPositive ? 'text-gray-400' : 'text-gray-400'} flex items-center gap-1`}>
             {isPositive ? '↑' : '↓'} {change}
           </p>
         )}

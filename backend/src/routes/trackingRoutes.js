@@ -21,7 +21,12 @@ router.use(protect);
 router.get('/by-order/:fulfillmentOrderId', async (req, res) => {
     try {
         const assignment = await prisma.deliveryAssignment.findFirst({
-            where:  { fulfillmentOrderId: req.params.fulfillmentOrderId },
+            where:  { 
+                OR: [
+                    { fulfillmentOrderId: req.params.fulfillmentOrderId },
+                    { orderId: req.params.fulfillmentOrderId }
+                ]
+            },
             select: { id: true },
         });
 

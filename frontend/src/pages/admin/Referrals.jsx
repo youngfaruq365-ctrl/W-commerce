@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import { apiClient as axios } from '../../utils/apiClient';
 import { Users, DollarSign, Activity, CheckCircle, Clock } from 'lucide-react';
 
 const Referrals = () => {
@@ -79,7 +79,7 @@ const Referrals = () => {
                       {ref.referred}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-[var(--text-main)]">
-                      ${ref.reward}
+                      ₦{ref.reward}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${

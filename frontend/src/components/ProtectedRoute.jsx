@@ -2,12 +2,14 @@ import React from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { ROUTES } from '../constants/routes';
+import { useIsPresent } from 'framer-motion';
 
 const ProtectedRoute = ({ roles = [] }) => {
-  const { user, isAuthenticated, isLoading } = useAuthStore();
+  const { user, isAuthenticated, isCheckingAuth } = useAuthStore();
   const location = useLocation();
+  const isPresent = useIsPresent();
 
-  if (isLoading) {
+  if (isCheckingAuth) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[var(--bg-primary)]">
         <div className="w-8 h-8 border-2 border-[var(--accent-primary)] border-t-transparent rounded-full animate-spin"></div>
@@ -15,14 +17,14 @@ const ProtectedRoute = ({ roles = [] }) => {
     );
   }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated && isPresent) {
     return <Navigate to={ROUTES.LOGIN} state={{ from: location }} replace />;
   }
 
   const role = user?.role?.toUpperCase();
   const normalizedRoles = roles.map(r => r.toUpperCase());
 
-  if (roles.length > 0 && (!role || !normalizedRoles.includes(role))) {
+  if (roles.length > 0 && (!role || !normalizedRoles.includes(role)) && isPresent) {
     // Redirect authenticated but unauthorized users to their respective dashboards or feed
     if (role === 'PENDING') return <Navigate to={ROUTES.ROLE_SELECTION} replace />;
     if (role === 'ADMIN') return <Navigate to={ROUTES.ADMIN_DASHBOARD} replace />;

@@ -1,3 +1,4 @@
+import { PLACEHOLDER_IMAGE } from '@/constants/placeholders';
 import React, { useState } from 'react';
 import { X, Check, ShoppingCart, Star } from 'lucide-react';
 import { celebrate } from '../components/visual/CelebrationController';
@@ -8,8 +9,8 @@ const ProductCompareModal = ({ products = [], onClose, onAddToCart }) => {
   if (products.length < 2) return null;
 
   return (
-    <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-white/80 backdrop-blur-sm animate-in fade-in duration-300">
-      <div className="bg-[var(--bg-secondary,white)] w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-[2rem] shadow-2xl flex flex-col relative animate-in zoom-in-95 duration-500">
+    <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/40 backdrop-blur-md animate-in fade-in duration-300">
+      <div className="modal-panel bg-[var(--bg-secondary,white)] w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-[2rem] shadow-2xl flex flex-col relative animate-in zoom-in-95 duration-500">
         
         <div className="sticky top-0 bg-[var(--bg-secondary,white)]/90 backdrop-blur-md z-20 px-8 py-6 border-b border-[var(--border-color,#eee)] flex justify-between items-center rounded-t-[2rem]">
           <h2 className="text-3xl font-black text-[var(--text-main,#111)] uppercase tracking-tight">
@@ -33,7 +34,7 @@ const ProductCompareModal = ({ products = [], onClose, onAddToCart }) => {
                 
                 <div className="aspect-square bg-white rounded-xl mb-6 p-4 flex items-center justify-center shadow-inner overflow-hidden">
                   <img 
-                    src={product.images && product.images.length > 0 && product.images[0].url ? (product.images[0].url.startsWith('http') || product.images[0].url.startsWith('/') ? product.images[0].url : `/${product.images[0].url}`) : '/assets/splash_3d_box_1781971684931.png'} 
+                    src={product.images && product.images.length > 0 && product.images[0].url ? (product.images[0].url.startsWith('http') || product.images[0].url.startsWith('/') ? product.images[0].url : `/${product.images[0].url}`) : PLACEHOLDER_IMAGE} 
                     alt={product.title} 
                     className="w-full h-full object-contain mix-blend-multiply group-hover:scale-110 transition-transform duration-500" 
                   />

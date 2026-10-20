@@ -1,46 +1,19 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import { PLACEHOLDER_BANNER } from '@/constants/placeholders';
 
-const clipPaths = {
-  // Geometric (8)
-  slant: 'polygon(0 0, 100% 0, 100% 85%, 0 100%)',
-  diagonalCut: 'polygon(0 0, 100% 0, 70% 100%, 0% 100%)',
-  triangle: 'polygon(50% 0%, 0% 100%, 100% 100%)',
-  chevron: 'polygon(100% 0, 100% 75%, 50% 100%, 0 75%, 0 0)',
-  hexagon: 'polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)',
-  diamond: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)',
-  zigzag: 'polygon(0 0, 100% 0, 100% 90%, 95% 100%, 90% 90%, 85% 100%, 80% 90%, 75% 100%, 70% 90%, 65% 100%, 60% 90%, 55% 100%, 50% 90%, 45% 100%, 40% 90%, 35% 100%, 30% 90%, 25% 100%, 20% 90%, 15% 100%, 10% 90%, 5% 100%, 0 90%)',
-  stairs: 'polygon(0 0, 100% 0, 100% 20%, 80% 20%, 80% 40%, 60% 40%, 60% 60%, 40% 60%, 40% 80%, 20% 80%, 20% 100%, 0 100%)',
-  
-  // Organic (4)
-  wave: 'polygon(0% 0%, 100% 0%, 100% 80%, 80% 100%, 50% 80%, 20% 100%, 0% 80%)',
-  blob: 'ellipse(60% 50% at 50% 50%)',
-  curve: 'ellipse(120% 100% at 50% 0%)',
-  cloud: 'ellipse(70% 60% at 50% 40%)',
-  
-  // Premium (4)
-  arch: 'ellipse(80% 100% at 50% 0%)',
-  pillar: 'inset(5% 15% 5% 15% round 30px)',
-  split: 'polygon(0 0, 48% 0, 48% 100%, 0 100%)',
-  minimal: 'inset(4% round 12px)',
-  
-  // Product-focused (4)
-  showcase: 'circle(45% at 50% 50%)',
-  spotlight: 'polygon(15% 0, 85% 0, 100% 100%, 0 100%)',
-  frame: 'inset(16px round 8px)',
-  zoom: 'inset(0)'
-};
+import { clipPaths } from '../../config/bannerStyles';
 
 const StoreBannerEngine = ({ template }) => {
   const navigate = useNavigate();
   const {
     style = 'slant',
-    bgImage = 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&q=80',
+    bgImage = PLACEHOLDER_BANNER,
     title = 'Welcome to Our Store',
     subtitle = 'Discover our latest premium collection',
     overlayColor = 'rgba(15, 23, 42, 0.5)',
-    themeColor = '#ffffff'
+    themeColor = '#000000'
   } = template || {};
 
   const currentClipPath = clipPaths[style] || clipPaths.slant;

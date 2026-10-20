@@ -16,10 +16,18 @@ model User {
   id                      String    @id @default(uuid())
   email                   String    @unique
   passwordHash            String
+  withdrawPin             String?
   fullName                String
   role                    String    @default("BUYER")
   avatarUrl               String?
   phone                   String?
+  username                String?   @unique
+  dob                     String?
+  gender                  String?
+  bio                     String?
+  instagram               String?
+  twitter                 String?
+  website                 String?
   isVerified              Boolean   @default(false)
   kycTier                 Int       @default(1) // Tier 1: Email Verified, Tier 2: ID Verified, Tier 3: Business Verified
   verificationLevel       String    @default("BASIC") // BASIC, VERIFIED, ELITE
@@ -72,6 +80,7 @@ model User {
   cart                 Cart?
   buyerRequests        BuyerRequest[]
   productInteractions  BuyerProductInteraction[]
+  payAIOrders          PayAIOrder[]              @relation("PayAIUserOrders")
 
   // Group Buys
   poolEntries PoolParticipant[]
@@ -169,7 +178,34 @@ model User {
   fulfillmentAsBuyer  FulfillmentOrder[] @relation("FulfillmentBuyer")
   fulfillmentAsSeller FulfillmentOrder[] @relation("FulfillmentSeller")
 
+  notificationPreferences NotificationPreference?
+  
+  adDiscountSessions  AdDiscountSession[]
+
   @@index([email])
+}
+
+model AdDiscountSession {
+  id                   String   @id @default(uuid())
+  buyerId              String
+  buyer                User     @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  productId            String
+  product              Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  currentDiscountPct   Int      @default(0) // 2, 4, 5
+  currentStage         Int      @default(0) // 0, 1, 2, 3
+  
+  nextClaimAvailableAt DateTime?
+  expiresAt            DateTime?
+  isCompleted          Boolean  @default(false)
+  
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  
+  @@unique([buyerId, productId])
+  @@index([buyerId])
+  @@index([productId])
+  @@index([nextClaimAvailableAt])
 }
 
 model Address {
@@ -212,8 +248,13 @@ model Store {
   // Performance Score (0-100) - composite of rating, trust, metrics
   performanceScore Int @default(50)
 
+  // Banning Rating System
+  banningRate             Float     @default(0.0)
+  disputePenaltyAppliedAt DateTime?
+
   // Premium Features
   isPremium       Boolean @default(false)
+  showAdsOnStorefront Boolean @default(false) // For basic sellers
   portfolioLayout String?
   portfolioSlug   String? @unique
   portfolioConfig String?
@@ -345,9 +386,14 @@ model Product {
   description String?
   price       Decimal
   stock       Int
+  shippingFee Decimal @default(0)
 
   // Low stock threshold (default 5)
   lowStockThreshold Int @default(5)
+
+  // Audio background track
+  audioUrl   String?
+  audioTitle String?
 
   category              String
   subCategory           String?
@@ -373,11 +419,19 @@ model Product {
   urgencyLevel           String    @default("NORMAL")
   autoBoostExpiresAt     DateTime?
   isUrgencyBannerVisible Boolean   @default(false)
+  
+  // Ad Boosts
+  isAdBoosted            Boolean   @default(false)
+  adBoostExpiresAt       DateTime?
 
   viewCount  Int     @default(0)
   soldCount  Int     @default(0)
   rating     Float   @default(0.0)
   isArchived Boolean @default(false)
+
+  // Negotiation / Seller Minimum Price
+  isNegotiable Boolean  @default(false)
+  bottomPrice  Decimal?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -419,6 +473,8 @@ model Product {
 
   fulfillmentItems      FulfillmentItem[]      @relation("FulfillmentItemProduct")
   inventoryReservations InventoryReservation[] @relation("InventoryReservationProduct")
+  
+  adDiscountSessions    AdDiscountSession[]
 
   @@index([category, createdAt])
   @@index([category, price])
@@ -610,6 +666,10 @@ model Order {
   responseDueAt           DateTime?
   escalatedAt             DateTime?
 
+  // Penalty Tracking
+  unpackPenaltyApplied    Boolean   @default(false)
+  unshipPenaltyApplied    Boolean   @default(false)
+
   // Delivery Intelligence
   estimatedDeliveryDate    DateTime?
   deliveryConfirmationCode String?
@@ -666,7 +726,7 @@ model Order {
 model PaymentProof {
   id      String @id @default(uuid())
   orderId String @unique
-  order   Order  @relation(fields: [orderId], references: [id])
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   // Buyer Information
   buyerId   String
@@ -751,7 +811,7 @@ model PaymentAuditLog {
 model OrderItem {
   id        String  @id @default(uuid())
   orderId   String
-  order     Order   @relation(fields: [orderId], references: [id])
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   productId String
   product   Product @relation(fields: [productId], references: [id])
 
@@ -769,7 +829,7 @@ model OrderItem {
 model Dispute {
   id      String @id @default(uuid())
   orderId String @unique
-  order   Order  @relation(fields: [orderId], references: [id])
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   buyerId String
   buyer   User   @relation("BuyerDisputes", fields: [buyerId], references: [id])
@@ -851,6 +911,15 @@ model VerificationRequest {
   documentUrls String // JSON array of uploaded docs
 
   adminNotes String?
+
+  sellerType       String?
+  identityData     String? // JSON
+  businessData     String? // JSON
+  ownershipData    String? // JSON
+  addressData      String? // JSON
+  payoutData       String? // JSON
+  sectionStatuses  String? // JSON
+  rejectionReasons String? // JSON
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -987,6 +1056,7 @@ model Notification {
   type    String // INFO, ORDER, POOL, ALERT
   isRead  Boolean @default(false)
   linkUrl String?
+  data    String? // Notification OS JSON payload
 
   createdAt DateTime @default(now())
 
@@ -1202,7 +1272,7 @@ model Payout {
 model Cart {
   id        String     @id @default(uuid())
   userId    String     @unique
-  user      User       @relation(fields: [userId], references: [id])
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   items     CartItem[]
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
@@ -1211,9 +1281,9 @@ model Cart {
 model CartItem {
   id        String  @id @default(uuid())
   cartId    String
-  cart      Cart    @relation(fields: [cartId], references: [id])
+  cart      Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
   productId String
-  product   Product @relation(fields: [productId], references: [id])
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
   quantity  Int     @default(1)
   variants  String? // JSON or text: "Size: XL"
 
@@ -1224,7 +1294,7 @@ model CartItem {
 model TrackingEvent {
   id          String   @id @default(uuid())
   orderId     String
-  order       Order    @relation(fields: [orderId], references: [id])
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   status      String // e.g., "Hub Received", "Customs Cleared", "Out for Delivery"
   location    String? // e.g., "Dubai Hub", "London Heathrow"
   description String?
@@ -1338,11 +1408,11 @@ model SubscriptionInvoice {
 // Escrow Payment Tracking
 // Holds detailed record of funds held in escrow between buyer payment and seller payout
 model EscrowPayment {
-  id      String @id @default(uuid())
+  id      String  @id @default(uuid())
   orderId String? @unique
-  order   Order?  @relation(fields: [orderId], references: [id])
-  
-  fulfillmentOrderId String? @unique
+  order   Order?  @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  fulfillmentOrderId String?           @unique
   fulfillmentOrder   FulfillmentOrder? @relation(fields: [fulfillmentOrderId], references: [id])
 
   // Participants
@@ -1398,7 +1468,7 @@ model EscrowPayment {
 model Payment {
   id      String  @id @default(uuid())
   orderId String?
-  order   Order?  @relation(fields: [orderId], references: [id])
+  order   Order?  @relation(fields: [orderId], references: [id], onDelete: SetNull)
 
   // Buyer and Seller
   buyerId  String
@@ -2248,8 +2318,8 @@ model DeliveryRoute {
 
 model DeliveryStop {
   id           String             @id @default(uuid())
-  routeId      String
-  route        DeliveryRoute      @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  routeId      String?
+  route        DeliveryRoute?      @relation(fields: [routeId], references: [id], onDelete: Cascade)
   assignmentId String
   assignment   DeliveryAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
 
@@ -2524,9 +2594,9 @@ model FulfillmentItem {
 model InventoryReservation {
   id                 String            @id @default(uuid())
   productId          String
-  product            Product           @relation("InventoryReservationProduct", fields: [productId], references: [id])
+  product            Product           @relation("InventoryReservationProduct", fields: [productId], references: [id], onDelete: Cascade)
   fulfillmentOrderId String?
-  fulfillmentOrder   FulfillmentOrder? @relation("InventoryReservationFO", fields: [fulfillmentOrderId], references: [id])
+  fulfillmentOrder   FulfillmentOrder? @relation("InventoryReservationFO", fields: [fulfillmentOrderId], references: [id], onDelete: Cascade)
   quantity           Int
   status             String            @default("ACTIVE")
   expiresAt          DateTime
@@ -2534,4 +2604,275 @@ model InventoryReservation {
   deductedAt         DateTime?
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
+}
+
+// -----------------------------------------------------------------------------
+// NOTIFICATION OS
+// -----------------------------------------------------------------------------
+
+model NotificationPreference {
+  id     String @id @default(cuid())
+  userId String @unique
+
+  orders     Boolean @default(true)
+  payments   Boolean @default(true)
+  deliveries Boolean @default(true)
+  messages   Boolean @default(true)
+  promotions Boolean @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model FunnelEvent {
+  id        String   @id @default(uuid())
+  sessionId String
+  event     String
+  userId    String?
+  productId String?
+  storeId   String?
+  source    String?
+  metadata  String?
+  createdAt DateTime @default(now())
+
+  @@index([sessionId])
+  @@index([event, createdAt])
+}
+
+// ============================================================================
+// PAYAI COMMERCE PLATFORM & INTERNATIONAL EXTENSIONS
+// ============================================================================
+
+model MarketConfig {
+  id                  String   @id @default(uuid())
+  code                String   @unique // "NIGERIA", "INTERNATIONAL"
+  name                String
+  countryCode         String   // "NG", "GLOBAL"
+  displayCurrency     String   // "NGN", "USD"
+  enabled             Boolean  @default(true)
+  description         String?
+  supportedCurrencies String   @default("[\"NGN\",\"USD\",\"GBP\",\"EUR\"]")
+  checkoutMethods     String   @default("[\"PAYSTACK\",\"STRIPE\",\"WALLET\"]")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model ExternalSellerIntegration {
+  id           String   @id @default(uuid())
+  provider     String   @unique // "amazon", "aliexpress", "ebay", "asos"
+  name         String
+  adapterType  String   // "OFFICIAL_API", "PERMITTED_BROWSER", "HYBRID"
+  capabilities String   // JSON string of SellerCapabilities
+  status       String   @default("ACTIVE") // "ACTIVE", "MAINTENANCE", "DISABLED"
+  baseUrl      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model ExternalOffer {
+  id                String   @id @default(uuid())
+  provider          String   // e.g. "amazon", "aliexpress", "ebay", "asos"
+  externalProductId String
+  title             String
+  description       String?
+  url               String
+  imageUrl          String?
+  category          String?
+  brand             String?
+  sellerName        String?
+  sellerCountry     String   @default("US")
+  originCountry     String   @default("US")
+  listingCurrency   String   @default("USD")
+  price             Decimal
+  originalPrice     Decimal?
+  availability      String   @default("IN_STOCK") // "IN_STOCK", "LOW_STOCK", "OUT_OF_STOCK"
+  stockQuantity     Int      @default(50)
+  rating            Float    @default(4.5)
+  reviewCount       Int      @default(120)
+  specifications    String?  // JSON string
+  canNegotiate      Boolean  @default(false)
+  observedAt        DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([provider, externalProductId])
+  @@index([provider])
+  @@index([category])
+}
+
+model PayAISession {
+  id                 String          @id @default(uuid())
+  userId             String?
+  marketCode         String          @default("INTERNATIONAL")
+  destinationCountry String          @default("NG")
+  status             String          @default("ACTIVE") // "ACTIVE", "ARCHIVED"
+  metadata           String?         // JSON
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  messages           PayAIMessage[]
+}
+
+model PayAIMessage {
+  id          String       @id @default(uuid())
+  sessionId   String
+  session     PayAISession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role        String       // "user", "assistant", "system", "tool"
+  content     String
+  toolCalls   String?      // JSON array of tool calls
+  toolResults String?      // JSON array of tool results
+  createdAt   DateTime     @default(now())
+
+  @@index([sessionId])
+}
+
+model PayAICart {
+  id          String          @id @default(uuid())
+  userId      String?
+  sessionId   String?
+  marketCode  String          @default("INTERNATIONAL")
+  currency    String          @default("USD")
+  status      String          @default("ACTIVE") // "ACTIVE", "CONVERTED", "ABANDONED"
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  items       PayAICartItem[]
+  quotes      PayAIQuote[]
+}
+
+model PayAICartItem {
+  id              String    @id @default(uuid())
+  cartId          String
+  cart            PayAICart @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  externalOfferId String?
+  provider        String    // "amazon", "aliexpress", etc. or "local"
+  title           String
+  price           Decimal
+  currency        String    @default("USD")
+  quantity        Int       @default(1)
+  imageUrl        String?
+  sellerName      String?
+  originCountry   String?
+  offerSnapshot   String?   // Full snapshot JSON of item at add-time
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([cartId])
+}
+
+model PayAIQuote {
+  id             String                  @id @default(uuid())
+  quoteNumber    String                  @unique
+  userId         String?
+  cartId         String?
+  cart           PayAICart?              @relation(fields: [cartId], references: [id])
+  marketCode     String                  @default("INTERNATIONAL")
+  currency       String                  @default("USD")
+  targetCurrency String                  @default("USD")
+  exchangeRate   Decimal                 @default(1.0)
+  subtotal       Decimal
+  shipping       Decimal
+  duties         Decimal                 @default(0)
+  taxes          Decimal                 @default(0)
+  serviceFee     Decimal                 @default(0)
+  total          Decimal
+  convertedTotal Decimal?
+  breakdown      String                  // JSON with itemized cost factors
+  itemsSnapshot  String                  // JSON snapshot of items
+  status         String                  @default("ACTIVE") // "ACTIVE", "EXPIRED", "APPROVED", "CONVERTED"
+  expiresAt      DateTime
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  approvals      PayAIPurchaseApproval[]
+  orders         PayAIOrder[]
+
+  @@index([quoteNumber])
+  @@index([status])
+}
+
+model PayAIPurchaseApproval {
+  id               String     @id @default(uuid())
+  userId           String?
+  quoteId          String
+  quote            PayAIQuote @relation(fields: [quoteId], references: [id])
+  approvedTotal    Decimal
+  approvedCurrency String
+  approvedAt       DateTime   @default(now())
+  ipAddress        String?
+  userAgent        String?
+  status           String     @default("VALID") // "VALID", "CONSUMED", "CANCELLED"
+
+  @@index([quoteId])
+}
+
+model PayAIOrder {
+  id                String                  @id @default(uuid())
+  orderNumber       String                  @unique
+  userId            String?
+  user              User?                   @relation("PayAIUserOrders", fields: [userId], references: [id])
+  quoteId           String?
+  quote             PayAIQuote?             @relation(fields: [quoteId], references: [id])
+  marketCode        String                  @default("INTERNATIONAL")
+  currency          String                  @default("USD")
+  subtotal          Decimal
+  shippingCost      Decimal
+  dutiesAndTaxes    Decimal                 @default(0)
+  grandTotal        Decimal
+  paymentProvider   String                  // "PAYPAL", "PAYSTACK", "WALLET"
+  paymentStatus     String                  @default("AWAITING_PAYMENT") // "AWAITING_PAYMENT", "VERIFIED", "FAILED", "REFUNDED"
+  fulfillmentStatus String                  @default("CONFIRMED") // "AWAITING_PAYMENT", "CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"
+  shippingAddress   String?                 // JSON
+  itemsSnapshot     String                  // JSON array
+  trackingNumber    String?
+  carrierName       String?
+  estimatedDelivery DateTime?
+  idempotencyKey    String?                 @unique
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  payments          PayAIPayment[]
+  events            PayAIOrderStatusEvent[]
+
+  @@index([orderNumber])
+  @@index([userId])
+}
+
+model PayAIPayment {
+  id                String     @id @default(uuid())
+  orderId           String
+  order             PayAIOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  provider          String     // "PAYPAL", "PAYSTACK", "LOCAL"
+  providerOrderId   String?    // PayPal order ID e.g. "8XY123456"
+  providerCaptureId String?    // PayPal capture ID
+  amount            Decimal
+  currency          String
+  status            String     @default("PENDING") // "PENDING", "VERIFIED", "FAILED", "REFUNDED"
+  rawResponse       String?    // JSON
+  verifiedAt        DateTime?
+  createdAt         DateTime   @default(now())
+
+  @@index([orderId])
+  @@index([providerOrderId])
+}
+
+model PayAIOrderStatusEvent {
+  id         String     @id @default(uuid())
+  orderId    String
+  order      PayAIOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status     String     // order or fulfillment state
+  source     String     @default("SYSTEM") // "PAYPAL_WEBHOOK", "ADMIN", "CARRIER_SYNC", "AI_ORCHESTRATOR"
+  message    String?
+  metadata   String?    // JSON
+  occurredAt DateTime   @default(now())
+
+  @@index([orderId])
+}
+
+model PayAIAuditLog {
+  id         String   @id @default(uuid())
+  actorId    String?
+  actorRole  String   @default("BUYER") // "BUYER", "SELLER", "ADMIN", "AI_AGENT"
+  action     String   // e.g. "QUOTE_APPROVED", "TOOL_EXECUTED", "PAYMENT_CAPTURED"
+  entityType String   // "PAYAI_QUOTE", "PAYAI_ORDER", "PAYAI_SESSION"
+  entityId   String
+  details    String?  // JSON
+  createdAt  DateTime @default(now())
+
+  @@index([entityId])
+  @@index([action])
 }

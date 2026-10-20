@@ -56,6 +56,7 @@ const OrderDetail = () => {
       case 'PROCESSING': return 'text-blue-400 bg-blue-400/10 border-blue-400/20';
       case 'SHIPPED': return 'text-purple-400 bg-purple-400/10 border-purple-400/20';
       case 'DELIVERED': return 'text-green-400 bg-green-400/10 border-green-400/20';
+      case 'DELIVERY_FAILED': return 'text-orange-400 bg-orange-400/10 border-orange-400/20';
       case 'CANCELLED': return 'text-red-400 bg-red-400/10 border-red-400/20';
       default: return 'text-[var(--text-muted)] bg-[var(--bg-tertiary)] border-[var(--border-color)]';
     }
@@ -135,6 +136,17 @@ const OrderDetail = () => {
         </div>
       </div>
 
+      {order.status === 'DELIVERY_FAILED' && (
+        <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-6 mb-8 text-orange-400">
+          <h3 className="font-bold flex items-center gap-2 mb-2"><AlertCircle size={20} /> Delivery Attempt Failed</h3>
+          <p className="text-sm mb-4">The courier was unable to deliver your package. You can request a redelivery or arrange for pickup at the nearest hub.</p>
+          <div className="flex gap-4">
+            <button onClick={() => navigate('/buyer/dashboard?tab=support')} className="bg-orange-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-orange-600 transition">Request Redelivery</button>
+            <button onClick={() => navigate('/buyer/dashboard?tab=support')} className="bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-white font-bold py-2 px-4 rounded-lg hover:bg-[var(--bg-secondary)] transition">Change to Pickup</button>
+          </div>
+        </div>
+      )}
+
       {/* Live Tracking */}
       {(order.status === 'IN_TRANSIT' || order.status === 'OUT_FOR_DELIVERY') && (
         <div className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md rounded-2xl border border-[var(--border-color)] overflow-hidden shadow-lg mb-8">
@@ -149,14 +161,16 @@ const OrderDetail = () => {
           <div className="h-[400px] w-full relative z-0">
             <MapView 
               activeRoute={{
-                pickupLat: 6.5244,
-                pickupLng: 3.3792,
-                pickupAddress: 'Fulfillment Center',
-                dropoffLat: 6.5400,
-                dropoffLng: 3.4000,
+                pickupLat: order.deliveryAssignment?.pickupLat || 6.5244,
+                pickupLng: order.deliveryAssignment?.pickupLng || 3.3792,
+                pickupAddress: 'Seller Address',
+                dropoffLat: order.deliveryAssignment?.dropoffLat || 6.5400,
+                dropoffLng: order.deliveryAssignment?.dropoffLng || 3.4000,
                 dropoffAddress: order?.shippingAddress?.street || 'Delivery Address'
               }}
-              couriers={Object.entries(courierLocations).map(([cid, loc]) => ({
+              couriers={Object.entries(courierLocations)
+                .filter(([cid]) => !order.deliveryAssignment || cid === order.deliveryAssignment.courierId)
+                .map(([cid, loc]) => ({
                 id: cid,
                 lat: loc.lat,
                 lng: loc.lng,
@@ -167,29 +181,26 @@ const OrderDetail = () => {
           </div>
           <div className="flex gap-4 p-4 border-t border-[var(--border-color)] bg-[var(--bg-secondary)]">
             <button 
-              onClick={async () => {
-                try {
-                  const res = await fetch(`/api/v1/delivery/${order.deliveryAssignment?.id}/call`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-                  });
-                  if (!res.ok) throw new Error('Call initiation failed');
-                  const data = await res.json();
-                  if (data.success) toast.success(`Call masking active. Dialing: ${data.proxyNumber}`);
-                  else toast.error(data.message || 'Call failed');
-                } catch (e) {
-                  // console.error(e);
-                  toast.error('Failed to initiate call');
-                }
+              onClick={() => {
+                const phone = order.deliveryAssignment?.courier?.user?.phone;
+                if (phone) window.location.href = `tel:${phone}`;
+                else toast.error('Courier phone number not available');
               }}
               className="flex-1 flex items-center justify-center gap-2 bg-blue-600/20 text-blue-400 py-3 rounded-xl font-bold">
               <Phone size={18} /> Contact Courier
             </button>
-            <button 
-              onClick={() => toast.success("Opening secure chat with courier...")}
-              className="flex-1 flex items-center justify-center gap-2 bg-indigo-600/20 text-indigo-400 py-3 rounded-xl font-bold">
-              <MessageCircle size={18} /> Chat
-            </button>
+              <button 
+                onClick={() => {
+                  const courierUserId = order.deliveryAssignment?.courier?.userId;
+                  if (courierUserId) {
+                    navigate(`/messages?user=${courierUserId}`);
+                  } else {
+                    toast.success("Opening secure chat with courier...");
+                  }
+                }}
+                className="flex-1 flex items-center justify-center gap-2 bg-indigo-600/20 text-indigo-400 py-3 rounded-xl font-bold">
+                <MessageCircle size={18} /> Chat
+              </button>
           </div>
         </div>
       )}
@@ -206,7 +217,7 @@ const OrderDetail = () => {
             <div key={item.id} className="p-6 flex flex-col sm:flex-row gap-6 items-start sm:items-center transition-all duration-300 hover:bg-[var(--bg-tertiary)] group">
               <div className="w-24 h-24 aspect-square rounded-xl overflow-hidden bg-white border border-[var(--border-color)] flex-shrink-0">
                 <img
-                  src={item.product?.images?.[0] || 'https://via.placeholder.com/80'}
+                  src={item.product?.images?.[0]?.url || item.product?.images?.[0] || 'https://via.placeholder.com/80'}
                   alt={item.productName || item.product?.title}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 />

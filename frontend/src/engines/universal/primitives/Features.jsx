@@ -12,7 +12,7 @@ const FEATURE_ICONS = {
   ],
   fashion: [
     { icon: RefreshCw,      title: 'Free Returns',         desc: '30-day hassle-free return policy.' },
-    { icon: Truck,          title: 'Free Shipping',        desc: 'On orders over $100 — worldwide.' },
+    { icon: Truck,          title: 'Free Shipping',        desc: 'On orders over ₦100 — worldwide.' },
     { icon: Shield,         title: 'Authenticity',         desc: 'Every item verified before dispatch.' },
     { icon: Award,          title: 'Premium Quality',      desc: 'Curated to the highest standards.' },
   ],

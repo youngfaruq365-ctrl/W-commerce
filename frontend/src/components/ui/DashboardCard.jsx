@@ -16,13 +16,10 @@ export const DashboardCard = ({
 }) => {
   return (
     <motion.div 
-      whileHover={{ y: -3, boxShadow: '0 10px 30px rgba(255,107,0,0.12)' }}
+      whileHover={{ y: -3 }}
       transition={{ duration: 0.12, ease: "easeOut" }}
       className={`
-        bg-gradient-to-b from-white/[0.9] to-white 
-        rounded-xl p-4 sm:p-5
-        shadow-[0_12px_30px_rgba(16,24,40,0.06)] 
-        border border-[rgba(124,58,237,0.05)]
+        neu-card p-4 sm:p-5
         relative overflow-hidden
         ${className}
       `}

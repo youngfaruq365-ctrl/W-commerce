@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 import { Menu, ChevronRight } from 'lucide-react';
 
 const MegaMenu = ({ onCategorySelect }) => {
@@ -58,7 +58,7 @@ const MegaMenu = ({ onCategorySelect }) => {
         onMouseEnter={() => setIsOpen(true)}
         onClick={() => setIsOpen(!isOpen)}
       >
-        <Menu size={18} className="text-[var(--text-main)] drop-shadow-[0_0_5px_var(--accent-gray)]" />
+        <Menu size={18} className="text-[color:var(--text-main)] drop-shadow-[0_0_5px_var(--accent-gray)]" />
       </button>
 
       {/* Dropdown Panel - App Dark Style / Glassmorphism */}

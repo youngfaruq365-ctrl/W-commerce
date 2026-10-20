@@ -71,7 +71,7 @@ exports.initializePayment = async (req, res) => {
         logger.error(`[PaymentV2] initializePayment error: ${err.message}`);
         return res.status(err.statusCode || 500).json({
             success: false,
-            message: err.message || 'Failed to initialize payment.',
+            message: process.env.NODE_ENV === 'production' ? 'Failed to initialize payment.' : err.message,
         });
     }
 };
@@ -86,6 +86,16 @@ exports.verifyPayment = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Payment reference is required.' });
         }
 
+        if (reference.startsWith('WCOM-MNF-')) {
+            const monnifyController = require('./monnifyController');
+            return monnifyController.verifyMonnifyTransaction(req, res);
+        }
+
+        if (reference.startsWith('GX-') || reference.startsWith('TEMP-')) {
+            const paymentController = require('./paymentController');
+            return paymentController.verifyTransaction(req, res);
+        }
+
         const result = await paymentV2Service.verifyAndConfirm(reference);
 
         return res.json({
@@ -96,13 +106,15 @@ exports.verifyPayment = async (req, res) => {
             currency:  result.currency,
             paidAt:    result.paidAt,
             confirmed: result.status === 'success',
+            order:     result.order,
+            receipt:   result.receipt,
         });
 
     } catch (err) {
         logger.error(`[PaymentV2] verifyPayment error: ${err.message}`);
         return res.status(err.statusCode || 500).json({
             success: false,
-            message: err.message || 'Payment verification failed.',
+            message: process.env.NODE_ENV === 'production' ? 'Payment verification failed.' : err.message,
         });
     }
 };
@@ -162,6 +174,103 @@ exports.paystackWebhook = async (req, res) => {
         }
     } catch (error) {
         logger.error(`[PaymentV2] Webhook processing exception: ${error.message}`);
+    }
+};
+
+// ─── POST /api/v1/payment/webhook/stripe ──────────────────────────────────────
+
+exports.stripeWebhook = async (req, res) => {
+    res.sendStatus(200);
+
+    const signature = req.headers['stripe-signature'];
+    const rawBody = req.body;
+
+    if (!rawBody || !signature) {
+        logger.warn('[PaymentV2] Stripe Webhook received with missing body or signature');
+        return;
+    }
+
+    try {
+        const stripeService = require('../services/stripeService');
+        const event = await stripeService.constructWebhookEvent(rawBody, signature);
+
+        const dedupeId = `stripe:${event.type}:${event.id}`;
+        
+        try {
+            await prisma.webhookEvent.create({
+                data: {
+                    eventType: event.type,
+                    eventId: dedupeId,
+                    reference: event.data.object?.id || null,
+                    payload: JSON.stringify(event),
+                    processed: false,
+                },
+            });
+        } catch (uniqueErr) {
+            if (uniqueErr.code === 'P2002') {
+                logger.info(`[PaymentV2] Duplicate stripe webhook skipped: ${dedupeId}`);
+                return;
+            }
+            logger.warn(`[PaymentV2] WebhookEvent create warning: ${uniqueErr.message}`);
+        }
+
+        if (event.type === 'payment_intent.succeeded') {
+            const pi = event.data.object;
+            const reference = pi.metadata?.marketplaceOrderId || pi.id;
+
+            const order = await prisma.marketplaceOrder.findFirst({
+                where: { OR: [{ id: reference }, { paymentReference: reference }] },
+                include: { fulfillmentOrders: true }
+            });
+
+            if (order && order.paymentStatus === 'PENDING') {
+                await prisma.$transaction(async (tx) => {
+                    await tx.marketplaceOrder.update({
+                        where: { id: order.id },
+                        data: { paymentStatus: 'PAID', paidAt: new Date(), status: 'PROCESSING', paymentMethod: 'STRIPE' }
+                    });
+                    for (const fo of order.fulfillmentOrders) {
+                        await tx.fulfillmentOrder.update({
+                            where: { id: fo.id },
+                            data: { paymentStatus: 'HELD', status: 'CONFIRMED' }
+                        });
+                        await tx.escrowPayment.create({
+                            data: {
+                                fulfillmentOrderId: fo.id,
+                                buyerId: order.buyerId,
+                                sellerId: fo.sellerId,
+                                totalAmount: fo.grandTotal,
+                                commissionRate: fo.commissionRate,
+                                commissionAmount: fo.commissionAmount,
+                                sellerAmount: fo.sellerAmount,
+                                paymentReference: pi.id,
+                                paymentProvider: 'STRIPE',
+                                status: 'HELD'
+                            }
+                        });
+                    }
+                    await tx.transaction.create({
+                        data: {
+                            userId: order.buyerId,
+                            type: 'PURCHASE',
+                            amount: pi.amount / 100,
+                            currency: pi.currency.toUpperCase(),
+                            status: 'COMPLETED',
+                            referenceId: order.id,
+                            description: `Stripe payment for Order #${order.id.substring(0, 8)}`,
+                        }
+                    });
+                });
+            }
+        }
+
+        await prisma.webhookEvent.updateMany({
+            where: { eventId: dedupeId },
+            data: { processed: true, processedAt: new Date() }
+        });
+
+    } catch (error) {
+        logger.error(`[PaymentV2] Stripe Webhook error: ${error.message}`);
     }
 };
 
@@ -239,11 +348,10 @@ exports.verifyBnpl = async (req, res) => {
                 userId,
                 type: 'PURCHASE',
                 amount: Number(order.totalAmount),
-                currency: 'USD',
+                currency: 'NGN',
                 status: 'COMPLETED',
                 referenceId: orderId,
-                description: `Payment for Order #${orderId.substring(0, 8)} via ${provider}`,
-                providerReference: intentId
+                description: `Payment for Order #${orderId.substring(0, 8)} via ${provider}`
             }
         });
         

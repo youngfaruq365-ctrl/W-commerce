@@ -6,19 +6,31 @@ const sellerAnalyticsService = require('../services/sellerAnalyticsService');
 const statsCache = { data: null, lastFetch: 0 };
 
 async function getSellerStore(sellerId) {
-    return prisma.store.findUnique({
+    let store = await prisma.store.findUnique({
         where: { sellerId }
     });
+    if (!store) {
+        const user = await prisma.user.findUnique({ where: { id: sellerId } });
+        if (user) {
+            store = await prisma.store.create({
+                data: {
+                    sellerId,
+                    storeName: user.fullName ? `${user.fullName}'s Shop` : 'My Store',
+                    country: 'Global'
+                }
+            });
+        }
+    }
+    return store;
 }
 
 async function getSellerOrders(storeId, sellerId, filters = {}) {
+    // Include ALL payment statuses so that totalOrders matches what the seller sees
     const fulfillmentWhere = {
-        sellerId: sellerId,
-        paymentStatus: { in: ['PAID', 'HELD', 'COMPLETED', 'RELEASED'] }
+        sellerId: sellerId
     };
     const legacyWhere = {
-        items: { some: { product: { store: { sellerId: sellerId } } } },
-        paymentStatus: { in: ['PAID', 'HELD', 'COMPLETED', 'RELEASED'] }
+        items: { some: { product: { store: { sellerId: sellerId } } } }
     };
 
     if (filters.createdAt) {
@@ -78,7 +90,16 @@ async function getSellerOrders(storeId, sellerId, filters = {}) {
 }
 
 function getSellerItemTotal(order, storeId) {
-    return Number(order.sellerAmount || order.grandTotal || 0);
+    // Use pre-calculated sellerAmount if it's a FulfillmentOrder (or normalized legacy)
+    if (order.sellerAmount !== undefined) {
+        return Number(order.sellerAmount);
+    }
+
+    // Fallback for raw legacy Order without normalized sellerAmount
+    const storeItems = order.items ? order.items.filter(item => item.product?.storeId === storeId) : [];
+    const gross = storeItems.reduce((sum, item) => sum + (Number(item.priceAtTime || 0) * item.quantity), 0);
+    const commissionRate = Number(order.commissionRate) || 0.10;
+    return gross - (gross * commissionRate);
 }
 
 function computeDailyViews(views, days = 7) {
@@ -98,9 +119,16 @@ function computeDailyViews(views, days = 7) {
 
 exports.getSellerAnalytics = async (req, res) => {
     try {
-        const store = await getSellerStore(req.user.id);
+        let store = await getSellerStore(req.user.id);
         if (!store) {
-            return res.status(404).json({ success: false, message: 'Store not found' });
+            const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+            store = await prisma.store.create({
+                data: {
+                    sellerId: req.user.id,
+                    storeName: user ? `${user.fullName}'s Shop` : 'My Store',
+                    country: 'Global'
+                }
+            });
         }
 
 
@@ -156,18 +184,68 @@ exports.getSellerAnalytics = async (req, res) => {
              }
         });
 
+        // ── 4-Week Performance Trend (monthlySales) ─────────────────────────
+        const nowMs = Date.now();
+        const weekMs = 7 * 24 * 60 * 60 * 1000;
+        const monthlyBuckets = [
+            { name: 'Week 1', sales: 0, visits: 0, start: nowMs - 4 * weekMs, end: nowMs - 3 * weekMs },
+            { name: 'Week 2', sales: 0, visits: 0, start: nowMs - 3 * weekMs, end: nowMs - 2 * weekMs },
+            { name: 'Week 3', sales: 0, visits: 0, start: nowMs - 2 * weekMs, end: nowMs - 1 * weekMs },
+            { name: 'Week 4', sales: 0, visits: 0, start: nowMs - 1 * weekMs, end: nowMs }
+        ];
+
+        orders.forEach(order => {
+            const time = new Date(order.createdAt).getTime();
+            const isValid = ['PAID', 'PACKED', 'CONFIRMED', 'SHIPPED', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED'].includes(order.status) || order.paymentStatus === 'PAID';
+            if (isValid) {
+                const amount = getSellerItemTotal(order, store.id);
+                for (const bucket of monthlyBuckets) {
+                    if (time >= bucket.start && time < bucket.end) {
+                        bucket.sales += amount;
+                        break;
+                    }
+                }
+            }
+        });
+
+        const dailyViewsList = computeDailyViews(views);
+        const recentViews = dailyViewsList.reduce((sum, v) => sum + v, 0);
+        monthlyBuckets[3].visits = recentViews;
+        const historicalViews = Math.max(0, allTimeViews - recentViews);
+        const avgHistorical = Math.floor(historicalViews / 3);
+        monthlyBuckets[0].visits = avgHistorical;
+        monthlyBuckets[1].visits = avgHistorical;
+        monthlyBuckets[2].visits = avgHistorical + (historicalViews % 3);
+
+        const monthlySales = monthlyBuckets.map(({ name, sales, visits }) => ({
+            name,
+            sales: Math.round(sales),
+            visits: Math.round(visits)
+        }));
+
+        const pendingOrdersCount = orders.filter(o => ['PENDING', 'AWAITING_PAYMENT'].includes(o.paymentStatus || o.status)).length;
+        const fulfilledOrdersCount = perf.totalOrders; // Only fulfilled (PAID+) orders from analytics service
+
         res.json({
             success: true,
             analytics: {
                 totalRevenue: perf.totalRevenue,
-                totalOrders: orders.length,
+                totalOrders: orders.length,         // ALL orders (pending + fulfilled) — matches sidebar count
+                fulfilledOrders: fulfilledOrdersCount, // Only fulfilled orders — for revenue context
+                pendingOrders: pendingOrdersCount,
                 totalProducts,
                 totalViews: allTimeViews,
                 totalInquiries,
                 repeatBuyers: perf.repeatBuyers,
                 weeklySales,
+                monthlySales,
                 avgRating: perf.averageRating,
-                dailyViews: computeDailyViews(views),
+                onTimeDeliveryRate: perf.onTimeDeliveryRate,
+                responseRate: perf.responseRate,
+                disputeRate: perf.disputeRate,
+                avgResponseMinutes: perf.avgResponseMinutes,
+                repeatBuyerRate: perf.repeatBuyerRate,
+                dailyViews: dailyViewsList,
                 conversionRate: `${conversionRate}%`,
                 trustScore: store.trustScore,
                 trustScoreDisplay: (Number(store.trustScore || 0) / 10).toFixed(1),
@@ -338,9 +416,16 @@ exports.getCustomerInsights = async (req, res) => {
 
 exports.getWeeklySummary = async (req, res) => {
     try {
-        const store = await getSellerStore(req.user.id);
+        let store = await getSellerStore(req.user.id);
         if (!store) {
-            return res.status(404).json({ success: false, message: 'Store not found' });
+            const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+            store = await prisma.store.create({
+                data: {
+                    sellerId: req.user.id,
+                    storeName: user ? `${user.fullName}'s Shop` : 'My Store',
+                    country: 'Global'
+                }
+            });
         }
 
         const now = new Date();
@@ -348,8 +433,8 @@ exports.getWeeklySummary = async (req, res) => {
         const twoWeeksAgo = new Date(Date.now() - (14 * 24 * 60 * 60 * 1000));
 
         const [thisWeekOrders, lastWeekOrders, reviews, pendingOrders] = await Promise.all([
-            getSellerOrders(store.id, { createdAt: { gte: weekAgo } }),
-            getSellerOrders(store.id, { createdAt: { gte: twoWeeksAgo, lt: weekAgo } }),
+            getSellerOrders(store.id, req.user.id, { createdAt: { gte: weekAgo } }),
+            getSellerOrders(store.id, req.user.id, { createdAt: { gte: twoWeeksAgo, lt: weekAgo } }),
             prisma.review.findMany({
                 where: {
                     product: { storeId: store.id }

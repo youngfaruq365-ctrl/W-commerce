@@ -3,13 +3,22 @@ const logger = require('../utils/logger');
 const axios = require('axios');
 
 const FLW_SECRET_KEY = process.env.FLW_SECRET_KEY;
-const IS_MOCK = !FLW_SECRET_KEY || FLW_SECRET_KEY.includes('REPLACE');
+const { allowMockExternalApis } = require('../utils/providerConfig');
+const NOT_CONFIGURED = !FLW_SECRET_KEY || FLW_SECRET_KEY.includes('REPLACE');
+const IS_MOCK = NOT_CONFIGURED && allowMockExternalApis();
 
 if (IS_MOCK) {
-  logger.warn('[FLUTTERWAVE] No FLW_SECRET_KEY found. Running in MOCK mode. Set FLW_SECRET_KEY in .env for live payments.');
+  logger.warn('[FLUTTERWAVE] Running in MOCK mode (ALLOW_MOCK_EXTERNAL_APIS=true, non-production).');
+}
+
+function assertConfigured() {
+  if (NOT_CONFIGURED && !IS_MOCK) {
+    throw new Error('Flutterwave is not configured (FLW_SECRET_KEY missing)');
+  }
 }
 
 async function initializePayment(amount, email, reference, currency = 'NGN', redirectUrl = '') {
+  assertConfigured();
   if (IS_MOCK) {
     logger.warn('[FLUTTERWAVE MOCK] initializePayment called. Returning simulated response.');
     return {
@@ -48,6 +57,7 @@ async function initializePayment(amount, email, reference, currency = 'NGN', red
 }
 
 async function verifyTransaction(transactionId) {
+  assertConfigured();
   if (IS_MOCK) {
     logger.warn('[FLUTTERWAVE MOCK] verifyTransaction called.');
     return { success: true, status: 'successful', transaction_id: transactionId, mock: true };

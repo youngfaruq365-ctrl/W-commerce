@@ -83,8 +83,8 @@ const ProductDetailPage = ({ store, styleProfile }) => {
             </div>
             <h1 className="text-3xl md:text-4xl font-black mb-4" style={{ fontFamily: 'var(--s-font-heading)' }}>{product.name}</h1>
             <div className="flex items-center gap-4 mb-6">
-              <span className="text-3xl font-black">${product.price}</span>
-              {product.originalPrice > product.price && <span className="text-xl line-through opacity-40">${product.originalPrice}</span>}
+              <span className="text-3xl font-black">₦{product.price}</span>
+              {product.originalPrice > product.price && <span className="text-xl line-through opacity-40">₦{product.originalPrice}</span>}
               {product.originalPrice > product.price && <span className="text-sm bg-red-100 text-red-600 font-bold px-2 py-0.5 rounded">-{Math.round((1 - product.price/product.originalPrice)*100)}%</span>}
             </div>
             <p className="text-gray-600 leading-relaxed mb-8">{product.description}</p>
@@ -271,7 +271,7 @@ const MenuPage = ({ store }) => {
             <div className="flex-1">
               <div className="flex justify-between mb-1">
                 <div className="font-bold">{item.name}</div>
-                <div className="font-black">${item.price}</div>
+                <div className="font-black">₦{item.price}</div>
               </div>
               <p className="text-sm opacity-60 mb-3">{item.desc}</p>
               <button onClick={() => addToCart({ ...products[item.id % products.length], name: item.name, price: parseFloat(item.price) })}
@@ -361,7 +361,7 @@ const ServicesPage = ({ store }) => {
             <div className="text-4xl mb-4">{s.icon}</div>
             <h3 className="font-bold text-lg mb-2">{s.name}</h3>
             <div className="flex items-center gap-4 mb-4 text-sm opacity-60">
-              <span>⏱ {s.duration}</span><span>From ${s.price}</span>
+              <span>⏱ {s.duration}</span><span>From ₦{s.price}</span>
             </div>
             <button onClick={() => addBooking({ type: 'healthcare', service: s.name })}
               className="w-full py-3 bg-[var(--s-primary,#3b82f6)] text-white font-bold rounded-xl hover:opacity-90 transition-opacity">
@@ -396,7 +396,7 @@ const VehiclesPage = ({ store }) => {
             <div className="p-6">
               <div className="font-black text-xl mb-1">{v.name}</div>
               <div className="text-2xl font-black mt-3" style={{ color: 'var(--s-primary)' }}>
-                ${v.price.toLocaleString()}
+                ₦{v.price.toLocaleString()}
               </div>
               <button onClick={() => toast('Feature coming soon', { icon: '🚀' })}  className="mt-4 text-sm font-bold hover:opacity-70 transition-opacity flex items-center gap-1">
                 View Details <ChevronRight size={14} />
@@ -428,7 +428,7 @@ const ListingsPage = ({ store }) => {
             </div>
             <div className="font-black text-lg mb-1">{l.name}</div>
             <div className="text-2xl font-black mb-3" style={{ color: 'var(--s-primary)' }}>
-              ${l.price.toLocaleString()}
+              ₦{l.price.toLocaleString()}
             </div>
             <div className="flex gap-4 text-sm opacity-60">
               <span>🛏 {l.beds} beds</span><span>🚿 {l.baths} baths</span><span>📐 {l.sqft.toLocaleString()} sqft</span>

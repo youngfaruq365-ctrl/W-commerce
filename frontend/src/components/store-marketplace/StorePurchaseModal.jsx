@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, CheckCircle, CreditCard, Sparkles } from 'lucide-react';
-
 import { useSellerStore } from '../../store/sellerStore';
 import { WReasoningAnimation } from '../motion/WReasoningAnimation';
+import toast from 'react-hot-toast';
 
 const StorePurchaseModal = ({ store, isOpen, onClose }) => {
   const [billing, setBilling] = useState('quarterly'); // 'quarterly' or 'annual'
@@ -49,7 +49,7 @@ const StorePurchaseModal = ({ store, isOpen, onClose }) => {
       }, 3000);
     } else {
       setIsProcessing(false);
-      alert(useSellerStore.getState().error || 'Transaction failed. Please try again.');
+      toast.error(useSellerStore.getState().error || 'Transaction failed. Please try again.');
     }
   };
 
@@ -64,13 +64,13 @@ const StorePurchaseModal = ({ store, isOpen, onClose }) => {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+        className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-md"
       >
         <motion.div
           initial={{ scale: 0.95, opacity: 0, y: 20 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.95, opacity: 0, y: 20 }}
-          className="bg-white rounded-3xl overflow-hidden max-w-4xl w-full flex flex-col md:flex-row shadow-2xl relative"
+          className="modal-panel bg-white rounded-3xl overflow-hidden max-w-4xl w-full flex flex-col md:flex-row shadow-2xl relative"
         >
           {(!isProcessing && !isSuccess) && (
             <button 
@@ -166,14 +166,14 @@ const StorePurchaseModal = ({ store, isOpen, onClose }) => {
 
                 <div className="flex-1 flex flex-col justify-center">
                   <div className="text-center mb-10">
-                    <div className="text-6xl font-black text-black tracking-tighter">${currentPrice}</div>
+                    <div className="text-6xl font-black text-black tracking-tighter">₦{currentPrice}</div>
                     <div className="text-sm text-[var(--text-muted)] font-medium mt-3 uppercase tracking-wider">{billingText}</div>
                   </div>
 
                   <div className="space-y-4 border-t border-gray-100 pt-6">
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-500">Subtotal</span>
-                      <span className="font-bold text-black">${currentPrice}</span>
+                      <span className="font-bold text-black">₦{currentPrice}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-500">Taxes & Fees</span>
@@ -181,7 +181,7 @@ const StorePurchaseModal = ({ store, isOpen, onClose }) => {
                     </div>
                     <div className="flex justify-between text-xl font-black mt-4 pt-4 border-t border-gray-100">
                       <span className="text-black">Total Due</span>
-                      <span className="text-black">${currentPrice}</span>
+                      <span className="text-black">₦{currentPrice}</span>
                     </div>
                   </div>
                 </div>

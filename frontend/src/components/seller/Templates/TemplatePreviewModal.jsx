@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 import { motion } from 'framer-motion';
 import { X, Monitor, Smartphone, Tablet, Wallet, CheckCircle, CreditCard } from 'lucide-react';
 import TemplateRenderer from '../../storefront/TemplateRenderer';
@@ -89,7 +89,7 @@ const TemplatePreviewModal = ({ template, ownedRecord, onClose, onPurchaseSucces
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-        className="relative w-full max-w-6xl h-[90vh] bg-[var(--bg-tertiary)] rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+        className="modal-panel relative w-full max-w-6xl h-[90vh] bg-[var(--bg-tertiary)] rounded-2xl shadow-2xl flex flex-col overflow-hidden"
       >
         {/* Header toolbar */}
         <div className="bg-white border-b border-[var(--border-color)] px-6 py-4 flex items-center justify-between z-20 shadow-sm">
@@ -189,7 +189,7 @@ const TemplatePreviewModal = ({ template, ownedRecord, onClose, onPurchaseSucces
               <div className="h-48 bg-gray-200 w-full mb-8" />
               <div className="max-w-4xl mx-auto px-4 grid grid-cols-2 md:grid-cols-4 gap-4">
                 {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
-                  <div key={i} className="bg-white p-4 rounded-xl shadow-sm h-64 flex flex-col gap-2">
+                  <div key={i} className="premium-glass p-4 rounded-3xl shadow-sm h-64 flex flex-col gap-2">
                     <div className="flex-1 bg-gray-100 rounded-lg"></div>
                     <div className="h-4 w-3/4 bg-gray-200 rounded"></div>
                     <div className="h-4 w-1/2 bg-gray-200 rounded"></div>

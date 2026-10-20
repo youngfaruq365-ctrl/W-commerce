@@ -60,7 +60,7 @@ const MAX_DISPATCH_ROUNDS = 10; // max couriers to try per assignment before giv
  */
 async function createAssignmentForFulfillmentOrder(fulfillmentOrderId) {
     // Idempotent: return existing if already created
-    const existing = await prisma.deliveryAssignment.findUnique({
+    const existing = await prisma.deliveryAssignment.findFirst({
         where: { fulfillmentOrderId },
     });
     if (existing) {
@@ -71,7 +71,13 @@ async function createAssignmentForFulfillmentOrder(fulfillmentOrderId) {
     const fo = await prisma.fulfillmentOrder.findUnique({
         where: { id: fulfillmentOrderId },
         include: {
-            seller: { select: { id: true, fullName: true } },
+            seller: { 
+                select: { 
+                    id: true, 
+                    fullName: true,
+                    addresses: { where: { isDefault: true }, take: 1 }
+                } 
+            },
             buyer:  { select: { id: true, fullName: true } },
             marketplaceOrder: {
                 select: {
@@ -108,7 +114,11 @@ async function createAssignmentForFulfillmentOrder(fulfillmentOrderId) {
     // For now we use null — dispatcher will use courier GPS proximity to FO seller
     const pickupLat = null;
     const pickupLng = null;
-    const pickupAddress = `Seller: ${fo.seller.fullName}`;
+    let pickupAddress = `Seller: ${fo.seller.fullName}`;
+    if (fo.seller.addresses && fo.seller.addresses.length > 0) {
+        const addr = fo.seller.addresses[0];
+        pickupAddress = `${addr.street || ''} ${addr.city || ''} ${addr.state || ''} ${addr.country || ''}`.trim();
+    }
 
     const totalWeightKg = fo.items.reduce(
         (sum, item) => sum + ((item.product.weightKg || 0.5) * item.quantity),

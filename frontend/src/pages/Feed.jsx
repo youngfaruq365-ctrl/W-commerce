@@ -1,10 +1,13 @@
+import { PLACEHOLDER_IMAGE } from '../constants/placeholders';
+import { isVideoUrl, getImageUrl } from '../utils/imageHelpers';
 import React, { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import axios from 'axios';
+import { apiClient as axios } from '../utils/apiClient';
 import { Sparkles, Menu, Search, Filter } from 'lucide-react';
 import { useCartStore } from '../store/cartStore';
 import { celebrate } from '../components/visual/CelebrationController';
+import toast from 'react-hot-toast';
 
 import FeedSidebar from '../components/feed/FeedSidebar';
 import FeedCard from '../components/feed/FeedCard';
@@ -31,12 +34,13 @@ class FeedItemBoundary extends React.Component {
 
 const optimizeImageUrl = (url) => {
   if (!url || typeof url !== 'string') return url;
+  if (isVideoUrl(url)) return getImageUrl(url);
   if (url.includes('cloudinary.com') && url.includes('/upload/')) {
     if (!url.includes('q_auto') && !url.includes('f_auto')) {
       return url.replace('/upload/', '/upload/q_auto,f_auto/');
     }
   }
-  return url;
+  return getImageUrl(url);
 };
 
 const Feed = () => {
@@ -97,13 +101,20 @@ const Feed = () => {
                 text:            `${deal.promoTitle} - ${deal.discount}% OFF! ${product.description?.slice(0, 80) || ''}`,
                 image:           deal.bannerImage ? optimizeImageUrl(deal.bannerImage) : null,
                 promoTitle:      deal.promoTitle,
+                promoType:       deal.promoType,
                 isFlashSale:     true,
                 discount:        deal.discount,
+                audioUrl:        product.audioUrl || product.audio || null,
+                audioTitle:      product.audioTitle || null,
                 likes:           product.viewCount || 0,
                 comments:        product._count?.reviews || 0,
                 originalProduct: product,
               };
             });
+            for (let i = mapped.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [mapped[i], mapped[j]] = [mapped[j], mapped[i]];
+            }
             setPosts(mapped);
           } else {
             setPosts([]);
@@ -170,11 +181,17 @@ const Feed = () => {
             avatar:          (product.store?.storeName || 'V')[0].toUpperCase(),
             time:            product.isFlashSale ? '🔥 Flash Deal' : 'Just Dropped',
             text:            product.description?.slice(0, 110) || `${product.title} — Premium quality, limited stock!`,
-            image:           optimizeImageUrl(product.images?.[0]?.url || '/assets/splash_3d_box_1781971684931.png'),
+            image:           optimizeImageUrl(product.images?.[0]?.url || PLACEHOLDER_IMAGE),
+            audioUrl:        product.audioUrl || product.audio || null,
+            audioTitle:      product.audioTitle || null,
             likes:           product.viewCount || 0,
             comments:        product._count?.reviews || 0,
             originalProduct: product,
           }));
+          for (let i = mapped.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [mapped[i], mapped[j]] = [mapped[j], mapped[i]];
+          }
           setPosts(mapped);
         } else {
           // No products found — show empty state, not fake data
@@ -197,7 +214,7 @@ const Feed = () => {
       await addToCart(product.id, 1);
       celebrate('standard', e);
     } catch (err) {
-      // console.error('Cart error:', err);
+      throw err;
     }
   };
 
@@ -215,9 +232,21 @@ const Feed = () => {
   return (
     <div className="w-full h-[calc(100vh-64px)] bg-[var(--bg-primary)] overflow-hidden relative">
       {/* TikTok-style Categories Bar */}
-      <div className="absolute top-0 left-0 right-0 z-[50] flex justify-center items-center pt-6 pb-6 pointer-events-none">
-         <div className="flex gap-5 pointer-events-auto">
-            {['For You', 'Trending', 'Fashion', 'Electronics', 'Promotions'].map(cat => {
+      <div className="absolute top-0 left-0 right-0 z-[50] flex justify-center items-center pt-4 pb-10 pointer-events-none lg:pl-[300px] gap-3 px-4 bg-gradient-to-b from-black/60 via-black/20 to-transparent">
+         {/* Promotion Button */}
+         <div className="pointer-events-auto shrink-0 relative z-50">
+            <button onClick={() => {
+              setActiveCategory('promotions');
+              const newParams = new URLSearchParams(searchParams);
+              newParams.set('category', 'promotions');
+              setSearchParams(newParams);
+            }} className="w-10 h-10 rounded-full bg-black/30 dark:bg-black/40 backdrop-blur-xl flex items-center justify-center text-white hover:bg-black/50 transition-colors border border-white/20 shadow-xl" title="Daily Promotions">
+              <Sparkles size={18} strokeWidth={2.5} className="text-amber-400" />
+            </button>
+         </div>
+
+         <div className="flex gap-2 pointer-events-auto max-w-full overflow-x-auto hide-scrollbar px-3 py-1.5 items-center bg-black/30 dark:bg-black/40 backdrop-blur-xl rounded-full border border-white/20 shadow-2xl">
+            {['For You', 'Trending', 'Fashion', 'Electronics'].map(cat => {
               const catKey = cat.toLowerCase().replace(' ', '');
               const isActive = effectiveCategory === catKey || (effectiveCategory === '' && catKey === 'foryou');
               return (
@@ -230,31 +259,23 @@ const Feed = () => {
                     else newParams.set('category', catKey);
                     setSearchParams(newParams);
                   }}
-                  className={`text-[17px] font-black drop-shadow-lg transition-all ${isActive ? 'text-[var(--text-main)] scale-105' : 'text-[var(--text-main)]/60 hover:text-[var(--text-main)]/90'}`}
+                  className={`text-xs md:text-sm font-black px-3.5 py-1.5 rounded-full transition-all ${isActive ? 'bg-white text-black shadow-md scale-105' : 'text-white/80 hover:text-white hover:bg-white/10'}`}
                >
                  {cat}
-                 {isActive && <div className="w-6 h-1 bg-[var(--text-main)] rounded-full mx-auto mt-1" />}
                </button>
               );
             })}
          </div>
-         {/* Search & Filter Buttons (Floating) */}
-         <div className="absolute right-4 top-5 flex gap-3 pointer-events-auto">
-            <button onClick={() => {
-              setActiveCategory('promotions');
-              const newParams = new URLSearchParams(searchParams);
-              newParams.set('category', 'promotions');
-              setSearchParams(newParams);
-            }} className="w-10 h-10 rounded-full bg-gradient-to-r from-[#00b873] to-[#005a38] border-none flex items-center justify-center text-white hover:scale-110 transition-transform shadow-lg" title="Daily Promotions">
-              <Sparkles size={18} strokeWidth={2.5} />
-            </button>
-            <button onClick={() => { setShowSearch(!showSearch); setShowFilter(false); }} className="w-10 h-10 rounded-full bg-transparent border-none flex items-center justify-center text-[var(--text-main)] hover:bg-[var(--bg-tertiary)] transition-colors">
+
+         {/* Search Button */}
+         <div className="pointer-events-auto shrink-0 relative z-50">
+            <button onClick={() => { setShowSearch(!showSearch); setShowFilter(false); }} className="w-10 h-10 rounded-full bg-black/30 dark:bg-black/40 backdrop-blur-xl flex items-center justify-center text-white hover:bg-black/50 transition-colors border border-white/20 shadow-xl">
               <Search size={18} strokeWidth={2.5} />
             </button>
             <AnimatePresence>
               {showSearch && (
-                <motion.div initial={{ opacity: 0, scale: 0.9, originTopRight: 1 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="absolute right-0 top-12 w-64 sm:w-72 bg-[var(--bg-secondary)]/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-[var(--border-color)] p-4 z-[60]">
-                  <input autoFocus type="text" placeholder="Search drops..." value={localSearch} onChange={(e) => setLocalSearch(e.target.value)} className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-main)] placeholder-[var(--text-main)]/50 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[var(--text-main)]/50 focus:ring-1 focus:ring-[var(--text-main)]/50 font-medium" />
+                <motion.div initial={{ opacity: 0, scale: 0.9, originTopRight: 1 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="absolute right-0 top-12 w-64 sm:w-72 bg-neutral-900/90 backdrop-blur-2xl border border-white/20 shadow-2xl rounded-2xl p-3 z-[60]">
+                  <input autoFocus type="text" placeholder="Search drops..." value={localSearch} onChange={(e) => setLocalSearch(e.target.value)} className="w-full bg-transparent outline-none py-1.5 text-sm font-medium text-white placeholder-gray-400" />
                 </motion.div>
               )}
             </AnimatePresence>
@@ -284,6 +305,9 @@ const Feed = () => {
           asMainFeed={true}
         />
       )}
+      
+      {/* Glowing Black Gradient at the bottom */}
+      <div className="absolute bottom-0 left-0 right-0 h-40 pointer-events-none bg-gradient-to-t from-black via-black/50 to-transparent z-[40]" />
     </div>
   );
 };

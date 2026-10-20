@@ -1,7 +1,5 @@
 import { create } from 'zustand';
-import axios from 'axios';
-
-axios.defaults.withCredentials = true;
+import { apiClient as axios } from '../utils/apiClient';
 
 export const useBuyerStore = create((set, get) => ({
   orders: [],
@@ -13,9 +11,26 @@ export const useBuyerStore = create((set, get) => ({
   disputes: [],
   reviews: [],
   notifications: [],
+  buyerRequests: [],
   profile: null,
   isLoading: false,
   error: null,
+
+  resetBuyerStore: () => set({
+    orders: [],
+    wishlist: [],
+    wallet: null,
+    walletTransactions: [],
+    savedShops: [],
+    messages: [],
+    disputes: [],
+    reviews: [],
+    notifications: [],
+    buyerRequests: [],
+    profile: null,
+    isLoading: false,
+    error: null,
+  }),
 
 
 
@@ -53,7 +68,7 @@ export const useBuyerStore = create((set, get) => ({
       set({ isLoading: true, error: null });
       const response = await axios.put('/api/v1/user/profile', data);
       if (response.data.success) {
-        get().fetchProfile();
+        await get().fetchProfile();
         return true;
       }
       return false;
@@ -68,7 +83,7 @@ export const useBuyerStore = create((set, get) => ({
       set({ isLoading: true, error: null });
       const response = await axios.post('/api/v1/user/address', data);
       if (response.data.success) {
-        get().fetchProfile();
+        await get().fetchProfile();
         return true;
       }
       return false;
@@ -132,17 +147,17 @@ export const useBuyerStore = create((set, get) => ({
     }
   },
 
-  raiseDispute: async (orderId, reason, description, evidenceUrls = []) => {
+  raiseDispute: async (orderId, reason, description, evidenceUrls = [], extraData = {}) => {
     try {
       set({ isLoading: true, error: null });
-      const response = await axios.post('/api/v1/disputes', { orderId, reason, description, evidenceUrls });
+      const response = await axios.post('/api/v1/disputes', { orderId, reason, description, evidenceUrls, ...extraData });
       if (response.data.success) {
         set((state) => ({
           orders: state.orders.map(o => o.id === orderId ? { ...o, status: 'DISPUTED' } : o),
           isLoading: false
         }));
         // Refresh disputes list
-        get().fetchDisputes();
+        await get().fetchDisputes();
         return true;
       }
       return false;
@@ -179,7 +194,7 @@ export const useBuyerStore = create((set, get) => ({
       set({ isLoading: true });
       const response = await axios.post('/api/v1/wishlist', { productId, priority, targetPrice });
       if (response.data.success || response.data.item) {
-        get().fetchWishlist();
+        await get().fetchWishlist();
         return true;
       }
       return false;
@@ -211,6 +226,45 @@ export const useBuyerStore = create((set, get) => ({
       set({ error: err.response?.data?.message || 'Error fetching wallet', isLoading: false });
     }
   },
+
+  
+  setWithdrawPin: async (pin) => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await axios.post('/api/v1/wallet/set-pin', { pin });
+      set({ isLoading: false });
+      return response.data;
+    } catch (err) {
+      set({ error: err.response?.data?.message || 'Failed to set PIN', isLoading: false });
+      throw err;
+    }
+  },
+
+  forgotWithdrawPin: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await axios.post('/api/v1/wallet/forgot-pin');
+      set({ isLoading: false });
+      return response.data;
+    } catch (err) {
+      set({ error: err.response?.data?.message || 'Failed to send OTP', isLoading: false });
+      throw err;
+    }
+  },
+
+  resetWithdrawPin: async (otp, newPin) => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await axios.post('/api/v1/wallet/reset-pin', { otp, newPin });
+      set({ isLoading: false });
+      return response.data;
+    } catch (err) {
+      set({ error: err.response?.data?.message || 'Failed to reset PIN', isLoading: false });
+      throw err;
+    }
+  },
+
+  clearError: () => set({ error: null }),
 
   fetchWalletTransactions: async () => {
     try {
@@ -266,13 +320,38 @@ export const useBuyerStore = create((set, get) => ({
     }
   },
 
+  fetchBuyerRequests: async () => {
+    try {
+      set({ isLoading: true, error: null });
+      const response = await axios.get('/api/v1/buyer-requests/my');
+      set({ buyerRequests: response.data.data || response.data.requests || [], isLoading: false });
+    } catch (err) {
+      set({ error: err.response?.data?.message || 'Error fetching buyer requests', isLoading: false });
+    }
+  },
+
+  createBuyerRequest: async (data) => {
+    try {
+      set({ isLoading: true, error: null });
+      const response = await axios.post('/api/v1/buyer-requests', data);
+      if (response.data.success) {
+        await get().fetchBuyerRequests();
+        return true;
+      }
+      return false;
+    } catch (err) {
+      set({ error: err.response?.data?.message || 'Error creating buyer request', isLoading: false });
+      return false;
+    }
+  },
+
   submitReview: async (productId, orderId, rating, comment) => {
     try {
       set({ isLoading: true, error: null });
       const response = await axios.post('/api/v1/reviews', { productId, orderId, rating, comment });
       if (response.data.success || response.data.review) {
         set({ isLoading: false });
-        get().fetchReviews();
+        await get().fetchReviews();
         return true;
       }
       return false;
@@ -287,12 +366,10 @@ export const useBuyerStore = create((set, get) => ({
       set({ isLoading: true });
       const formData = new FormData();
       formData.append('proof', file);
-      const response = await axios.post(`/api/v1/orders/${orderId}/upload-proof`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      const response = await axios.post(`/api/v1/orders/${orderId}/upload-proof`, formData);
       if (response.data.success) {
         set({ isLoading: false });
-        get().fetchOrders();
+        await get().fetchOrders();
         return true;
       }
       return false;

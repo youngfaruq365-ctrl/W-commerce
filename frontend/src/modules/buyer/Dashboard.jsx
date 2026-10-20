@@ -82,7 +82,7 @@ export default function BuyerDashboard() {
   const stats = [
     { label: 'Orders', value: isLoading ? 0 : statsData.orderCount, icon: ShoppingBag, color: 'text-blue-400', bg: 'bg-blue-400/10' },
     { label: 'Wishlist', value: isLoading ? 0 : statsData.wishlistCount, icon: Heart, color: 'text-rose-400', bg: 'bg-rose-400/10' },
-    { label: 'Wallet', value: isLoading ? '$0.00' : '$' + parseFloat(statsData.walletBalance || 0).toFixed(2), icon: Wallet, color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
+    { label: 'Wallet', value: isLoading ? '₦0.00' : '₦' + parseFloat(statsData.walletBalance || 0).toFixed(2), icon: Wallet, color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
     { label: 'Points', value: isLoading ? 0 : statsData.points, icon: Star, color: 'text-amber-400', bg: 'bg-amber-400/10' },
   ];
 
@@ -156,7 +156,7 @@ export default function BuyerDashboard() {
                         <p className="text-[var(--text-muted)] text-sm">{order.id.substring(0,8)} · {new Date(order.createdAt).toLocaleDateString()}</p>
                       </div>
                       <div className="text-right flex-shrink-0">
-                        <p className="font-bold">${parseFloat(order.totalAmount || 0).toFixed(2)}</p>
+                        <p className="font-bold">₦{parseFloat(order.totalAmount || 0).toFixed(2)}</p>
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColors[order.status] || statusColors.Processing}`}>{order.status}</span>
                       </div>
                     </div>
@@ -172,7 +172,7 @@ export default function BuyerDashboard() {
             <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl p-5 space-y-4">
               <h3 className="font-bold flex items-center gap-2"><Wallet size={16} className="text-emerald-400" /> Wallet</h3>
               <div className="text-center py-3">
-                {isLoading ? <WSkeleton className="h-10 w-32 mx-auto" /> : <p className="text-3xl font-black">${parseFloat(statsData.walletBalance || 0).toFixed(2)}</p>}
+                {isLoading ? <WSkeleton className="h-10 w-32 mx-auto" /> : <p className="text-3xl font-black">₦{parseFloat(statsData.walletBalance || 0).toFixed(2)}</p>}
                 <p className="text-[var(--text-muted)] text-sm mt-1">Available Balance</p>
               </div>
               <div className="grid grid-cols-2 gap-2">
@@ -220,7 +220,7 @@ export default function BuyerDashboard() {
                 <div className="p-3">
                   <p className="font-semibold text-sm truncate group-hover:text-white transition-colors">{item.title}</p>
                   <div className="flex items-center justify-between mt-2">
-                    <p className="font-bold">${parseFloat(item.price).toFixed(2)}</p>
+                    <p className="font-bold">₦{parseFloat(item.price).toFixed(2)}</p>
                     <span className="text-xs text-amber-400 flex items-center gap-0.5"><Star size={11} fill="currentColor" />{item.averageRating || 5.0}</span>
                   </div>
                   <WButton onClick={() => toast('Feature coming soon', { icon: '🚀' })}  variant="ghost" size="xs" fullWidth className="mt-2">Add to Cart</WButton>

@@ -12,12 +12,12 @@ const WalletView = ({ paymentGateway, setPaymentGateway, bankDetails, setBankDet
       {/* WALLET SUMMARY SECTION */}
       <div className="bg-[#0a0a0a] border border-[var(--accent-gray)] shadow-[0_0_15px_var(--accent-gray-dim)] p-6 rounded-xl mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-          <h2 className="text-xl font-bold text-black mb-2 flex items-center gap-2">
+          <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
             <Wallet className="text-[var(--accent-gray)]" />
             Available Balance
           </h2>
-          <div className="text-4xl font-extrabold text-black font-mono">
-            ₦{walletSummary?.balanceNgn ? Number(walletSummary.balanceNgn).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
+          <div className="text-4xl font-extrabold text-white font-mono">
+            ₦{walletSummary?.balances?.GONG?.available ? Number(walletSummary.balances.GONG.available).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
           </div>
           <p className="text-sm text-gray-500 mt-1">Ready for withdrawal</p>
         </div>

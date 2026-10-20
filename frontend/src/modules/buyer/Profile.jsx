@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { User, Mail, Phone, Calendar, Shield, Package, Star, Users, Gift, ChevronRight, Edit3, Camera, Award } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
+import { useBuyerStore } from '../../store/buyerStore';
 import { WButton, WBadge, WAvatar } from '../../design/components';
 import UserAvatar from '../../components/shared/ui/UserAvatar';
 
@@ -27,14 +28,23 @@ export default function BuyerProfile() {
   const { user } = useAuthStore();
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
+  const { profile, orders, reviews, fetchProfile, fetchOrders, fetchReviews, isLoading } = useBuyerStore();
+
+  useEffect(() => {
+    fetchProfile();
+    fetchOrders();
+    fetchReviews();
+  }, [fetchProfile, fetchOrders, fetchReviews]);
+
   const level = 'Gold';
   const levelStyle = accountLevels[level];
+  const displayUser = profile || user || {};
 
   const stats = [
-    { label: 'Orders', value: '24' },
-    { label: 'Reviews', value: '18' },
-    { label: 'Referrals', value: '7' },
-    { label: 'Points', value: '3,240' },
+    { label: 'Orders', value: isLoading ? '...' : (orders?.length || 0) },
+    { label: 'Reviews', value: isLoading ? '...' : (reviews?.length || 0) },
+    { label: 'Referrals', value: isLoading ? '...' : (displayUser.referralCount || 0) },
+    { label: 'Points', value: isLoading ? '...' : (displayUser.rewardPoints || 0) },
   ];
 
   if (isEditing) {
@@ -52,7 +62,7 @@ export default function BuyerProfile() {
 
             {/* Avatar */}
             <div className="relative group flex-shrink-0">
-              <UserAvatar user={user} size="w-24 h-24" className="text-4xl" />
+              <UserAvatar user={displayUser} size="w-24 h-24" className="text-4xl" />
               <button onClick={() => setIsEditing(true)} className="absolute bottom-0 right-0 w-8 h-8 bg-[var(--text-main)] rounded-full flex items-center justify-center shadow-md hover:scale-110 transition-transform">
                 <Camera size={14} className="text-[var(--bg-primary)]" />
               </button>
@@ -61,17 +71,17 @@ export default function BuyerProfile() {
             {/* Info */}
             <div className="flex-1 text-center md:text-left">
               <div className="flex flex-col md:flex-row md:items-center gap-3 mb-2">
-                <h1 className="text-2xl font-bold">{user?.name || 'Alex Johnson'}</h1>
+                <h1 className="text-2xl font-bold">{displayUser.fullName || displayUser.name || 'Set Full Name'}</h1>
                 <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold border ${levelStyle.color} ${levelStyle.bg} ${levelStyle.border}`}>
                   {levelStyle.icon} {level} Member
                 </span>
               </div>
               <div className="flex flex-col md:flex-row md:items-center gap-4 text-[var(--text-muted)] text-sm mt-2">
-                <span className="flex items-center gap-1.5"><Mail size={13} />{user?.email || 'alex.johnson@email.com'}</span>
-                <span className="flex items-center gap-1.5"><Phone size={13} />+1 (555) 234-5678</span>
-                <span className="flex items-center gap-1.5"><Calendar size={13} />Member since Jan 2024</span>
+                <span className="flex items-center gap-1.5"><Mail size={13} />{displayUser.email || 'No email set'}</span>
+                <span className="flex items-center gap-1.5"><Phone size={13} />{displayUser.phone || 'No phone set'}</span>
+                <span className="flex items-center gap-1.5"><Calendar size={13} />Member since {displayUser.createdAt ? new Date(displayUser.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short' }) : 'recently'}</span>
               </div>
-              <p className="text-[var(--text-muted)] text-sm mt-3 max-w-md">Tech enthusiast & avid shopper. Always on the lookout for the latest gadgets and deals. ✨</p>
+              <p className="text-[var(--text-muted)] text-sm mt-3 max-w-md">{displayUser.bio || 'Add a bio to tell the community about yourself.'}</p>
               <div className="mt-4">
                 <WButton onClick={() => setIsEditing(true)} variant="ghost" size="sm" icon={<Edit3 size={13} />}>Edit Profile</WButton>
               </div>
@@ -94,15 +104,15 @@ export default function BuyerProfile() {
           <div className="flex items-center justify-between mb-3">
             <div>
               <h3 className={`font-bold flex items-center gap-2 ${levelStyle.color}`}><Award size={16} /> {level} Member</h3>
-              <p className="text-[var(--text-muted)] text-sm mt-0.5">760 points to Platinum tier</p>
+              <p className="text-[var(--text-muted)] text-sm mt-0.5">{4000 - (displayUser.rewardPoints || 0)} points to Platinum tier</p>
             </div>
             <span className="text-2xl">👑</span>
           </div>
           <div className="h-2 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
-            <div className={`h-full rounded-full bg-gradient-to-r from-amber-500 to-orange-400`} style={{ width: '81%' }} />
+            <div className={`h-full rounded-full bg-gradient-to-r from-amber-500 to-orange-400`} style={{ width: `${Math.min(((displayUser.rewardPoints || 0) / 4000) * 100, 100)}%` }} />
           </div>
           <div className="flex justify-between text-xs text-[var(--text-muted)] mt-2">
-            <span>3,240 pts</span>
+            <span>{displayUser.rewardPoints || 0} pts</span>
             <span>4,000 pts</span>
           </div>
         </div>
@@ -110,11 +120,11 @@ export default function BuyerProfile() {
         {/* Info Rows */}
         <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl divide-y divide-[var(--border-subtle)]">
           {[
-            { icon: User, label: 'Full Name', value: 'Alex Johnson' },
-            { icon: Mail, label: 'Email', value: 'alex.johnson@email.com' },
-            { icon: Phone, label: 'Phone', value: '+1 (555) 234-5678' },
-            { icon: Calendar, label: 'Date of Birth', value: 'March 15, 1993' },
-            { icon: Shield, label: 'Account Status', value: 'Verified ✓' },
+            { icon: User, label: 'Full Name', value: displayUser.fullName || displayUser.name || 'Not set' },
+            { icon: Mail, label: 'Email', value: displayUser.email || 'Not set' },
+            { icon: Phone, label: 'Phone', value: displayUser.phone || 'Not set' },
+            { icon: Calendar, label: 'Date of Birth', value: displayUser.dob ? new Date(displayUser.dob).toLocaleDateString() : 'Not set' },
+            { icon: Shield, label: 'Account Status', value: displayUser.isVerified ? 'Verified ✓' : 'Unverified' },
           ].map(row => (
             <div key={row.label} className="flex items-center gap-4 p-4">
               <div className="w-8 h-8 bg-[var(--bg-tertiary)] rounded-lg flex items-center justify-center flex-shrink-0">

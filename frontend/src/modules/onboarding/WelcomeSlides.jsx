@@ -44,9 +44,9 @@ const Slide1Illustration = () => (
     </div>
     {/* Product cards */}
     {[
-      { emoji: '👟', name: 'Sneakers', price: '$129', offset: '-translate-x-16 -translate-y-4', delay: '0s',   zIndex: 'z-20' },
-      { emoji: '📱', name: 'iPhone',   price: '$999', offset: 'translate-x-0  translate-y-0',   delay: '0.1s', zIndex: 'z-30' },
-      { emoji: '⌚', name: 'Watch',    price: '$249', offset: 'translate-x-16 translate-y-4',   delay: '0.2s', zIndex: 'z-20' },
+      { emoji: '👟', name: 'Sneakers', price: '₦129', offset: '-translate-x-16 -translate-y-4', delay: '0s',   zIndex: 'z-20' },
+      { emoji: '📱', name: 'iPhone',   price: '₦999', offset: 'translate-x-0  translate-y-0',   delay: '0.1s', zIndex: 'z-30' },
+      { emoji: '⌚', name: 'Watch',    price: '₦249', offset: 'translate-x-16 translate-y-4',   delay: '0.2s', zIndex: 'z-20' },
     ].map(({ emoji, name, price, offset, delay, zIndex }) => (
       <div
         key={name}
@@ -80,7 +80,7 @@ const Slide2Illustration = () => (
         </div>
         <div>
           <div className="text-xs font-bold text-white">My Global Store</div>
-          <div className="text-[9px] text-[var(--text-muted)]">42 countries • $12.4K revenue</div>
+          <div className="text-[9px] text-[var(--text-muted)]">42 countries • ₦12.4K revenue</div>
         </div>
         <div className="ml-auto">
           <span className="text-[9px] text-emerald-400 font-semibold bg-emerald-400/10 px-2 py-0.5 rounded-full">● Live</span>

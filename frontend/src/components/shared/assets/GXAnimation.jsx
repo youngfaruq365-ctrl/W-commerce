@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Lottie from 'lottie-react';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 import AssetRegistry from '../../../assets/AssetRegistry';
 import useAssetStore from '../../../store/assetStore';
 

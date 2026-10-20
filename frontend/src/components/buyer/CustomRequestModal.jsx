@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Send, AlertCircle, Search, Loader2 } from 'lucide-react';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 
 const CustomRequestModal = ({ isOpen, onClose }) => {
   const [formData, setFormData] = useState({
@@ -62,7 +62,7 @@ const CustomRequestModal = ({ isOpen, onClose }) => {
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-fade-in">
-      <div className="absolute inset-0 bg-white/80 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-md" onClick={onClose} />
       <div className="relative modal-3d-glass rounded-xl w-full max-w-lg p-6 sm:p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
         <button onClick={onClose} className="absolute top-4 right-4 text-gray-700 hover:text-black transition-colors">
           <X size={20} />
@@ -80,7 +80,7 @@ const CustomRequestModal = ({ isOpen, onClose }) => {
         </p>
 
         {message.text && (
-          <div className={`px-4 py-3 rounded-lg mb-6 flex items-center gap-2 ${message.type === 'success' ? 'bg-gx-success/10 border border-gx-success text-gx-success' : 'bg-gray-400 500/10 border border-gray-400 500 text-gray-700 500'}`}>
+          <div className={`px-4 py-3 rounded-lg mb-6 flex items-center gap-2 ${message.type === 'success' ? 'bg-gx-success/10 border border-gx-success text-gx-success' : 'bg-gray-500/10 border border-gray-500 text-gray-500'}`}>
             <AlertCircle size={18} />
             <span className="text-sm">{message.text}</span>
           </div>

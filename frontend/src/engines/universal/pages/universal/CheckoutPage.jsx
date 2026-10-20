@@ -7,7 +7,7 @@ const formatPrice = (amount) => {
   return new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', minimumFractionDigits: 0 }).format(amount);
 };
 
-// ─── Simple Checkout (Essential $5-8) ─────────────────────────────────────────
+// ─── Simple Checkout (Essential ₦5-8) ─────────────────────────────────────────
 const SimpleCheckout = () => {
   const { cartTotal, placeOrder, setActivePage, orderComplete } = usePreview();
   if (orderComplete) return (
@@ -39,7 +39,7 @@ const SimpleCheckout = () => {
   );
 };
 
-// ─── Step Checkout (Plus $9-12) ────────────────────────────────────────────────
+// ─── Step Checkout (Plus ₦9-12) ────────────────────────────────────────────────
 const StepCheckout = () => {
   const { cartTotal, placeOrder, setActivePage, orderComplete } = usePreview();
   const [step, setStep] = useState(0);

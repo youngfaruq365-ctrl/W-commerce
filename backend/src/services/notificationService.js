@@ -1,3 +1,6 @@
+/**
+ * @deprecated Use notificationV2Service instead
+ */
 const prisma = require('../utils/prismaClient');
 const logger = require('../utils/logger');
 const emailService = require('./emailService');
@@ -150,16 +153,7 @@ class NotificationService {
         }
 
         try {
-            const webpush = require('web-push');
-            
-            // In a real application, VAPID keys would be configured in environment variables
-            const publicVapidKey = process.env.VAPID_PUBLIC_KEY || 'dummy-public-key';
-            const privateVapidKey = process.env.VAPID_PRIVATE_KEY || 'dummy-private-key';
-            const subject = process.env.VAPID_SUBJECT || 'mailto:admin@example.com';
-            
-            if (publicVapidKey !== 'dummy-public-key' && privateVapidKey !== 'dummy-private-key') {
-                webpush.setVapidDetails(subject, publicVapidKey, privateVapidKey);
-            }
+            const pushService = require('./pushService');
             
             let pushSubscription;
             try {
@@ -171,12 +165,12 @@ class NotificationService {
                 return;
             }
 
-            const payload = JSON.stringify({
+            const payload = {
                 title: 'Notification',
                 body: notification.message
-            });
+            };
 
-            await webpush.sendNotification(pushSubscription, payload);
+            await pushService.sendPushNotification(pushSubscription, payload);
             logger.info(`Push notification sent: ${notification.id}`);
         } catch (error) {
             logger.error(`Failed to send push notification: ${error.message}`);

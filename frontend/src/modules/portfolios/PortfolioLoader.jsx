@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 import { Store, AlertCircle } from 'lucide-react';
 import { WSkeleton, WButton } from '../../design/components';
 import FreePortfolio from './FreePortfolio';
@@ -113,7 +113,28 @@ export default function PortfolioLoader() {
         subscriptionTier: data.store.subscriptionTier ? data.store.subscriptionTier.toLowerCase() : 'free',
         theme: data.portfolio.configuration?.visual?.colors || { primary: '#6366f1', accent: '#818cf8', bg: '#0f0f13' },
         seller: data.seller,
-        products: data.products || []
+        products: (data.products || []).map(p => {
+          let imageUrl = '';
+          if (p.images && p.images.length > 0) {
+            const rawUrl = typeof p.images[0] === 'string' ? p.images[0] : p.images[0].url;
+            if (rawUrl) {
+              imageUrl = rawUrl.startsWith('http') ? rawUrl : `/${rawUrl.replace(/\\/g, '/').replace(/^uploads\//, 'uploads/')}`;
+              if (!imageUrl.startsWith('/uploads/') && !imageUrl.startsWith('http')) {
+                 imageUrl = imageUrl.startsWith('/') ? `/uploads${imageUrl}` : `/uploads/${imageUrl}`;
+              }
+            }
+          }
+          return {
+            ...p,
+            id: p.id,
+            name: p.title || p.name,
+            title: p.title || p.name,
+            price: p.price,
+            image: imageUrl,
+            rating: p.averageRating || 0,
+            reviews: p.totalReviews || 0
+          };
+        })
       };
 
       setStore(formattedStore);

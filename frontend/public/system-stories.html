@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GLOBALX — Multi Store Layout Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f4f7fb;--surface:#fff;--surface-2:#eef2f7;--text:#111827;--muted:#6b7280;
+  --line:#e5eaf0;--shadow:0 18px 45px rgba(31,41,55,.10);
+  --accent:#0879e8;--accent-2:#006cff;--radius:24px;
+}
+[data-theme="dark"]{
+  --bg:#09111d;--surface:#101b2a;--surface-2:#172436;--text:#f7faff;--muted:#91a0b5;
+  --line:#223149;--shadow:0 20px 55px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+button,input{font:inherit}
+button{cursor:pointer}
+.app{min-height:100vh}
+.topbar{height:72px;display:flex;align-items:center;justify-content:space-between;padding:0 5%;border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:blur(18px);position:sticky;top:0;z-index:20}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800}
+.logo{width:38px;height:38px;border-radius:13px;background:linear-gradient(135deg,var(--accent),#7c3aed);color:#fff;display:grid;place-items:center;box-shadow:0 8px 22px rgba(8,121,232,.25)}
+.top-actions{display:flex;gap:9px}
+.icon-btn{width:40px;height:40px;border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:13px}
+.container{width:min(1240px,92%);margin:auto;padding:26px 0 80px}
+.store-head{display:flex;justify-content:space-between;align-items:center;gap:18px;margin-bottom:22px}
+.store-title{font-size:28px;font-weight:800;letter-spacing:-.8px}
+.store-meta{color:var(--muted);font-size:13px;margin-top:5px}
+.back{border:1px solid var(--line);background:var(--surface);color:var(--text);padding:11px 15px;border-radius:14px}
+.hero{position:relative;overflow:hidden;border-radius:28px;min-height:310px;padding:38px;display:flex;align-items:flex-end;background:linear-gradient(120deg,#071321,#173a64);box-shadow:var(--shadow);margin-bottom:22px}
+.hero img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.52}
+.hero:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(0,0,0,.78),rgba(0,0,0,.12))}
+.hero-content{position:relative;z-index:1;color:#fff;max-width:620px}
+.eyebrow{text-transform:uppercase;font-size:11px;font-weight:800;letter-spacing:1.4px;opacity:.78;margin-bottom:10px}
+.hero h1{font-size:clamp(30px,5vw,54px);line-height:1.02;letter-spacing:-1.8px;margin-bottom:12px}
+.hero p{max-width:540px;color:rgba(255,255,255,.82);line-height:1.65;margin-bottom:20px}
+.cta{border:0;background:var(--accent);color:#fff;padding:13px 19px;border-radius:14px;font-weight:700;box-shadow:0 12px 28px rgba(8,121,232,.28)}
+.banner-split{align-items:stretch;padding:0;background:var(--surface);color:var(--text)}
+.banner-split:after{display:none}.banner-split img{position:relative;inset:auto;width:48%;height:310px;opacity:1;order:2}.banner-split .hero-content{padding:38px;display:flex;justify-content:center;flex-direction:column;color:var(--text);order:1}.banner-split p{color:var(--muted)}
+.banner-minimal{min-height:230px;align-items:center;background:linear-gradient(135deg,var(--accent),#7c3aed)}
+.banner-minimal:after{background:linear-gradient(90deg,rgba(0,0,0,.28),rgba(0,0,0,.02))}
+.search-row{display:flex;gap:12px;margin-bottom:20px}
+.search{flex:1;height:52px;border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:16px;padding:0 17px;outline:none;box-shadow:var(--shadow)}
+.chips{display:flex;gap:9px;overflow:auto;padding-bottom:5px;margin-bottom:28px}
+.chip{white-space:nowrap;border:1px solid var(--line);background:var(--surface);color:var(--muted);padding:10px 14px;border-radius:999px}
+.chip.active{background:var(--text);color:var(--surface);border-color:var(--text)}
+.section-head{display:flex;justify-content:space-between;align-items:center;margin:28px 0 14px}
+.section-head h2{font-size:20px}
+.section-head span{font-size:12px;color:var(--accent);font-weight:700}
+.products{display:grid;gap:16px}
+.layout-1{grid-template-columns:repeat(4,1fr)}
+.layout-2{grid-template-columns:repeat(3,1fr)}
+.layout-3{grid-template-columns:repeat(2,1fr)}
+.product{border:1px solid var(--line);background:var(--surface);border-radius:20px;overflow:hidden;box-shadow:0 10px 28px rgba(31,41,55,.06);transition:.25s}
+.product:hover{transform:translateY(-4px);box-shadow:var(--shadow)}
+.product-media{height:210px;position:relative;overflow:hidden;background:var(--surface-2)}
+.product-media img{width:100%;height:100%;object-fit:cover;transition:.35s}
+.product:hover img{transform:scale(1.04)}
+.badge{position:absolute;top:12px;left:12px;background:var(--surface);color:var(--text);padding:6px 9px;border-radius:9px;font-size:10px;font-weight:800}
+.fav{position:absolute;right:12px;top:12px;width:34px;height:34px;border:0;border-radius:50%;background:var(--surface);color:var(--text)}
+.product-body{padding:15px}.product-name{font-weight:700;margin-bottom:7px}.product-desc{font-size:12px;color:var(--muted);min-height:34px;line-height:1.45}
+.product-foot{display:flex;justify-content:space-between;align-items:end;margin-top:13px}.price{font-size:17px;font-weight:800}.rating{font-size:11px;color:#f59e0b}
+.featured{display:grid;grid-template-columns:1.2fr .8fr;gap:18px;margin-top:22px}
+.info-card{background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:22px;box-shadow:0 10px 28px rgba(31,41,55,.05)}
+.info-card h3{margin-bottom:9px}.info-card p{color:var(--muted);line-height:1.6;font-size:13px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px}.stat{padding:15px;border-radius:16px;background:var(--surface-2)}.stat strong{display:block;font-size:18px}.stat span{font-size:11px;color:var(--muted)}
+.bottom-nav{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:30;display:flex;gap:5px;padding:8px;border:1px solid var(--line);background:color-mix(in srgb,var(--surface) 94%,transparent);backdrop-filter:blur(18px);border-radius:20px;box-shadow:var(--shadow)}
+.nav-item{border:0;background:transparent;color:var(--muted);padding:9px 14px;border-radius:13px;font-size:12px}.nav-item.active{background:var(--accent);color:#fff}
+.catalog{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.store-card{border:1px solid var(--line);background:var(--surface);border-radius:24px;overflow:hidden;box-shadow:var(--shadow);transition:.25s}.store-card:hover{transform:translateY(-5px)}
+.store-cover{height:170px;position:relative}.store-cover img{width:100%;height:100%;object-fit:cover}.store-cover:after{content:"";position:absolute;inset:0;background:linear-gradient(transparent,rgba(0,0,0,.7))}
+.store-cover h3{position:absolute;z-index:1;bottom:14px;left:17px;color:#fff;font-size:20px}
+.store-info{padding:17px}.store-info p{font-size:12px;color:var(--muted);line-height:1.5;min-height:36px}.store-tags{display:flex;gap:6px;margin:12px 0;flex-wrap:wrap}.tag{font-size:10px;padding:6px 8px;background:var(--surface-2);border-radius:8px;color:var(--muted)}
+.open-store{width:100%;border:0;background:var(--text);color:var(--surface);padding:12px;border-radius:12px;font-weight:700}
+.catalog h1{grid-column:1/-1;font-size:32px}
+.catalog-sub{grid-column:1/-1;color:var(--muted);margin-top:-8px;margin-bottom:4px}
+.hidden{display:none!important}
+@media(max-width:900px){.layout-1{grid-template-columns:repeat(2,1fr)}.layout-2{grid-template-columns:repeat(2,1fr)}.catalog{grid-template-columns:repeat(2,1fr)}.featured{grid-template-columns:1fr}}
+@media(max-width:600px){.topbar{padding:0 4%;height:64px}.container{width:92%;padding-top:18px}.store-title{font-size:22px}.store-head{align-items:flex-start}.hero{min-height:390px;padding:25px}.banner-split{display:block;padding:0}.banner-split img{width:100%;height:190px;display:block}.banner-split .hero-content{padding:25px}.layout-1,.layout-2,.layout-3,.catalog{grid-template-columns:1fr}.product-media{height:230px}.search-row{display:block}.search{width:100%}.bottom-nav{width:calc(100% - 22px);justify-content:space-around}.nav-item{flex:1;padding:9px 5px}}
+</style>
+</head>
+<body>
+<div id="app" class="app"></div>
+
+<script>
+/* ============================================================
+   GLOBALX MULTI-STORE LAYOUT ENGINE
+   6 categories × 5 stores = 30 store experiences.
+   Every store receives:
+   - one of 3 product layouts
+   - one of 3 banner layouts
+   - light OR dark theme
+   - category-specific content/images
+   The assignment is deterministic, so a store stays visually stable.
+============================================================ */
+
+const categories = {
+  Restaurant:{
+    icon:"🍽️", accent:"#f59e0b",
+    stores:[
+      ["Burger Haven","Burgers • Fast Food","Smash burgers, loaded fries and chilled drinks.","https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=1200&q=85"],
+      ["Pizza Palace","Pizza • Italian","Wood-fired pizza with fresh ingredients.","https://images.unsplash.com/photo-1574071318508-1cdbab80d002?auto=format&fit=crop&w=1200&q=85"],
+      ["Naija Bites","African • Local","Comfort food, grills and local favourites.","https://images.unsplash.com/photo-1604329760661-e71dc83f8f26?auto=format&fit=crop&w=1200&q=85"],
+      ["Sushi House","Japanese • Sushi","Fresh rolls, sashimi and chef specials.","https://images.unsplash.com/photo-1579871494447-9811cf80d66c?auto=format&fit=crop&w=1200&q=85"],
+      ["Green Table","Healthy • Vegan","Fresh bowls, salads and plant-based meals.","https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=1200&q=85"]
+    ],
+    products:["Classic Burger","Pepperoni Pizza","Jollof Bowl","Salmon Sushi","Green Power Bowl","Chicken Wings","Truffle Pasta","Fruit Smoothie"]
+  },
+  Fashion:{
+    icon:"👗", accent:"#8b5cf6",
+    stores:[
+      ["Luna Fashion","Women • Contemporary","Modern pieces for confident everyday style.","https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=1200&q=85"],
+      ["Urban Thread","Streetwear • Men","Premium streetwear built for daily movement.","https://images.unsplash.com/photo-1523398002811-999ca8dec234?auto=format&fit=crop&w=1200&q=85"],
+      ["Velvet Edit","Luxury • Women","Refined silhouettes and statement accessories.","https://images.unsplash.com/photo-1496747611176-843222e1e57c?auto=format&fit=crop&w=1200&q=85"],
+      ["Kicks Lab","Sneakers • Unisex","Limited sneakers and everyday essentials.","https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=1200&q=85"],
+      ["Mode Kids","Kids • Lifestyle","Comfortable, playful styles for little explorers.","https://images.unsplash.com/photo-1519238263530-99bdd11df2ea?auto=format&fit=crop&w=1200&q=85"]
+    ],
+    products:["Elegant Maxi Dress","Classic Sneakers","Leather Handbag","Oversized Jacket","Minimal Watch","Everyday Tee","Premium Hoodie","Canvas Tote"]
+  },
+  Creator:{
+    icon:"▶️", accent:"#7c3aed",
+    stores:[
+      ["Creator Gear","Cameras • Studio","Tools for creators who want to level up.","https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=1200&q=85"],
+      ["Lens House","Photography • Video","Cameras, lenses and accessories for visual artists.","https://images.unsplash.com/photo-1516724562728-afc824a36e84?auto=format&fit=crop&w=1200&q=85"],
+      ["Audio Lab","Audio • Podcast","Microphones, interfaces and studio essentials.","https://images.unsplash.com/photo-1590602847861-f357a9332bbc?auto=format&fit=crop&w=1200&q=85"],
+      ["Stream Station","Streaming • Gaming","Build a polished streaming setup.","https://images.unsplash.com/photo-1598550476439-6847785fcea6?auto=format&fit=crop&w=1200&q=85"],
+      ["Design Desk","Design • Productivity","Hardware and tools for creative professionals.","https://images.unsplash.com/photo-1496171367470-9ed9a91ea931?auto=format&fit=crop&w=1200&q=85"]
+    ],
+    products:["Sony Camera","Studio Microphone","Ring Light","Creator Laptop","Wireless Headphones","Tripod Kit","Capture Card","Desk Monitor"]
+  },
+  Property:{
+    icon:"🏠", accent:"#0ea5e9",
+    stores:[
+      ["Lagos Homes","Homes • Sales","Discover homes, land and investment opportunities.","https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=85"],
+      ["City Rentals","Apartments • Rent","Modern apartments in connected neighbourhoods.","https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1200&q=85"],
+      ["Prime Estates","Luxury • Sales","Premium properties for discerning buyers.","https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?auto=format&fit=crop&w=1200&q=85"],
+      ["Land Market","Land • Investment","Verified land opportunities for long-term value.","https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=85"],
+      ["WorkSpace Pro","Commercial • Office","Flexible commercial spaces for growing businesses.","https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1200&q=85"]
+    ],
+    products:["Luxury 4 Bedroom Duplex","Modern 2 Bedroom Flat","Estate Land","Serviced Apartment","Office Suite","Retail Space","Family Villa","Commercial Plot"]
+  },
+  Healthcare:{
+    icon:"🩺", accent:"#06b6d4",
+    stores:[
+      ["CarePlus","Doctors • Clinics","Quality care, appointments and wellness services.","https://images.unsplash.com/photo-1551076805-e1869033e561?auto=format&fit=crop&w=1200&q=85"],
+      ["MediMarket","Pharmacy • Wellness","Everyday healthcare and wellness essentials.","https://images.unsplash.com/photo-1585435557343-3b092031a831?auto=format&fit=crop&w=1200&q=85"],
+      ["Wellness Hub","Fitness • Nutrition","Build healthier routines with expert guidance.","https://images.unsplash.com/photo-1498837167922-ddd27525d352?auto=format&fit=crop&w=1200&q=85"],
+      ["DentalCare","Dental • Specialists","Professional dental care for the whole family.","https://images.unsplash.com/photo-1606811971618-4486d14f3f99?auto=format&fit=crop&w=1200&q=85"],
+      ["HealthLab","Diagnostics • Tests","Convenient diagnostics and laboratory services.","https://images.unsplash.com/photo-1579154204601-01588f351e67?auto=format&fit=crop&w=1200&q=85"]
+    ],
+    products:["Doctor Consultation","Wellness Check","Lab Test Package","Dental Cleaning","Health Screening","Nutrition Session","Pharmacy Essentials","Home Care Kit"]
+  },
+  Automotive:{
+    icon:"🚘", accent:"#ef4444",
+    stores:[
+      ["AutoDrive","Cars • Sales","Quality vehicles, verified listings and support.","https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=1200&q=85"],
+      ["Motor Parts Hub","Parts • Accessories","Reliable parts and accessories for your vehicle.","https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=1200&q=85"],
+      ["Luxury Motors","Premium • Cars","Premium vehicles for the next level of driving.","https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=1200&q=85"],
+      ["AutoCare Pro","Service • Repair","Maintenance, diagnostics and professional repairs.","https://images.unsplash.com/photo-1487754180451-c456f719a1fc?auto=format&fit=crop&w=1200&q=85"],
+      ["Tyre Station","Tyres • Service","Tyres, alignment and road-ready services.","https://images.unsplash.com/photo-1558981806-ec527fa84c39?auto=format&fit=crop&w=1200&q=85"]
+    ],
+    products:["Toyota Corolla","Honda Civic","Range Rover Sport","Brake Kit","Premium Tyres","Engine Oil","LED Headlights","Car Battery"]
+  }
+};
+
+const categoryKeys = Object.keys(categories);
+const layoutNames = ["layout-1","layout-2","layout-3"];
+const bannerNames = ["hero-standard","banner-split","banner-minimal"];
+
+function hash(str){
+  let h=2166136261;
+  for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619)}
+  return (h>>>0);
+}
+function pick(seed,max){return hash(seed)%max}
+function storeId(category,index){return category.toLowerCase()+"-"+(index+1)}
+
+function getStore(category,index){
+  const data=categories[category], store=data.stores[index];
+  const id=storeId(category,index);
+  const layout=layoutNames[pick(id+"layout",3)];
+  const banner=bannerNames[pick(id+"banner",3)];
+  const theme=pick(id+"theme",2) ? "dark" : "light";
+  return {id,category,index,name:store[0],type:store[1],description:store[2],image:store[3],layout,banner,theme,accent:data.accent,products:data.products};
+}
+
+const allStores=categoryKeys.flatMap(c=>categories[c].stores.map((_,i)=>getStore(c,i)));
+
+function setTheme(store){
+  document.documentElement.dataset.theme=store.theme;
+  document.documentElement.style.setProperty("--accent",store.accent);
+}
+function productImage(store,i){
+  const source=encodeURIComponent(store.image);
+  const fallbacks=[
+    `https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80`,
+    `https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=800&q=80`,
+    `https://images.unsplash.com/photo-1491553895911-0055eca6402d?auto=format&fit=crop&w=800&q=80`
+  ];
+  return store.category==="Property"||store.category==="Automotive"||store.category==="Restaurant"||store.category==="Fashion"||store.category==="Creator"||store.category==="Healthcare"
+    ? (i%3===0 ? store.image : fallbacks[i%fallbacks.length]) : source;
+}
+function renderCatalog(){
+  document.documentElement.dataset.theme="light";
+  const app=document.getElementById("app");
+  app.innerHTML=`
+    <header class="topbar">
+      <div class="brand"><div class="logo">GX</div><span>GLOBALX</span></div>
+      <div class="top-actions"><button class="icon-btn" onclick="toggleGlobalTheme()">◐</button></div>
+    </header>
+    <main class="container">
+      <div class="catalog">
+        <h1>Store Marketplace</h1>
+        <p class="catalog-sub">30 professional stores • 5 stores in every marketplace category.</p>
+        ${allStores.map(s=>`
+          <article class="store-card">
+            <div class="store-cover"><img src="${s.image}" alt="${s.name}" loading="lazy"><h3>${s.name}</h3></div>
+            <div class="store-info">
+              <p>${s.description}</p>
+              <div class="store-tags"><span class="tag">${s.category}</span><span class="tag">${s.layout.replace("layout-","Layout ")}</span><span class="tag">${s.theme}</span></div>
+              <button class="open-store" onclick="openStore('${s.id}')">Open Store →</button>
+            </div>
+          </article>`).join("")}
+      </div>
+    </main>`;
+}
+function openStore(id){
+  const store=allStores.find(s=>s.id===id);
+  if(!store)return;
+  setTheme(store);
+  const app=document.getElementById("app");
+  const products=store.products.map((name,i)=>`
+    <article class="product">
+      <div class="product-media">
+        <img src="${productImage(store,i)}" alt="${name}" loading="lazy">
+        <span class="badge">${i%3===0?"NEW":"FEATURED"}</span>
+        <button class="fav" onclick="this.textContent=this.textContent==='♡'?'♥':'♡'">♡</button>
+      </div>
+      <div class="product-body">
+        <div class="product-name">${name}</div>
+        <div class="product-desc">${store.type} • verified listing</div>
+        <div class="product-foot"><span class="price">$${[32,42,65,89,120,180,249,350][i]}</span><span class="rating">★ ${(4.5+(i%5)/10).toFixed(1)}</span></div>
+      </div>
+    </article>`).join("");
+
+  const bannerClass=store.banner;
+  app.innerHTML=`
+    <header class="topbar">
+      <div class="brand"><div class="logo">${categories[store.category].icon}</div><span>GLOBALX</span></div>
+      <div class="top-actions">
+        <button class="icon-btn" onclick="toggleStoreTheme('${store.id}')">◐</button>
+        <button class="icon-btn">🛒</button>
+      </div>
+    </header>
+    <main class="container">
+      <div class="store-head">
+        <div><div class="store-title">${store.name}</div><div class="store-meta">${store.category} · ${store.type} · ${store.layout} · ${store.banner}</div></div>
+        <button class="back" onclick="renderCatalog()">← All Stores</button>
+      </div>
+
+      <section class="hero ${bannerClass}">
+        <img src="${store.image}" alt="">
+        <div class="hero-content">
+          <div class="eyebrow">${store.category} store</div>
+          <h1>${store.name}</h1>
+          <p>${store.description} Discover carefully selected products and services in a premium shopping experience.</p>
+          <button class="cta">Explore Collection →</button>
+        </div>
+      </section>
+
+      <div class="search-row">
+        <input class="search" placeholder="Search ${store.category.toLowerCase()} products, services or listings...">
+        <button class="back">☷ Filters</button>
+      </div>
+      <div class="chips">
+        <button class="chip active">All</button>
+        <button class="chip">Popular</button><button class="chip">New</button>
+        <button class="chip">Deals</button><button class="chip">Recommended</button>
+      </div>
+
+      <div class="section-head"><h2>Featured ${store.category==="Property"?"Listings":"Products"}</h2><span>See all →</span></div>
+      <section class="products ${store.layout}">${products}</section>
+
+      <section class="featured">
+        <div class="info-card">
+          <h3>Why shop ${store.name}?</h3>
+          <p>Designed as a premium marketplace storefront with responsive cards, strong visual hierarchy, category discovery and clear conversion actions.</p>
+          <div class="stats"><div class="stat"><strong>4.8★</strong><span>Store rating</span></div><div class="stat"><strong>24h</strong><span>Fast response</span></div><div class="stat"><strong>100%</strong><span>Verified</span></div></div>
+        </div>
+        <div class="info-card"><h3>Store experience</h3><p><b>${store.layout}</b> product layout<br><b>${store.banner}</b> hero/banner<br><b>${store.theme}</b> visual mode<br><b>${store.category}</b> marketplace template</p></div>
+      </section>
+    </main>
+    <nav class="bottom-nav">
+      <button class="nav-item active">⌂ Home</button><button class="nav-item">⌕ Search</button><button class="nav-item">♡ Saved</button><button class="nav-item">♙ Profile</button>
+    </nav>`;
+}
+function toggleStoreTheme(id){
+  const store=allStores.find(s=>s.id===id);
+  store.theme=store.theme==="dark"?"light":"dark";
+  setTheme(store);
+}
+function toggleGlobalTheme(){
+  document.documentElement.dataset.theme=document.documentElement.dataset.theme==="dark"?"light":"dark";
+}
+renderCatalog();
+</script>
+</body>
+</html>

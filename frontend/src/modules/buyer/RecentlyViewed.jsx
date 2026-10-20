@@ -147,7 +147,7 @@ export default function RecentlyViewed() {
                       <div className="flex-1 min-w-0">
                         <h3 className="text-[var(--text-main)] font-medium text-sm leading-snug mb-1 truncate pr-2">{item.name}</h3>
                         <div className="flex items-center gap-3">
-                          <span className="text-[var(--text-main)] font-bold">${item.price}</span>
+                          <span className="text-[var(--text-main)] font-bold">₦{item.price}</span>
                           <span className="text-[var(--text-faint)] text-xs flex items-center gap-1">
                             <Clock size={10} /> {formatRelative(item.viewedAt)}
                           </span>

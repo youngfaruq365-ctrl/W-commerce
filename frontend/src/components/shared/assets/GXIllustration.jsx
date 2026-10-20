@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import AssetRegistry from '../../../assets/AssetRegistry';
 import useAssetStore from '../../../store/assetStore';
+import { PLACEHOLDER_IMAGE } from '@/constants/placeholders';
 
 const fallbackImages = {
-  'hero': 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=800&q=80',
-  'empty.cart': 'https://images.unsplash.com/photo-1586769852044-692d6e3703f0?w=800&q=80',
-  'empty.orders': 'https://images.unsplash.com/photo-1566576721346-d4a3b4eaeb55?w=800&q=80',
-  'empty.inventory': 'https://images.unsplash.com/photo-1553413077-190dd305871c?w=800&q=80',
-  'default': 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=800&q=80'
+  'hero': PLACEHOLDER_IMAGE,
+  'empty.cart': PLACEHOLDER_IMAGE,
+  'empty.orders': PLACEHOLDER_IMAGE,
+  'empty.inventory': PLACEHOLDER_IMAGE,
+  'default': PLACEHOLDER_IMAGE
 };
 
 const GXIllustration = ({ name, className = '', style = {}, themeOverride = null }) => {

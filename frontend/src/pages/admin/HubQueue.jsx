@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { Package, CheckCircle, Clock, Truck, ChevronRight } from 'lucide-react';
-import axios from 'axios';
+import { apiClient as axios } from '../../utils/apiClient';
 
 const HubQueue = () => {
     const [packages, setPackages] = useState([]);
@@ -11,10 +11,7 @@ const HubQueue = () => {
     const fetchPackages = async () => {
         try {
             setLoading(true);
-            const token = localStorage.getItem('token');
-            const res = await axios.get('/api/v1/hub/packages', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            const res = await axios.get('/api/v1/hub/packages');
             const data = res.data;
             if (data.success) {
                 setPackages(data.packages);
@@ -35,10 +32,7 @@ const HubQueue = () => {
     const handleConsolidate = async (id) => {
         try {
             setProcessingId(id);
-            const token = localStorage.getItem('token');
-            const res = await axios.post(`/api/v1/hub/packages/${id}/consolidate`, {}, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            const res = await axios.post(`/api/v1/hub/packages/${id}/consolidate`, {});
             const data = res.data;
             if (data.success) {
                 toast.success('Package consolidated and dispatched successfully!');

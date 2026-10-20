@@ -43,7 +43,7 @@ const PremiumUnlockModal = ({ isOpen, onClose, tier, onConfirm }) => {
     if (paymentMethod === 'promo' && promoStatus !== 'success') return;
     
     setIsSubmitting(true);
-    let payload = { theme: `${tier.name} Portfolio`, grade: tier.name };
+    let payload = { theme: `${tier.name} Portfolio`, grade: tier.name, tier: tier.name };
     if (paymentMethod === 'wallet') {
       payload.payFromWallet = true;
     } else {
@@ -86,12 +86,12 @@ const PremiumUnlockModal = ({ isOpen, onClose, tier, onConfirm }) => {
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
       {/* Absolute Backdrop */}
       <div 
-        className="absolute inset-0 bg-white/80 backdrop-blur-md animate-in fade-in duration-500"
+        className="absolute inset-0 bg-black/40 backdrop-blur-md animate-in fade-in duration-500"
         onClick={onClose}
       />
       
       {/* Modal Container */}
-      <div className={`relative w-full max-w-md bg-[#0a0a0a]/90 border border-white/10 rounded-3xl overflow-hidden shadow-[0_0_80px_rgba(0,0,0,0.8)] backdrop-blur-2xl animate-in zoom-in-95 duration-500`}>
+      <div className={`relative modal-panel w-full max-w-md bg-[#0a0a0a]/90 border border-white/10 rounded-3xl overflow-hidden shadow-[0_0_80px_rgba(0,0,0,0.8)] backdrop-blur-2xl animate-in zoom-in-95 duration-500`}>
         
         {/* Dynamic Glow Behind */}
         <div className={`absolute top-0 left-1/2 -translate-x-1/2 w-full h-48 ${glowColor} blur-[80px] rounded-full pointer-events-none`}></div>
@@ -123,7 +123,7 @@ const PremiumUnlockModal = ({ isOpen, onClose, tier, onConfirm }) => {
         <div className="relative z-10 p-6 space-y-6">
           
           {/* Price Box */}
-          <div className="flex items-center justify-between p-5 bg-white/60 border border-white/10 rounded-2xl group hover:border-white/20 transition-all">
+          <div className="flex items-center justify-between p-5 premium-glass/60 border border-white/10 rounded-3xl group hover:border-white/20 transition-all">
             <div>
               <p className="text-xs text-gray-500 uppercase tracking-widest font-semibold mb-1">One-time Unlock</p>
               <div className="flex items-baseline gap-1">
@@ -137,7 +137,7 @@ const PremiumUnlockModal = ({ isOpen, onClose, tier, onConfirm }) => {
           </div>
 
           {/* Payment Method Toggle */}
-          <div className="flex bg-white/40 border border-white/5 rounded-xl p-1 relative">
+          <div className="flex premium-glass/40 border border-white/5 rounded-3xl p-1 relative">
             <div 
               className={`absolute top-1 bottom-1 w-[calc(50%-4px)] bg-[#1a1a1a] border border-white/10 rounded-lg shadow-lg transition-transform duration-300 ease-out ${paymentMethod === 'promo' ? 'translate-x-full' : 'translate-x-0'}`}
             ></div>
@@ -163,7 +163,7 @@ const PremiumUnlockModal = ({ isOpen, onClose, tier, onConfirm }) => {
                 <p className="text-sm text-gray-700">
                   <span className="text-black font-bold"> ₦{tier.price}</span> will be deducted securely from your available wallet balance.
                 </p>
-                <div className="flex items-center justify-center gap-2 text-xs text-gray-700 400 font-bold bg-gray-400 500/10 py-2 px-4 rounded-full mx-auto w-fit border border-gray-400 500/20">
+                <div className="flex items-center justify-center gap-2 text-xs text-gray-400 font-bold bg-gray-500/10 py-2 px-4 rounded-full mx-auto w-fit border border-gray-500/20">
                   <ShieldCheck size={16} /> Encrypted & Secure Transaction
                 </div>
               </div>
@@ -176,8 +176,8 @@ const PremiumUnlockModal = ({ isOpen, onClose, tier, onConfirm }) => {
                     type="text" 
                     placeholder="e.g. GLOBALX-VIP"
                     className={`w-full bg-[#111] border rounded-xl py-4 pl-12 pr-12 text-black font-mono uppercase focus:outline-none transition-all shadow-inner ${
-                      promoStatus === 'success' ? 'border-gray-400 500/50 focus:border-gray-400 400 focus:shadow-[0_0_15px_rgba(34,197,94,0.3)]' :
-                      promoStatus === 'error' ? 'border-gray-400 500/50 focus:border-gray-400 400 focus:shadow-[0_0_15px_rgba(239,68,68,0.3)]' :
+                      promoStatus === 'success' ? 'border-gray-500/50 focus:border-gray-400 focus:shadow-[0_0_15px_rgba(34,197,94,0.3)]' :
+                      promoStatus === 'error' ? 'border-gray-500/50 focus:border-gray-400 focus:shadow-[0_0_15px_rgba(239,68,68,0.3)]' :
                       'border-white/10 focus:border-white/30 hover:border-white/20'
                     }`}
                     value={promoCode}
@@ -187,17 +187,17 @@ const PremiumUnlockModal = ({ isOpen, onClose, tier, onConfirm }) => {
                     {isVerifying ? (
                       <Loader2 size={20} className="text-gray-700 animate-spin" />
                     ) : promoStatus === 'success' ? (
-                      <CheckCircle size={20} className="text-gray-700 500 animate-in zoom-in" />
+                      <CheckCircle size={20} className="text-gray-500 animate-in zoom-in" />
                     ) : promoStatus === 'error' ? (
-                      <X size={20} className="text-gray-700 500 animate-in zoom-in" />
+                      <X size={20} className="text-gray-500 animate-in zoom-in" />
                     ) : null}
                   </div>
                 </div>
                 {promoStatus === 'success' && (
-                  <p className="text-xs text-gray-700 400 flex items-center gap-1.5 animate-in slide-in-from-top-2 ml-1 font-medium"><CheckCircle size={14}/> Code verified! 100% discount applied.</p>
+                  <p className="text-xs text-gray-400 flex items-center gap-1.5 animate-in slide-in-from-top-2 ml-1 font-medium"><CheckCircle size={14}/> Code verified! 100% discount applied.</p>
                 )}
                 {promoStatus === 'error' && (
-                  <p className="text-xs text-gray-700 400 flex items-center gap-1.5 animate-in slide-in-from-top-2 ml-1 font-medium"><X size={14}/> Invalid or expired promo code.</p>
+                  <p className="text-xs text-gray-400 flex items-center gap-1.5 animate-in slide-in-from-top-2 ml-1 font-medium"><X size={14}/> Invalid or expired promo code.</p>
                 )}
               </div>
             )}

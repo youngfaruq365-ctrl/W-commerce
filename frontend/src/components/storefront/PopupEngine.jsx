@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 import TemplateRenderer from './TemplateRenderer';
 
 const PopupEngine = ({ storeId }) => {

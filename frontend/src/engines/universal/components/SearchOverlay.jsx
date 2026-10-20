@@ -108,10 +108,10 @@ export const SearchOverlay = ({ store }) => {
                       <div>
                         <h3 className="font-bold text-[var(--s-text)] text-lg line-clamp-1">{product.name}</h3>
                         <div className="flex items-center gap-2 mt-1">
-                          <span className="font-black text-[var(--s-text)]">${parseFloat(product.price).toFixed(2)}</span>
+                          <span className="font-black text-[var(--s-text)]">₦{parseFloat(product.price).toFixed(2)}</span>
                           {product.originalPrice && (
                             <span className="text-[var(--s-text)] opacity-40 line-through text-sm">
-                              ${parseFloat(product.originalPrice).toFixed(2)}
+                              ₦{parseFloat(product.originalPrice).toFixed(2)}
                             </span>
                           )}
                         </div>

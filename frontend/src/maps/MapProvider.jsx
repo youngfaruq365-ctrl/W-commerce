@@ -12,7 +12,7 @@ export const useMap = () => {
 };
 
 // Abstract MapProvider that can swap out underlying implementations
-export const MapProvider = ({ children, provider = 'leaflet', apiKey }) => {
+export const MapProvider = ({ children, provider = 'google', apiKey }) => {
     // In the future, this component will dynamically render MockMapProvider, MapboxProvider, etc.
     // based on the `provider` prop.
 

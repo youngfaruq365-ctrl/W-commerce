@@ -2,6 +2,60 @@ import React from 'react';
 import GXIcon from '../../shared/assets/GXIcon';
 import { useNavigate } from 'react-router-dom';
 
+const CapsuleButton = ({ label, icon, onClick, isBlue, isItalic, colorClass, iconColorClass }) => {
+  let textClass = 'text-[var(--text-main)]';
+  let iClass = 'text-[var(--text-main)]';
+  
+  const isPerformance = label === 'Performance';
+  const isAnalytics = isBlue || label === 'Analytics';
+  const isUpgrade = label === 'Upgrade Plan';
+  const isLogout = label === 'Logout';
+
+  if (isAnalytics) {
+    textClass = 'text-[#008cff]';
+    iClass = 'text-[#008cff]';
+  } else if (isUpgrade) {
+    textClass = 'text-[#e6a51a]';
+    iClass = 'text-[#e6a51a]';
+  } else if (isLogout) {
+    textClass = 'text-[#e33b42]';
+    iClass = 'text-[#e33b42]';
+  } else if (colorClass) {
+    textClass = colorClass;
+  }
+  
+  if (iconColorClass) {
+    iClass = iconColorClass;
+  }
+
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full max-w-[200px] h-10 px-4 flex items-center gap-3 cursor-pointer group transition-all duration-200 ease-out flex-shrink-0 mx-auto rounded-xl neu-input hover:scale-[1.02] active:scale-[0.98] ${isAnalytics ? '!shadow-[inset_4px_4px_8px_rgba(0,140,255,0.1),_inset_-4px_-4px_8px_rgba(0,140,255,0.2)]' : ''}`}
+    >
+      <div 
+        className={`w-4 h-4 flex items-center justify-center shrink-0 ${iClass} [&>svg]:w-[14px] [&>svg]:h-[14px] [&>svg]:stroke-[1.5] [&>svg]:fill-none`}
+        style={{
+          filter: isAnalytics ? 'drop-shadow(0 0 2px rgba(0,140,255,.7))' :
+                  isUpgrade ? 'drop-shadow(0 0 2px rgba(230,165,26,.45))' :
+                  isLogout ? 'drop-shadow(0 0 2px rgba(227,59,66,.4))' : 'none'
+        }}
+      >
+        {icon}
+      </div>
+      <span 
+        className={`text-xs whitespace-nowrap leading-none ${textClass} ${isPerformance ? 'italic font-semibold' : 'font-medium'}`}
+        style={{
+          fontFamily: isPerformance ? 'Georgia, "Times New Roman", serif' : undefined,
+          textShadow: isAnalytics ? '0 0 4px rgba(0,140,255,.55)' : 'none'
+        }}
+      >
+        {label}
+      </span>
+    </button>
+  );
+};
+
 const DashboardSidebar = ({ 
   tabs, 
   activeTab, 
@@ -13,60 +67,55 @@ const DashboardSidebar = ({
 }) => {
   const navigate = useNavigate();
   return (
-    <aside className={`fixed lg:sticky lg:top-24 top-0 h-[100dvh] lg:h-[calc(100vh-8rem)] left-0 z-50 w-72 transform transition-transform duration-300 ease-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 flex-shrink-0`}>
-      <div className="bg-white/95 lg:bg-white/80 backdrop-blur-md pt-24 lg:pt-6 p-6 border border-slate-200/50 rounded-2xl shadow-xl h-full flex flex-col">
+    <aside className={`fixed lg:sticky lg:top-24 top-[4px] h-[calc(100dvh-8px)] lg:h-[calc(100vh-8rem)] left-[4px] lg:left-0 z-50 w-72 transform transition-transform duration-300 ease-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 flex-shrink-0`}>
+      <div className="neu-panel p-6 pt-24 lg:pt-6 !rounded-none h-full flex flex-col">
         
-        <div className="flex w-full justify-between items-start mb-8 pb-6 border-b border-slate-200 relative">
+        <div className="flex w-full justify-between items-start mb-8 pb-6 border-b-2 border-white relative">
           <div className="flex flex-col items-center w-full">
-            <div className={`w-16 h-16 bg-gradient-to-tr from-slate-800 to-slate-600 text-white rounded-2xl mb-4 flex items-center justify-center text-xl font-bold ${user?.isVerified ? 'shadow-[0_0_15px_rgba(34,197,94,0.5)] border-2 border-green-500' : 'shadow-lg'}`}>
+            <div className={`w-16 h-16 bg-[var(--bg-primary)] shadow-[6px_6px_12px_rgba(163,177,198,0.5),-6px_-6px_12px_rgba(255,255,255,0.9)] text-[var(--text-main)] rounded-2xl mb-4 flex items-center justify-center text-xl font-bold ${user?.isVerified ? 'border-2 border-[#006cff]' : ''}`}>
               {(user?.fullName || 'S').substring(0, 2).toUpperCase()}
             </div>
-            <h3 className="font-bold text-slate-800 tracking-tight text-lg">{user?.fullName || 'Seller'}</h3>
-            <p className="text-xs text-slate-500 flex items-center gap-2 mt-1">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Store Online
+            <h3 className="font-bold text-[var(--text-main)] tracking-tight text-lg">{user?.fullName || 'Seller'}</h3>
+            <p className="text-xs text-[var(--text-muted)] flex items-center gap-2 mt-1">
+              <span className={`w-2 h-2 rounded-full ${user?.isVerified ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span> {user?.isVerified ? 'Store Online' : 'Unverified'}
             </p>
           </div>
           
           <button 
             onClick={() => setIsSidebarOpen(false)} 
-            className="lg:hidden absolute right-0 top-0 p-2 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors"
+            className="lg:hidden absolute right-0 top-0 p-2 rounded-full neu-button text-[var(--text-main)]"
           >
             <GXIcon name="shared.close" size={18} />
           </button>
         </div>
 
-        <nav className="space-y-2 flex-1 overflow-y-auto overscroll-contain pr-2 hide-scrollbar pb-20 md:pb-0">
+        <nav className="flex flex-col items-center gap-[10px] flex-1 overflow-y-auto overscroll-contain px-2 hide-scrollbar pb-20 md:pb-0 pt-2">
           {tabs.map((tab) => (
-            <button 
+            <CapsuleButton 
               key={tab.id}
-              onClick={() => { setActiveTab(tab.id); setIsSidebarOpen(false); }} 
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 text-sm font-medium
-                ${activeTab === tab.id 
-                  ? 'bg-slate-800 text-white shadow-md font-bold translate-x-1' 
-                  : 'text-slate-500 hover:bg-slate-100/50 hover:text-slate-900 hover:translate-x-1'
-                }`}
-            >
-              <GXIcon name={tab.iconName} size={18} className={activeTab === tab.id ? "text-white" : "text-slate-400 group-hover:text-slate-700"} />
-              {tab.label}
-            </button>
+              label={tab.label}
+              icon={<GXIcon name={tab.iconName} size={14} />}
+              onClick={() => { setActiveTab(tab.id); setIsSidebarOpen(false); }}
+              isBlue={activeTab === tab.id}
+            />
           ))}
         </nav>
 
-        <div className="mt-4 pt-4 border-t border-slate-200 space-y-2">
-          <button
+        <div className="mt-4 pt-4 border-t border-[var(--border-color)] flex flex-col items-center gap-[10px] px-2 pb-6">
+          <CapsuleButton
+            label="Upgrade Plan"
+            icon={<GXIcon name="shared.star" size={14} />}
             onClick={() => navigate('/seller/subscription')}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 shadow-md hover:shadow-lg transition-all duration-300"
-          >
-            <GXIcon name="shared.star" size={18} className="text-white" />
-            Upgrade Plan
-          </button>
-          <button
+            colorClass="text-amber-500"
+            iconColorClass="text-amber-500"
+          />
+          <CapsuleButton
+            label="Logout"
+            icon={<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>}
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-slate-600 hover:bg-red-50 hover:text-red-600 transition-all duration-300"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-            Logout
-          </button>
+            colorClass="text-red-500"
+            iconColorClass="text-red-500"
+          />
         </div>
       </div>
     </aside>

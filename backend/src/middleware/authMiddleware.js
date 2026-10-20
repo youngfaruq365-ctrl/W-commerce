@@ -7,15 +7,14 @@ const logger = require('../utils/logger');
 const protect = async (req, res, next) => {
     let token;
 
-    // 1. Check Cookies (Priority)
-    if (req.cookies && req.cookies.token) {
-        token = req.cookies.token;
+    // 1. Check Authorization Header (Priority for explicit API clients)
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+        token = req.headers.authorization.split(' ')[1];
     }
 
-
-    // 2. Check Authorization Header (Fallback for cross-origin or legacy)
-    if (!token && req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-        token = req.headers.authorization.split(' ')[1];
+    // 2. Check Cookies (Fallback for web navigations)
+    if (!token && req.cookies && req.cookies.token) {
+        token = req.cookies.token;
     }
 
     if (token) {
@@ -23,21 +22,36 @@ const protect = async (req, res, next) => {
             // Verify token
             const decoded = jwt.verify(token, getJwtSecret());
 
-            // Try to get cached user data first (Redis)
-            let cachedUser = null;
-            try {
-                const cacheKey = `user:${decoded.id}:profile`;
-                const cached = await redisManager.get(cacheKey);
-                if (cached) {
-                    cachedUser = JSON.parse(cached);
+            // Check if token exists and is active in userSession
+            let session = await prisma.userSession.findFirst({
+                where: { token, isActive: true, expiresAt: { gt: new Date() } }
+            });
+            if (!session && decoded && decoded.id) {
+                // Auto-heal session for cryptographically valid token if user exists in DB
+                try {
+                    const existingUser = await prisma.user.findUnique({ where: { id: decoded.id }, select: { id: true } });
+                    if (existingUser) {
+                        session = await prisma.userSession.create({
+                            data: {
+                                userId: existingUser.id,
+                                token,
+                                userAgent: req.headers['user-agent'] || 'Browser',
+                                ipAddress: req.ip || '127.0.0.1',
+                                expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                                isActive: true
+                            }
+                        }).catch(() => null);
+                    }
+                } catch (e) {
+                    // ignore
                 }
-            } catch (cacheErr) {
-                // Redis not available, will fetch from DB
+            }
+            if (!session) {
+                return res.status(401).json({ success: false, message: 'Session expired or revoked' });
             }
 
-            // Get user from Token (including trial fields)
-            // BUG-AUTH-03: Added phone and avatarUrl so getMe returns complete profile
-            req.user = cachedUser || await prisma.user.findUnique({
+            // Get user fresh from DB (ensures instant reflection of tier upgrades & role changes)
+            req.user = await prisma.user.findUnique({
                 where: { id: decoded.id },
                 select: { 
                     id: true, 
@@ -54,12 +68,17 @@ const protect = async (req, res, next) => {
                     trialStatus: true,
                     isTrialActive: true,
                     isVerified: true,
-                    kycTier: true
+                    kycTier: true,
+                    isFlagged: true
                 }
             });
 
             if (!req.user) {
                 return res.status(401).json({ success: false, message: 'User no longer exists' });
+            }
+
+            if (req.user.isFlagged) {
+                return res.status(403).json({ success: false, message: 'Your account has been suspended.' });
             }
 
             // Check Trial Expiration (async - don't block request)
@@ -69,7 +88,6 @@ const protect = async (req, res, next) => {
                 
                 if (now > trialEnd) {
                     // Trial expired - update asynchronously in background
-                    // Don't await to avoid blocking the request
                     prisma.user.update({
                         where: { id: req.user.id },
                         data: { 
@@ -78,9 +96,8 @@ const protect = async (req, res, next) => {
                             hasPaidAccess: false,
                             subscriptionTier: 'NONE'
                         }
-                    }).catch(err => console.error('[Trial Expiration] DB update failed:', err));
+                    }).catch(err => logger.error('[Trial Expiration] DB update failed:', err));
                     
-                    // Update local request context immediately
                     req.user.isTrialActive = false;
                     req.user.trialStatus = 'EXPIRED';
                     req.user.hasPaidAccess = false;
@@ -90,27 +107,18 @@ const protect = async (req, res, next) => {
 
             // Check Access Expiry (for paid subscriptions) - async
             if (req.user.hasPaidAccess && req.user.accessExpiry && new Date() > new Date(req.user.accessExpiry)) {
-                // Auto-expire asynchronously
                 prisma.user.update({
                     where: { id: req.user.id },
                     data: { hasPaidAccess: false, subscriptionTier: 'NONE' }
-                }).catch(err => console.error('[Access Expiry] DB update failed:', err));
+                }).catch(err => logger.error('[Access Expiry] DB update failed:', err));
                 
                 req.user.hasPaidAccess = false;
                 req.user.subscriptionTier = 'NONE';
             }
 
-            // Cache user profile in Redis for 1 hour (TTL)
-            try {
-                const cacheKey = `user:${req.user.id}:profile`;
-                await redisManager.set(cacheKey, JSON.stringify(req.user), 3600);
-            } catch (cacheErr) {
-                // Redis not available - continue without caching
-            }
-
             next();
         } catch (error) {
-            console.error('Auth Error:', error.message);
+            logger.error('Auth Error: ' + error.message);
             if (error.name === 'TokenExpiredError') {
                 return res.status(401).json({ 
                     success: false, 
@@ -237,24 +245,29 @@ const optionalProtect = async (req, res, next) => {
     if (token) {
         try {
             const decoded = jwt.verify(token, getJwtSecret());
-            req.user = await prisma.user.findUnique({
-                where: { id: decoded.id },
-                select: { 
-                    id: true, 
-                    fullName: true, 
-                    email: true,
-                    phone: true,
-                    avatarUrl: true,
-                    role: true, 
-                    hasPaidAccess: true, 
-                    subscriptionTier: true, 
-                    accessExpiry: true,
-                    trialStartDate: true,
-                    trialEndDate: true,
-                    trialStatus: true,
-                    isTrialActive: true
-                }
+            const session = await prisma.userSession.findFirst({
+                where: { token, isActive: true, expiresAt: { gt: new Date() } }
             });
+            if (session) {
+                req.user = await prisma.user.findUnique({
+                    where: { id: decoded.id },
+                    select: { 
+                        id: true, 
+                        fullName: true, 
+                        email: true,
+                        phone: true,
+                        avatarUrl: true,
+                        role: true, 
+                        hasPaidAccess: true, 
+                        subscriptionTier: true, 
+                        accessExpiry: true,
+                        trialStartDate: true,
+                        trialEndDate: true,
+                        trialStatus: true,
+                        isTrialActive: true
+                    }
+                });
+            }
         } catch (error) {
             // Ignore token error for optional protect
         }

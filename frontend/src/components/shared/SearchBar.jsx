@@ -1,6 +1,7 @@
+import { PLACEHOLDER_IMAGE } from '@/constants/placeholders';
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, Loader2, X } from 'lucide-react';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 import { useNavigate } from 'react-router-dom';
 
 const SearchBar = ({ onSearch }) => {
@@ -102,7 +103,7 @@ const SearchBar = ({ onSearch }) => {
           onClick={toggleExpand}
           className={`absolute right-0 w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center cursor-pointer transition-all z-10 shrink-0 ${isExpanded || query ? 'text-[var(--text-muted)] hover:text-[var(--accent-gray)]' : 'icon-3d-glass-box'}`}
         >
-          <Search size={18} className={isExpanded || query ? "" : "text-[var(--text-main)] drop-shadow-[0_0_5px_var(--accent-gray)]"} />
+          <Search size={18} className={isExpanded || query ? "" : "text-[color:var(--text-main)] drop-shadow-[0_0_5px_var(--accent-gray)]"} />
         </button>
       </form>
 
@@ -123,7 +124,7 @@ const SearchBar = ({ onSearch }) => {
                   ? (product.images[0].url.startsWith('http') || product.images[0].url.startsWith('/') 
                       ? product.images[0].url 
                       : `/${product.images[0].url}`) 
-                  : '/assets/splash_3d_box_1781971684931.png';
+                  : PLACEHOLDER_IMAGE;
                 
                 return (
                   <div 

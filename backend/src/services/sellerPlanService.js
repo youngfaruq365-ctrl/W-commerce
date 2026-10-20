@@ -5,9 +5,10 @@ exports.getCommissionRate = async (sellerId, defaultRate) => {
         const store = await prisma.store.findFirst({ where: { sellerId } });
         const tier = store ? (store.sellerTier || 'NONE') : 'NONE';
         
-        if (tier === 'DIAMOND') return 0.00;
-        if (tier === 'PLATINUM') return 0.02;
-        if (tier === 'GOLD') return 0.05;
+        // Map all known tier names to their correct commission rates
+        if (['DIAMOND', 'ULTRA', 'ULTRA2PRO', 'ULTRA1PRO', 'ENTERPRISE'].includes(tier)) return 0.00;
+        if (['PLATINUM', 'PRO', 'PRO ULTRA'].includes(tier)) return 0.02;
+        if (['GOLD', 'PREMIUM'].includes(tier)) return 0.05;
         
         return defaultRate !== undefined ? defaultRate : 0.10;
     } catch (e) {

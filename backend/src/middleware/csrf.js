@@ -16,8 +16,11 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 // Paths to skip CSRF (webhooks receive external POST requests)
 const SKIP_PATHS = [
   '/api/webhooks/',
+  '/api/v1/webhooks/',
   '/api/stripe/webhook',
-  '/api/paystack/webhook'
+  '/api/paystack/webhook',
+  '/api/webhooks/paypal',
+  '/api/v1/webhooks/paypal'
 ];
 
 /**
@@ -79,7 +82,7 @@ function csrfProtection(req, res, next) {
 
   // Validate: header token must match cookie token
   if (!headerToken || headerToken !== cookieToken) {
-    logger.warn(`CSRF: Token mismatch for ${req.method} ${path} (IP: ${req.ip})`);
+    logger.warn(`CSRF: Token mismatch for ${req.method} ${path} (IP: ${req.ip}). Cookie: ${cookieToken}, Header: ${headerToken}`);
     return res.status(403).json({
       success: false,
       message: 'CSRF token invalid. Please refresh the page and try again.'

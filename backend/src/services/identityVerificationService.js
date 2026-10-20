@@ -26,7 +26,7 @@ class IdentityVerificationService {
     } catch (error) {
       console.error('BVN Verification Error:', error.message);
       // For development/mock purposes, if API fails, return a mock success
-      if (process.env.NODE_ENV === 'development') {
+      if (require('../utils/providerConfig').allowMockExternalApis()) {
          return {
            success: true,
            confidence: 0.99,
@@ -54,7 +54,7 @@ class IdentityVerificationService {
     } catch (error) {
       console.error('NIN Verification Error:', error.message);
       // For development/mock purposes
-      if (process.env.NODE_ENV === 'development') {
+      if (require('../utils/providerConfig').allowMockExternalApis()) {
          return {
            success: true,
            confidence: 0.99,

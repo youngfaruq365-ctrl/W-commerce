@@ -13,7 +13,7 @@ if (!IS_MOCK) {
 }
 
 class StripeService {
-    async createPaymentIntent(amount, currency = 'usd', metadata = {}) {
+    async createPaymentIntent(amount, currency = 'ngn', metadata = {}) {
         if (IS_MOCK) {
             logger.warn(`[STRIPE MOCK] createPaymentIntent: ${amount} ${currency}`);
             return {

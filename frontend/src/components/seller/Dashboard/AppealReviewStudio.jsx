@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Star, CheckCircle, ArrowRight, ArrowLeft, Sparkles, Download, Package, AlertCircle, Users, Settings, Link, Truck, Megaphone, Zap, DollarSign } from 'lucide-react';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 import toast from 'react-hot-toast';
 
 const AppealReviewStudio = ({ onSuccess }) => {
@@ -22,7 +22,7 @@ const AppealReviewStudio = ({ onSuccess }) => {
     setTimeout(() => { setProgress(75); setProgressText('Submitting appeal...'); }, 1600);
 
     try {
-      await axios.post(`http://localhost:5000/api/v1/reviews/${reviewId}/appeal`, { reason }, { withCredentials: true });
+      await axios.post(`/api/v1/reviews/${reviewId}/appeal`, { reason }, { withCredentials: true });
       setTimeout(() => {
         setIsSubmitting(false);
         setProgress(100);
@@ -31,7 +31,7 @@ const AppealReviewStudio = ({ onSuccess }) => {
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to submit appeal');
       setIsSubmitting(false);
-      setStep('reason');
+      setStep('details');
     }
   };
 

@@ -23,29 +23,29 @@ const checkoutService = require('../services/checkoutService');
 async function clearPurchasedCartItems(userId, items) {
     try {
         const cart = await prisma.cart.findUnique({ where: { userId } });
-        if (cart && items && items.length > 0) {
-            const productIds = items.map(i => String(i.productId));
+        const purchasedProductIds = items.map(i => i.productId);
+        if (cart && purchasedProductIds.length > 0) {
             await prisma.cartItem.deleteMany({
                 where: {
                     cartId: cart.id,
-                    productId: { in: productIds }
+                    productId: { in: purchasedProductIds }
                 }
             });
-            logger.info(`[PAYMENT] Cleared ${productIds.length} purchased items from Cart for User ${userId}`);
+            logger.info(`[PAYMENT] Cleared purchased items from Cart for User ${userId}`);
         }
     } catch (e) {
-        logger.error(`[PAYMENT] Failed to clear cart items: ${e.message}`);
+        logger.error(`[PAYMENT] Failed to clear cart items for User ${userId}: ${e.message}`);
     }
 }
 
 exports.createPaymentIntent = async (req, res) => {
     try {
-        const { items, currency = 'usd', shippingAddress, isConsolidated, region = 'US', promoCode, gateway } = req.body;
+        const { items, currency = 'usd', shippingAddress, isConsolidated, region = 'US', promoCode, gateway, gamificationReward } = req.body;
         const userId = req.user.id;
         const idempotencyKey = req.headers['idempotency-key'];
 
         // 1. Dry run to calculate amount and check stock before creating intent
-        const { parentOrder: dryOrder, totalAmountUSD, isExistingOrder } = await checkoutService.processCheckout({
+        const { parentOrder: dryOrder, totalAmountUSD, isExistingOrder, sellerCount } = await checkoutService.processCheckout({
             userId,
             items,
             shippingAddress,
@@ -55,7 +55,8 @@ exports.createPaymentIntent = async (req, res) => {
             paymentMethod: gateway || 'CARD',
             initialStatus: 'PENDING',
             idempotencyKey,
-            dryRun: true
+            dryRun: true,
+            gamificationReward
         });
 
         if (isExistingOrder && dryOrder.stripePaymentId) {
@@ -83,13 +84,13 @@ exports.createPaymentIntent = async (req, res) => {
                 reference: 'GX-TEMP-' + Date.now(), // Temp reference, order ID unknown yet
                 bearer: 'account',
                 metadata: { userId: userId },
-                callback_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/cart`
+                callback_url: `${process.env.FRONTEND_URL || 'http://localhost:5175'}/cart`
             };
 
             let transaction;
             let splitPaymentInitialized = false;
 
-            if (primarySellerId) {
+            if (primarySellerId && sellerCount === 1) {
                 const store = await prisma.store.findFirst({ where: { sellerId: primarySellerId } });
                 if (store && store.paystackSubaccountCode) {
                     const paystackSubaccountService = require('../services/paystackSubaccountService');
@@ -166,7 +167,7 @@ exports.createPaymentIntent = async (req, res) => {
         res.json({ success: true, ...providerResponse });
     } catch (error) {
         logger.error(`Payment Intent Error: ${error.message}`);
-        res.status(500).json({ success: false, message: 'Payment init failed', error: error.message });
+        res.status(500).json({ success: false, message: 'Payment init failed', error: process.env.NODE_ENV === 'production' ? 'An error occurred' : error.message });
     }
 };
 
@@ -183,7 +184,8 @@ exports.createBankTransferOrder = async (req, res) => {
             region,
             promoCodeStr: promoCode,
             paymentMethod: 'BANK_TRANSFER',
-            initialStatus: 'AWAITING_TRANSFER'
+            initialStatus: 'AWAITING_TRANSFER',
+            gamificationReward: req.body.gamificationReward
         });
 
         // 4. Return Regional Bank Details
@@ -200,7 +202,7 @@ exports.createBankTransferOrder = async (req, res) => {
         });
     } catch (error) {
         logger.error(`Bank Transfer Init Error: ${error.message}`);
-        res.status(500).json({ success: false, message: 'Failed to initialize bank transfer', error: error.message });
+        res.status(500).json({ success: false, message: 'Failed to initialize bank transfer', error: process.env.NODE_ENV === 'production' ? 'An error occurred' : error.message });
     }
 };
 
@@ -217,22 +219,79 @@ exports.payWithWallet = async (req, res) => {
             region,
             promoCodeStr: promoCode,
             paymentMethod: 'WALLET',
-            initialStatus: 'PAID'
+            initialStatus: 'PAID',
+            gamificationReward: req.body.gamificationReward
+        });
+
+        await clearPurchasedCartItems(userId, items);
+
+        // Increment soldCount safely
+        const orderItems = (result.parentOrder && Array.isArray(result.parentOrder.items))
+            ? result.parentOrder.items
+            : (Array.isArray(items) ? items : []);
+
+        for (const item of orderItems) {
+            const prodId = item.productId || item.id;
+            const quantity = Number(item.quantity || item.qty || 1);
+            if (prodId && quantity > 0) {
+                await prisma.product.update({
+                    where: { id: prodId },
+                    data: { soldCount: { increment: quantity } }
+                }).catch(err => {
+                    logger.error(`Failed to update soldCount for wallet purchase: ${err.message}`);
+                });
+            }
+        }
+
+        res.json({
+            success: true,
+            orderId: result.parentOrder?.id,
+            order: result.parentOrder,
+            newBalance: result.updatedUser?.balance,
+            message: 'Order placed successfully using wallet balance.'
+        });
+
+    } catch (error) {
+        logger.error(`Wallet Payment Error: ${error.message}`);
+        res.status(500).json({ success: false, message: error.message || 'Failed to process wallet payment', error: process.env.NODE_ENV === 'production' ? 'An error occurred' : error.message });
+    }
+};
+
+exports.createCodOrder = async (req, res) => {
+    try {
+        const { items, shippingAddress, isConsolidated, region = 'NG', promoCode, gamificationReward } = req.body;
+        const userId = req.user.id;
+
+        const { parentOrder: order, totalAmountUSD } = await checkoutService.processCheckout({
+            userId,
+            items,
+            shippingAddress,
+            isConsolidated,
+            region,
+            promoCodeStr: promoCode,
+            paymentMethod: 'COD',
+            initialStatus: 'PENDING',
+            gamificationReward
         });
 
         await clearPurchasedCartItems(userId, items);
 
         res.json({
             success: true,
-            orderId: result.parentOrder.id,
-            newBalance: result.updatedUser.balance,
-            message: 'Order placed successfully using wallet balance.'
+            orderId: order.id,
+            order,
+            totalAmountUSD,
+            message: 'Cash on delivery order created successfully.'
         });
-
     } catch (error) {
-        logger.error(`Wallet Payment Error: ${error.message}`);
-        res.status(500).json({ success: false, message: 'Failed to process wallet payment', error: error.message });
+        logger.error(`COD Order Error: ${error.message}`);
+        res.status(500).json({ success: false, message: error.message || 'Failed to create COD order' });
     }
+};
+
+exports.createFlutterwaveIntent = async (req, res) => {
+    req.body = { ...req.body, gateway: 'FLUTTERWAVE' };
+    return exports.createPaymentIntent(req, res);
 };
 
 function getBankDetails(region) {
@@ -290,6 +349,7 @@ exports.uploadPaymentProof = async (req, res) => {
             where: { id: orderId },
             data: {
                 status: 'PENDING_VERIFICATION',
+                paymentStatus: 'PROOF_SUBMITTED',
                 proofUrl: proofUrl,
                 stripePaymentId: `TRANSFER_PROOF_${Date.now()}` // Use this as temporary ref
             }
@@ -308,11 +368,107 @@ exports.uploadPaymentProof = async (req, res) => {
             }
         });
 
+        // Notify Seller via Socket
+        if (order.sellerId) {
+            const socketService = require('../services/socketService');
+            const io = socketService.getIO();
+            if (io) {
+                io.to(order.sellerId).emit('payment_proof:new');
+                io.to(order.sellerId).emit('new_notification');
+            }
+        }
+
         res.json({ success: true, message: 'Proof of payment uploaded successfully. Our team will verify it shortly.' });
 
     } catch (error) {
         logger.error(`Upload Proof Error: ${error.message}`);
-        res.status(500).json({ success: false, message: 'Failed to upload proof', error: error.message });
+        res.status(500).json({ success: false, message: 'Failed to upload proof', error: process.env.NODE_ENV === 'production' ? 'An error occurred' : error.message });
+    }
+};
+
+exports.getSellerProofs = async (req, res) => {
+    try {
+        const sellerId = req.user.id;
+        
+        const orders = await prisma.order.findMany({
+            where: {
+                sellerId: sellerId,
+                proofUrl: { not: null }
+            },
+            include: {
+                buyer: { select: { fullName: true } }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        const proofs = orders.map(order => ({
+            id: order.id,
+            orderId: order.id,
+            buyerName: order.buyer ? order.buyer.fullName : 'Unknown Buyer',
+            transactionRef: order.stripePaymentId || 'N/A',
+            amount: order.totalAmount,
+            status: ['PROOF_SUBMITTED', 'PENDING_VERIFICATION'].includes(order.paymentStatus) ? 'PENDING' : 
+                    (order.paymentStatus === 'PENDING' || order.status === 'CANCELLED') ? 'REJECTED' : 'APPROVED',
+            proofImageUrl: order.proofUrl
+        }));
+
+        res.json({ success: true, proofs });
+    } catch (error) {
+        logger.error(`Get Seller Proofs Error: ${error.message}`);
+        res.status(500).json({ success: false, message: 'Failed to fetch proofs' });
+    }
+};
+
+exports.verifyPaymentProof = async (req, res) => {
+    try {
+        const { proofId } = req.params;
+        const { action, rejectReason } = req.body;
+        const sellerId = req.user.id;
+
+        const order = await prisma.order.findUnique({ where: { id: proofId } });
+        if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+        if (order.sellerId !== sellerId) return res.status(403).json({ success: false, message: 'Not authorized' });
+
+        if (action === 'APPROVE') {
+            await exports.finalizeOrder(order.id, order.stripePaymentId, order.totalAmount, order.buyerId, 'DIRECT_BANK');
+            // Notify buyer
+            try {
+                await prisma.notification.create({
+                    data: {
+                        userId: order.buyerId,
+                        title: '✅ Payment Approved',
+                        body: `Your payment for Order #${order.id.slice(0, 8).toUpperCase()} has been verified.`,
+                        type: 'ORDER'
+                    }
+                });
+            } catch (e) { /* non-critical */ }
+            res.json({ success: true, message: 'Payment approved successfully.' });
+        } else if (action === 'REJECT') {
+            await prisma.order.update({
+                where: { id: order.id },
+                data: {
+                    paymentStatus: 'PENDING',
+                    proofUrl: null
+                }
+            });
+            // Notify buyer
+            try {
+                await prisma.notification.create({
+                    data: {
+                        userId: order.buyerId,
+                        title: '❌ Payment Proof Rejected',
+                        body: `Your payment proof for Order #${order.id.slice(0, 8).toUpperCase()} was rejected. ${rejectReason ? `Reason: ${rejectReason}` : 'Please re-upload a valid proof.'}`,
+                        type: 'ORDER'
+                    }
+                });
+            } catch (e) { /* non-critical */ }
+            res.json({ success: true, message: 'Payment proof rejected. Buyer has been notified.' });
+        } else {
+            res.status(400).json({ success: false, message: 'Invalid action' });
+        }
+    } catch (error) {
+        logger.error(`Verify Proof Error: ${error.message}`);
+        res.status(500).json({ success: false, message: 'Failed to verify proof' });
     }
 };
 
@@ -329,7 +485,8 @@ exports.createCodOrder = async (req, res) => {
             region,
             promoCodeStr: promoCode,
             paymentMethod: 'COD',
-            initialStatus: 'PENDING'
+            initialStatus: 'PENDING',
+            gamificationReward: req.body.gamificationReward
         });
 
         await clearPurchasedCartItems(userId, items);
@@ -342,7 +499,7 @@ exports.createCodOrder = async (req, res) => {
         });
     } catch (error) {
         logger.error(`COD Order Init Error: ${error.message}`);
-        res.status(500).json({ success: false, message: 'Failed to create COD order', error: error.message });
+        res.status(500).json({ success: false, message: 'Failed to create COD order', error: process.env.NODE_ENV === 'production' ? 'An error occurred' : error.message });
     }
 };
 
@@ -359,7 +516,8 @@ exports.createFlutterwavePayment = async (req, res) => {
             region,
             promoCodeStr: promoCode,
             paymentMethod: 'FLUTTERWAVE',
-            initialStatus: 'PENDING'
+            initialStatus: 'PENDING',
+            gamificationReward: req.body.gamificationReward
         });
 
         const reference = 'FLW-' + order.id;
@@ -372,7 +530,7 @@ exports.createFlutterwavePayment = async (req, res) => {
         });
     } catch (error) {
         logger.error(`Flutterwave Payment Init Error: ${error.message}`);
-        res.status(500).json({ success: false, message: 'Failed to initialize Flutterwave payment', error: error.message });
+        res.status(500).json({ success: false, message: 'Failed to initialize Flutterwave payment', error: process.env.NODE_ENV === 'production' ? 'An error occurred' : error.message });
     }
 };
 
@@ -452,7 +610,7 @@ exports.releaseEscrow = async (req, res) => {
         res.json(result);
     } catch (error) {
         logger.error(`Escrow Release Error: ${error.message}`);
-        res.status(500).json({ success: false, message: 'Escrow release failed', error: error.message });
+        res.status(500).json({ success: false, message: 'Escrow release failed', error: process.env.NODE_ENV === 'production' ? 'An error occurred' : error.message });
     }
 };
 
@@ -531,7 +689,7 @@ async function processEscrowRelease(orderId, triggerSource = 'SYSTEM_AUTO') {
                     }
                 }
             }
-        }
+        },
     });
 
     if (!order) return { success: false, statusCode: 404, message: 'Order not found' };
@@ -616,13 +774,36 @@ async function processEscrowRelease(orderId, triggerSource = 'SYSTEM_AUTO') {
         });
     }
 
-    // Credit seller balance (always, even if Paystack transfer was also initiated)
-    // If Paystack transfer succeeds, webhook will handle final reconciliation
-    if (!transferResult) {
-        await prisma.user.update({
-            where: { id: primarySellerId },
-            data: { balance: { increment: sellerAmount } }
-        });
+    // Credit seller — if WALLET payment, use escrowLedgerService which also releases the WalletHold
+    if (order.paymentMethod === 'WALLET') {
+        try {
+            const escrowLedgerService = require('../services/escrowLedgerService');
+            await escrowLedgerService.releaseToSeller({
+                orderId,
+                buyerId:       order.buyerId,
+                sellerId:      primarySellerId,
+                amount:        order.totalAmount,
+                triggerSource,
+            });
+            logger.info(`[ESCROW] WalletHold released and seller credited via escrowLedgerService for Order ${orderId}`);
+        } catch (err) {
+            logger.error(`[ESCROW] escrowLedgerService.releaseToSeller failed: ${err.message}. Falling back to direct credit.`);
+            // Fallback: direct wallet credit
+            if (!transferResult) {
+                await prisma.user.update({
+                    where: { id: primarySellerId },
+                    data: { balance: { increment: sellerAmount } }
+                });
+            }
+        }
+    } else {
+        // Non-wallet payment (Paystack, bank transfer, etc.)
+        if (!transferResult) {
+            await prisma.user.update({
+                where: { id: primarySellerId },
+                data: { balance: { increment: sellerAmount } }
+            });
+        }
     }
 
     // Log Transaction: ESCROW_RELEASE for seller
@@ -822,31 +1003,18 @@ async function finalizeOrder(orderId, reference, amount, userId, provider = 'PAY
 
         if (!order) return;
 
-        if (order.paymentStatus === 'PAID') return;
-
-        await prisma.order.update({
-            where: { id: orderId },
+        const updatedOrder = await prisma.order.updateMany({
+            where: { id: orderId, paymentStatus: 'PENDING' },
             data: {
                 paymentStatus: 'PAID',
                 status: 'PROCESSING',
-                paymentReference: reference,
+                stripePaymentId: reference,
                 paymentMethod: provider,
                 escrowReleaseAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)
             }
         });
 
-        // Clear the cart
-        const cart = await prisma.cart.findUnique({ where: { userId } });
-        if (cart) {
-            const purchasedProductIds = order.items.map(i => i.productId);
-            await prisma.cartItem.deleteMany({
-                where: {
-                    cartId: cart.id,
-                    productId: { in: purchasedProductIds }
-                }
-            });
-            logger.info(`Cleared cart items for paid legacy Order ${orderId}`);
-        }
+        if (updatedOrder.count === 0) return;
 
         // Cascade to subOrders
         await prisma.order.updateMany({
@@ -865,8 +1033,7 @@ async function finalizeOrder(orderId, reference, amount, userId, provider = 'PAY
                 currency: 'NGN',
                 status: 'COMPLETED',
                 referenceId: orderId,
-                description: `Payment for Order #${orderId.substring(0, 8)} via ${provider}`,
-                providerReference: reference
+                description: `Payment for Order #${orderId.substring(0, 8)} via ${provider}`
             }
         });
 
@@ -874,32 +1041,54 @@ async function finalizeOrder(orderId, reference, amount, userId, provider = 'PAY
         await clearPurchasedCartItems(order.buyerId || userId, order.items);
         
         // Notify Seller and Update Dashboard Events
-        if (order.sellerId) {
-            const notificationV2 = require('../services/notificationV2Service');
-            await notificationV2.notify(order.sellerId, {
+        const notificationV2 = require('../services/notificationV2Service');
+        const socketService = require('../services/socketService');
+        const analyticsController = require('./analyticsController');
+        const io = socketService.getIO();
+
+        // Find all sellers involved (parent and child orders)
+        const childOrders = await prisma.order.findMany({ where: { parentOrderId: orderId } });
+        const sellerIdsToNotify = new Set();
+        if (order.sellerId) sellerIdsToNotify.add(order.sellerId);
+        for (const child of childOrders) {
+            if (child.sellerId) sellerIdsToNotify.add(child.sellerId);
+        }
+
+        for (const sId of sellerIdsToNotify) {
+            await notificationV2.notify(sId, {
                 type: 'ORDER_PAID',
                 title: 'New Paid Order',
                 body: `Payment received for order #${orderId.substring(0,8)}. Please prepare for shipping.`,
                 actionUrl: `/seller/orders`
             }).catch(() => {});
 
-            // Also emit via socketService so dashboard updates
-            const socketService = require('../services/socketService');
-            const io = socketService.getIO();
             if (io) {
-                io.to(order.sellerId).emit('seller_dashboard_update');
-                io.emit('admin_dashboard_update');
+                io.to(sId).emit('seller_dashboard_update');
+                io.to(sId).emit('order:updated', { orderId });
             }
-            
-            // Log analytics event
-            const analyticsController = require('./analyticsController');
+
             if (analyticsController.recordEvent) {
-                await analyticsController.recordEvent(order.sellerId, 'SALE', { orderId, amount });
+                await analyticsController.recordEvent(sId, 'SALE', { orderId, amount });
             }
         }
 
-        // Note: Stock was already decremented during checkoutService.processCheckout 
-        // to reserve inventory, so we do not decrement it here again.
+        // Notify Buyer and Admin
+        if (io) {
+            io.to(order.buyerId || userId).emit('order:updated', { orderId });
+            io.to('role:ADMIN').emit('admin_dashboard_update');
+        }
+
+        // Increment soldCount for products in the order
+        for (const item of order.items) {
+            if (item.productId && item.quantity) {
+                await prisma.product.update({
+                    where: { id: item.productId },
+                    data: { soldCount: { increment: item.quantity } }
+                }).catch(err => {
+                    logger.error(`Failed to update soldCount for product ${item.productId}: ${err.message}`);
+                });
+            }
+        }
         
     } catch (e) {
         logger.error(`[PAYMENT] Finalize error for ${orderId}: ${e.message}`);
@@ -931,6 +1120,7 @@ exports.verifyTransaction = async (req, res) => {
                 // Now: re-derive userId from the order in the DB instead of trusting metadata.
                 const metaType = data.metadata?.type;
                 let userId = null;
+                let actualOrderId = null;
 
                 if (metaType === 'ACCESS_FEE' || metaType === 'PRO_BUYER_SUBSCRIPTION') {
                     // For subscription payments, find the user via their email (Paystack customer)
@@ -942,11 +1132,21 @@ exports.verifyTransaction = async (req, res) => {
                 } else {
                     // For order payments, look up the order by reference
                     const orderId = data.metadata?.orderId || reference.replace('GX-', '');
+                    
+                    const orConditions = [];
+                    if (orderId && orderId !== reference && !orderId.startsWith('TEMP-')) {
+                        orConditions.push({ id: orderId });
+                    }
+                    if (reference) {
+                        orConditions.push({ stripePaymentId: reference });
+                    }
+
                     const orderRecord = await prisma.order.findFirst({
-                        where: { OR: [{ id: orderId }, { stripePaymentId: reference }] },
-                        select: { buyerId: true }
+                        where: { OR: orConditions },
+                        select: { id: true, buyerId: true }
                     });
                     userId = orderRecord?.buyerId || null;
+                    actualOrderId = orderRecord?.id || orderId;
                 }
 
                 if (!userId) {
@@ -957,46 +1157,38 @@ exports.verifyTransaction = async (req, res) => {
                 if (metaType === 'ACCESS_FEE') {
                     await finalizeAccessFee(userId, reference, data.amount / 100, 'PAYSTACK');
                 } else if (metaType === 'PRO_BUYER_SUBSCRIPTION') {
-                    const userCtrl = require('./userController');
-                    await userCtrl.activateProAfterPayment(userId, reference, data.amount / 100, 'PAYSTACK');
+                    const { finalizeSubscription } = require('../services/subscriptionService');
+                    await finalizeSubscription(userId, reference, data.amount / 100, 'PAYSTACK', 'MONTHLY');
                 } else {
-                    const orderId = data.metadata?.orderId || reference.replace('GX-', '');
-                    await finalizeOrder(orderId, reference, data.amount / 100, userId);
+                    await finalizeOrder(actualOrderId, reference, data.amount / 100, userId);
+                }
+
+                let finalizedOrder = null;
+                if (actualOrderId && metaType !== 'ACCESS_FEE' && metaType !== 'PRO_BUYER_SUBSCRIPTION') {
+                    finalizedOrder = await prisma.order.findUnique({
+                        where: { id: actualOrderId },
+                        include: { items: true }
+                    });
                 }
 
                 res.json({
                     success: true,
+                    status: 'success',
                     message: 'Payment verified successfully',
-                    data: paystackResponse.data
+                    data: paystackResponse.data,
+                    order: finalizedOrder
                 });
             } else {
                 const orderId = data.metadata?.orderId || reference.replace('GX-', '');
-                if (orderId) {
-                    const order = await prisma.order.findUnique({
-                        where: { id: orderId },
-                        include: { items: true }
-                    });
-
-                    if (order && order.paymentStatus !== 'FAILED' && order.paymentStatus !== 'PAID') {
-                        await prisma.$transaction(async (tx) => {
-                            await tx.order.update({
-                                where: { id: order.id },
-                                data: { paymentStatus: 'FAILED', status: 'CANCELLED' }
-                            });
-                            for (const item of order.items) {
-                                await tx.product.update({
-                                    where: { id: item.productId },
-                                    data: { stock: { increment: item.quantity } }
-                                });
-                            }
-                        });
-                        logger.info(`Restored stock for abandoned legacy Order ${order.id} upon verifyTransaction`);
-                    }
-                }
+                await checkoutService.cancelAndRestoreOrder({
+                    orderId: orderId && !orderId.startsWith('TEMP-') ? orderId : undefined,
+                    reference
+                });
 
                 res.json({
                     success: false,
-                    message: 'Payment not successful',
+                    cancelled: true,
+                    message: 'Payment cancelled or not completed. Product stock has been restored.',
                     status: data.status
                 });
             }
@@ -1005,7 +1197,25 @@ exports.verifyTransaction = async (req, res) => {
         }
     } catch (error) {
         logger.error(`Paystack Verification Error: ${error.message}`);
-        res.status(500).json({ success: false, message: 'Verification failed', error: error.message });
+        res.status(500).json({ success: false, message: 'Verification failed', error: process.env.NODE_ENV === 'production' ? 'An error occurred' : error.message });
+    }
+};
+
+/**
+ * Cancel a pending order (e.g. buyer closed or cancelled payment gateway) and immediately restore stock
+ */
+exports.cancelPendingPayment = async (req, res) => {
+    try {
+        const { orderId, reference } = req.body;
+        const userId = req.user?.id;
+        if (!orderId && !reference) {
+            return res.status(400).json({ success: false, message: 'orderId or reference is required' });
+        }
+        const result = await checkoutService.cancelAndRestoreOrder({ orderId, reference, userId });
+        res.json(result);
+    } catch (error) {
+        logger.error(`[PAYMENT] Cancel Pending Payment Error: ${error.message}`);
+        res.status(500).json({ success: false, message: 'Failed to cancel pending payment', error: error.message });
     }
 };
 
@@ -1047,7 +1257,7 @@ exports.processRefund = async (req, res) => {
         }
     } catch (error) {
         logger.error(`Paystack Refund Error: ${error.message}`);
-        res.status(500).json({ success: false, message: 'Refund failed', error: error.message });
+        res.status(500).json({ success: false, message: 'Refund failed', error: process.env.NODE_ENV === 'production' ? 'An error occurred' : error.message });
     }
 };
 
@@ -1126,7 +1336,7 @@ exports.initiateAccessPayment = async (req, res) => {
                     type: 'ACCESS_FEE',
                     subscriptionTier: tier
                 },
-                callback_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/access-success.html`
+                callback_url: `${process.env.FRONTEND_URL || 'http://localhost:5175'}/access-success.html`
             };
 
             // Call Paystack
@@ -1170,7 +1380,7 @@ exports.initiateAccessPayment = async (req, res) => {
 
     } catch (error) {
         logger.error(`Access Fee Init Error: ${error.message}`);
-        res.status(500).json({ success: false, message: 'Payment init failed', error: error.message });
+        res.status(500).json({ success: false, message: 'Payment init failed', error: process.env.NODE_ENV === 'production' ? 'An error occurred' : error.message });
     }
 };
 
@@ -1249,6 +1459,9 @@ exports.handleWebhook = async (req, res) => {
         if (!res.headersSent) res.sendStatus(200);
     }
 };
+
+exports.processEscrowRelease = processEscrowRelease;
+exports.processFulfillmentEscrowRelease = processFulfillmentEscrowRelease;
 
 
 

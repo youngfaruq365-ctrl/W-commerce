@@ -1,7 +1,47 @@
 const express = require('express');
 const router = express.Router();
+const path = require('path');
+const crypto = require('crypto');
+const cloudinary = require('cloudinary').v2;
+const streamifier = require('streamifier');
 const uploadMiddleware = require('../middleware/uploadMiddleware');
 const { protect, authorize } = require('../middleware/authMiddleware');
+
+// Internal helper: upload a single file buffer to Cloudinary or save to disk
+async function uploadSingleFile(file) {
+    // Cloudinary path
+    if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY) {
+        return new Promise((resolve, reject) => {
+            if (!file.buffer) return reject(new Error('File buffer missing for cloud upload'));
+            
+            const uploadStream = cloudinary.uploader.upload_stream(
+                { folder: 'globalx/disputes', resource_type: 'auto' },
+                (error, result) => {
+                    if (error) reject(error);
+                    else resolve(result.secure_url);
+                }
+            );
+            
+            // Handle stream errors
+            uploadStream.on('error', (err) => reject(err));
+            
+            const rs = streamifier.createReadStream(file.buffer);
+            rs.on('error', (err) => reject(err));
+            rs.pipe(uploadStream);
+        });
+    }
+    
+    // Local fallback: write the buffer to disk if memoryStorage was used
+    const filename = file.filename || (file.fieldname + '_' + Date.now() + '-' + crypto.randomBytes(8).toString('hex') + path.extname(file.originalname));
+    const filePath = path.join(__dirname, '../../storage/uploads', filename);
+    
+    if (file.buffer) {
+        const fs = require('fs');
+        await fs.promises.writeFile(filePath, file.buffer);
+    }
+    
+    return `/uploads/${filename}`;
+}
 
 // POST /api/upload
 // Protected route: Any authenticated user can upload (for chat, profiles, etc.)
@@ -48,20 +88,19 @@ router.post('/multiple', protect, uploadMiddleware.upload.array('images', 5), as
         const imageUrls = [];
 
         for (const file of req.files) {
-            let imageUrl;
             try {
-                // Create a mock req.file for each file to use the cloud upload
-                const mockReq = { file: file };
-                imageUrl = await uploadMiddleware.uploadToCloud(mockReq, res);
-            } catch (cloudError) {
-                imageUrl = `/uploads/${file.filename}`;
+                const url = await uploadSingleFile(file);
+                imageUrls.push(url);
+            } catch (fileError) {
+                console.error('[UPLOAD] Failed to upload file:', file.originalname, fileError.message);
+                // Skip failed files rather than crashing the whole request
             }
-            imageUrls.push(imageUrl);
         }
 
         res.json({
             success: true,
             message: 'Images uploaded successfully',
+            urls: imageUrls,
             imageUrls: imageUrls
         });
 

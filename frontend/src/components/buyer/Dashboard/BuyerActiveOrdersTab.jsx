@@ -1,5 +1,7 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ShoppingBag, MapPin, Truck } from 'lucide-react';
+import { PLACEHOLDER_IMAGE } from '@/constants/placeholders';
 
 const ACTIVE_STATUSES = [
   'PENDING', 'AWAITING_DIRECT_PAYMENT', 'AWAITING_TRANSFER',
@@ -20,6 +22,7 @@ const BuyerActiveOrdersTab = ({
   onViewReceipt,
   fileInputRef,
 }) => {
+  const navigate = useNavigate();
   const activeOrders = orders.filter(o => ACTIVE_STATUSES.includes(o.status));
 
   if (activeOrders.length === 0) {
@@ -66,7 +69,7 @@ const BuyerActiveOrdersTab = ({
                 <div key={item.id} className="flex gap-4">
                   <div className="w-24 h-24 bg-white rounded-lg overflow-hidden border border-[var(--border-color)]">
                     <img
-                      src={item.product?.images?.[0]?.url || 'https://placehold.co/100x100/111/333?text=No+Image'}
+                      src={item.product?.images?.[0]?.url || PLACEHOLDER_IMAGE}
                       className="w-full h-full object-cover hover:scale-110 transition-transform duration-500"
                       alt="product"
                       loading="lazy"
@@ -91,15 +94,15 @@ const BuyerActiveOrdersTab = ({
 
             {/* Order Footer */}
             <div className="mt-6 pt-4 border-t border-[var(--border-color)] flex justify-between items-center flex-wrap gap-3">
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-4 flex-wrap">
                 <div className="flex flex-col">
                   <p className="text-[var(--text-muted)] text-xs">Total Amount</p>
-                  <p className="text-xl font-extrabold text-black">₦{parseFloat(order.totalAmount).toFixed(2)}</p>
+                  <p className="text-xl font-extrabold text-[var(--text-main)]">₦{parseFloat(order.totalAmount).toFixed(2)}</p>
                 </div>
                 {(order.paymentStatus === 'PAID' || ['PAID', 'PACKED', 'SHIPPED', 'DELIVERED', 'COMPLETED'].includes(order.status)) && (
                   <button
                     onClick={() => onViewReceipt(order)}
-                    className="px-4 py-2 bg-[var(--text-main)] text-black text-sm font-bold rounded shadow hover:opacity-90 flex items-center gap-2 ml-4"
+                    className="px-4 py-2 bg-white dark:bg-zinc-800 border border-[var(--border-color)] text-[var(--text-main)] text-sm font-bold rounded-xl shadow-sm hover:opacity-90 flex items-center gap-2 ml-4 cursor-pointer"
                   >
                     View Receipt
                   </button>
@@ -108,16 +111,21 @@ const BuyerActiveOrdersTab = ({
               <div className="flex items-center gap-3 flex-wrap">
                 {order.status !== 'PENDING' && (
                   <button
-                    onClick={() => onTrack(order.id)}
-                    className="px-4 py-2 bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-black font-bold rounded-lg hover:border-[var(--accent-gray)] transition-colors text-sm"
+                    onClick={() => {
+                      if (onTrack) onTrack(order.id);
+                      navigate(`/payai?tab=tracking&orderId=${order.id}`);
+                    }}
+                    className="px-4 py-2 bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[var(--text-main)] font-bold rounded-xl hover:border-blue-500 hover:text-blue-500 transition-colors text-sm flex items-center gap-1.5 cursor-pointer shadow-sm"
+                    title="Track package in PayAI Live Radar"
                   >
-                    Track Order
+                    <Truck size={14} />
+                    <span>Track Order</span>
                   </button>
                 )}
                 {order.status === 'SHIPPED' && (
                   <button
                     onClick={() => onConfirmReceipt(order.id)}
-                    className="px-4 py-2 bg-[var(--accent-gray)] text-black font-bold rounded-lg hover:brightness-110 transition-colors text-sm"
+                    className="px-4 py-2 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-bold rounded-xl hover:brightness-110 transition-colors text-sm cursor-pointer shadow-sm"
                   >
                     Confirm Receipt
                   </button>

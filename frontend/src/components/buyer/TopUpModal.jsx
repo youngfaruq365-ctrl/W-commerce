@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Wallet, ShieldCheck, ArrowRight } from 'lucide-react';
-import axios from 'axios';
+import { apiClient as axios } from '../../utils/apiClient';
 import { v4 as uuidv4 } from 'uuid';
 
 const TopUpModal = ({ isOpen, onClose }) => {
@@ -23,8 +23,7 @@ const TopUpModal = ({ isOpen, onClose }) => {
     try {
       const endpoint = provider === 'paystack' ? '/api/v1/wallet/fund/paystack' 
         : provider === 'monnify' ? '/api/v1/wallet/fund/monnify' 
-        : provider === 'bank' ? '/api/v1/wallet/fund/bank-transfer'
-        : '/api/v1/wallet/fund/flutterwave';
+        : '/api/v1/wallet/fund/bank-transfer';
 
       const response = await axios.post(endpoint, {
         amount: Number(amount),
@@ -51,8 +50,8 @@ const TopUpModal = ({ isOpen, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-white/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-      <div className="modal-3d-glass rounded-2xl w-full max-w-md overflow-hidden relative">
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+      <div className="modal-panel neu-panel rounded-2xl w-full max-w-md overflow-hidden relative">
         <div className="p-6 border-b border-gray-200 flex justify-between items-center">
           <h2 className="text-xl font-bold flex items-center gap-2">
             <Wallet className="text-[var(--accent-gray)]" /> Top Up Wallet
@@ -71,14 +70,14 @@ const TopUpModal = ({ isOpen, onClose }) => {
           )}
 
           <div>
-            <label className="block text-sm font-bold text-gray-700 mb-2">Amount (USD)</label>
+            <label className="block text-sm font-bold text-gray-700 mb-2">Amount (NGN)</label>
             <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-700 font-bold">$</span>
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-700 font-bold">₦</span>
               <input
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                className="w-full bg-white border border-gray-200 rounded-xl pl-8 pr-4 py-3 text-black focus:outline-none focus:border-[var(--accent-gray)] transition-colors"
+                className="w-full neu-input pl-8"
                 placeholder="0.00"
                 min="1"
                 step="0.01"
@@ -93,28 +92,22 @@ const TopUpModal = ({ isOpen, onClose }) => {
               <button
                 type="button"
                 onClick={() => setProvider('paystack')}
-                className={`p-4 rounded-xl border ${provider === 'paystack' ? 'border-[var(--accent-gray)] bg-[var(--accent-gray)]/10 text-black' : 'border-gray-200 bg-white text-gray-700'} flex flex-col items-center gap-2 transition-all`}
+                className={`w-full flex flex-col items-center gap-2 p-4 transition-all ${provider === 'paystack' ? 'neu-card-pressed text-[#006cff]' : 'neu-button text-[var(--text-muted)]'}`}
               >
                 <span className="font-bold">Paystack</span>
               </button>
               <button
                 type="button"
                 onClick={() => setProvider('monnify')}
-                className={`p-4 rounded-xl border ${provider === 'monnify' ? 'border-[var(--accent-gray)] bg-[var(--accent-gray)]/10 text-black' : 'border-gray-200 bg-white text-gray-700'} flex flex-col items-center gap-2 transition-all`}
+                className={`w-full flex flex-col items-center gap-2 p-4 transition-all ${provider === 'monnify' ? 'neu-card-pressed text-[#006cff]' : 'neu-button text-[var(--text-muted)]'}`}
               >
                 <span className="font-bold">Monnify</span>
               </button>
-              <button
-                type="button"
-                onClick={() => setProvider('flutterwave')}
-                className={`p-4 rounded-xl border ${provider === 'flutterwave' ? 'border-[var(--accent-gray)] bg-[var(--accent-gray)]/10 text-black' : 'border-gray-200 bg-white text-gray-700'} flex flex-col items-center gap-2 transition-all`}
-              >
-                <span className="font-bold">Flutterwave</span>
-              </button>
+
               <button
                 type="button"
                 onClick={() => setProvider('bank')}
-                className={`p-4 rounded-xl border ${provider === 'bank' ? 'border-[var(--accent-gray)] bg-[var(--accent-gray)]/10 text-black' : 'border-gray-200 bg-white text-gray-700'} flex flex-col items-center gap-2 transition-all col-span-2`}
+                className={`w-full flex flex-col items-center gap-2 p-4 transition-all col-span-2 ${provider === 'bank' ? 'neu-card-pressed text-[#006cff]' : 'neu-button text-[var(--text-muted)]'}`}
               >
                 <span className="font-bold">Bank Transfer</span>
               </button>
@@ -122,17 +115,17 @@ const TopUpModal = ({ isOpen, onClose }) => {
           </div>
 
           {provider === 'bank' && (
-            <div className="bg-[#111] border border-gray-200 p-4 rounded-xl animate-fade-in text-sm text-gray-800">
-              <p className="font-bold text-black mb-2">Bank Transfer Details</p>
+            <div className="neu-card p-4 animate-fade-in text-sm text-[var(--text-muted)]">
+              <p className="font-bold text-[var(--text-main)] mb-2">Bank Transfer Details</p>
               <p>Your unique bank transfer details will be generated once you proceed.</p>
-              <p className="mt-3 text-[var(--accent-gray)] text-xs">Note: Include your registered email in the transfer memo.</p>
+              <p className="mt-3 text-[#006cff] text-xs">Note: Include your registered email in the transfer memo.</p>
             </div>
           )}
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-[var(--accent-gray)] text-black font-bold py-3 rounded-xl hover:brightness-110 transition-all flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full neu-button-primary py-3 flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? 'Processing...' : (
               <>Proceed to Payment <ArrowRight size={18} /></>

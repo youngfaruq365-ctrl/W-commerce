@@ -52,7 +52,7 @@ const EditProductModal = ({ isOpen, onClose, product }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-white/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-md z-[100] flex items-center justify-center p-4">
       <div className="modal-3d-glass rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b border-gray-200 sticky top-0 bg-[#0a0a0a] z-10">
           <h2 className="text-2xl font-bold text-black">Edit Product</h2>
@@ -105,7 +105,7 @@ const EditProductModal = ({ isOpen, onClose, product }) => {
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2">Price (₦)</label>
                 <div className="relative">
-                  <DollarSign className="absolute left-3 top-3.5 text-gray-500" size={16} />
+                  <span className="absolute left-3.5 top-3 text-gray-500 font-bold" style={{ fontSize: '16px' }}>₦</span>
                   <input 
                     type="number" 
                     required
@@ -167,7 +167,7 @@ const EditProductModal = ({ isOpen, onClose, product }) => {
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-2">Shipping Fee (₦) (0 = Free)</label>
               <div className="relative">
-                <DollarSign className="absolute left-3 top-3.5 text-gray-500" size={16} />
+                <span className="absolute left-3.5 top-3 text-gray-500 font-bold" style={{ fontSize: '16px' }}>₦</span>
                 <input 
                   type="number" 
                   step="0.01"

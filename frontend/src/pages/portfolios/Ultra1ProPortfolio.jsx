@@ -1,3 +1,4 @@
+import { PLACEHOLDER_IMAGE } from '@/constants/placeholders';
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, useInView, useScroll, useTransform } from 'framer-motion';
 import {
@@ -141,8 +142,8 @@ const NeonCard = ({ product, onAddToCart, i=0 }) => {
       style={{background:'#001020',borderColor:'rgba(14,165,233,0.1)'}}
       whileHover={{borderColor:'rgba(14,165,233,0.35)',boxShadow:'0 0 20px rgba(14,165,233,0.08)'}}>
       <div className="aspect-square overflow-hidden relative" style={{background:'#001830'}}>
-        <img src={product.images?.[0]?.url||'/assets/splash_3d_box_1781971684931.png'} alt={product.title}
-          onError={e=>{e.target.onerror=null;e.target.src='/assets/splash_3d_box_1781971684931.png';}}
+        <img src={product.images?.[0]?.url||PLACEHOLDER_IMAGE} alt={product.title}
+          onError={e=>{e.target.onerror=null;e.target.src={PLACEHOLDER_IMAGE};}}
           className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"/>
         <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300" style={{background:'linear-gradient(to top, rgba(0,16,32,0.8) 0%, transparent 60%)'}}/>
         <button onClick={()=>setLiked(v=>!v)}
@@ -283,7 +284,7 @@ const Ultra1ProPortfolio = ({ store, brandConfig, handleAddToCart, handleFollow,
                   {products[0] && (
                     <div className="flex items-center gap-3 p-3 rounded-xl border" style={{background:'#000d1a',borderColor:border}}>
                       <div className="w-14 h-14 rounded-xl overflow-hidden flex-shrink-0 border" style={{borderColor:border}}>
-                        <img src={products[0].images?.[0]?.url||'/assets/splash_3d_box_1781971684931.png'} alt="" onError={e=>{e.target.onerror=null;e.target.src='/assets/splash_3d_box_1781971684931.png';}} className="w-full h-full object-cover"/>
+                        <img src={products[0].images?.[0]?.url||PLACEHOLDER_IMAGE} alt="" onError={e=>{e.target.onerror=null;e.target.src={PLACEHOLDER_IMAGE};}} className="w-full h-full object-cover"/>
                       </div>
                       <div>
                         <p className="text-xs font-bold text-white line-clamp-1">{products[0].title}</p>
@@ -344,8 +345,8 @@ const Ultra1ProPortfolio = ({ store, brandConfig, handleAddToCart, handleFollow,
                     <div className="flex flex-col sm:flex-row gap-3 sm:p-5 items-center flex-1">
                       <div className="w-full sm:w-60 h-60 rounded-2xl overflow-hidden flex-shrink-0 border shadow-2xl"
                         style={{background:'#001830',borderColor:border,boxShadow:`0 0 30px ${neon}15`}}>
-                        <img src={products[0].images?.[0]?.url||'/assets/splash_3d_box_1781971684931.png'} alt={products[0].title}
-                          onError={e=>{e.target.onerror=null;e.target.src='/assets/splash_3d_box_1781971684931.png';}}
+                        <img src={products[0].images?.[0]?.url||PLACEHOLDER_IMAGE} alt={products[0].title}
+                          onError={e=>{e.target.onerror=null;e.target.src={PLACEHOLDER_IMAGE};}}
                           className="w-full h-full object-cover"/>
                       </div>
                       <div className="flex-1">

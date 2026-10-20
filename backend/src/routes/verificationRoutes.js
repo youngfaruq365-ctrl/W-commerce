@@ -5,6 +5,7 @@ const { protect } = require('../middleware/authMiddleware');
 
 router.get('/my-status', protect, verificationController.getMyVerifications);
 router.post('/submit', protect, verificationController.submitVerification);
+router.put('/:id/section', protect, verificationController.updateSection);
 router.get('/tiers', verificationController.getTierBenefits);
 
 module.exports = router;

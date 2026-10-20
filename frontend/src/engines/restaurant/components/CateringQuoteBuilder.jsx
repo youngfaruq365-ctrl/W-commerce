@@ -61,7 +61,7 @@ export const CateringQuoteBuilder = ({ store, motionVariants, onCheckout }) => {
                     <div key={p.id} className="border-2 border-transparent hover:border-[var(--store-primary)] rounded-xl p-6 bg-gray-50 cursor-pointer transition-colors group">
                       <h4 className="text-xl font-bold mb-2 group-hover:text-[var(--store-primary)]">{p.title} Package</h4>
                       <p className="text-gray-500 mb-4 text-sm">{p.description}</p>
-                      <div className="font-bold text-lg">${p.price.toFixed(2)} <span className="text-sm font-normal text-gray-500">/ guest</span></div>
+                      <div className="font-bold text-lg">₦{p.price.toFixed(2)} <span className="text-sm font-normal text-gray-500">/ guest</span></div>
                     </div>
                   ))}
                 </div>

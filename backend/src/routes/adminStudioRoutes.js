@@ -1,6 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const { performStudioAction } = require('../controllers/adminStudioController');
+const { optionalProtect } = require('../middleware/authMiddleware');
+
+router.use(optionalProtect);
 
 router.post('/analytics/action', performStudioAction);
 router.post('/arbitration/action', performStudioAction);

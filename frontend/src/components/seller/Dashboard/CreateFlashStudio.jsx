@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Zap, CheckCircle, ArrowRight, ArrowLeft, Sparkles, Upload, Package, AlertCircle } from 'lucide-react';
 import { useSellerStore } from '../../../store/sellerStore';
@@ -51,15 +51,13 @@ const CreateFlashStudio = ({ onSuccess }) => {
     setProgressText('Uploading banner...');
 
     try {
-      let bannerUrl = null;
+      let bannerUrl = undefined;
 
       if (formData.bannerImage) {
         const imgData = new FormData();
         imgData.append('image', formData.bannerImage);
         
-        const uploadRes = await axios.post('/api/v1/upload', imgData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
+        const uploadRes = await axios.post('/api/v1/upload', imgData);
         
         if (uploadRes.data.success) {
           bannerUrl = uploadRes.data.imageUrl;

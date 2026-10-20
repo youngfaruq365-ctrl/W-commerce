@@ -1,21 +1,32 @@
-import React, { useState, useEffect } from 'react';
-import { Check, Loader2 } from 'lucide-react';
-import axios from 'axios';
+import React, { useState, useEffect, useRef } from 'react';
+import { Check, Loader2, X, Star, TrendingUp, BarChart2, Zap, Shield, ShoppingBag, Layout, Activity } from 'lucide-react';
+import { apiClient as axios } from '@/utils/apiClient';
 import { toast } from 'react-hot-toast';
 import { useAuthStore } from '../../store/authStore';
 import { useNavigate } from 'react-router-dom';
 import { celebrate } from '../visual/CelebrationController';
+import { PlanBook } from './PlanBook';
 
 const SubscriptionPlans = () => {
-  const [isYearly, setIsYearly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [subscribingId, setSubscribingId] = useState(null);
   const [dbPlans, setDbPlans] = useState([]);
+  const [isBookClosed, setIsBookClosed] = useState(false);
+  const [isManualMode, setIsManualMode] = useState(false);
   
   const { user } = useAuthStore();
   const navigate = useNavigate();
   
   const currentTier = user?.subscriptionTier?.toUpperCase() || 'FREE';
+  // Normalize tier for comparison with plan names
+  const planTier = currentTier === 'FREE' || currentTier === 'NONE' ? 'BASIC' : currentTier;
+
+  // Human-readable display of current tier
+  const tierDisplayName = {
+    'FREE': 'Basic', 'NONE': 'Basic', 'BASIC': 'Basic',
+    'PRO': 'Pro', 'ULTRA': 'Ultra', 'PREMIUM': 'Premium', 'TRIAL': 'Trial'
+  }[currentTier] || currentTier;
+  const verifiedRef = useRef(null);
 
   useEffect(() => {
     const fetchPlans = async () => {
@@ -35,176 +46,269 @@ const SubscriptionPlans = () => {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const reference = params.get('reference') || params.get('trxref');
+    const reference = params.get('reference') || params.get('trxref') || params.get('rc_redirect');
     
-    if (reference) {
-      const verifyPayment = async () => {
+    if (reference && verifiedRef.current !== reference) {
+      verifiedRef.current = reference;
+      const verifyPayment = async (attempts = 0) => {
+        const loadingToast = toast.loading('Verifying your payment...');
         try {
-          const res = await axios.get('/api/v1/seller-plans/verify-payment/' + reference);
+          const verifyRef = reference === 'true' ? 'revenuecat' : reference;
+          const res = await axios.get('/api/v1/seller-plans/verify-payment/' + verifyRef);
+          toast.dismiss(loadingToast);
           if (res.data.success) {
+            const upgradedTier = res.data.planTier || 'new plan';
+            // Force fresh user data from server
+            await useAuthStore.getState().checkAuth();
             celebrate('major');
-            toast.success('Payment verified successfully!');
-            await useAuthStore.getState().checkAuth(); // Refresh user state
+            toast.success(`🎉 Upgraded to ${upgradedTier} successfully!`, { duration: 4000 });
+            setIsBookClosed(true);
+            // Replace URL to remove reference params, then reload to reflect new tier
+            navigate('/seller/subscription', { replace: true });
+          } else {
+            toast.error('Payment could not be verified. Please contact support.');
             navigate('/seller/subscription', { replace: true });
           }
         } catch (error) {
-          toast.error(error.response?.data?.message || 'Payment verification failed');
+          toast.dismiss(loadingToast);
+          if (reference === 'true' && attempts < 2) {
+            // RevenueCat Web Billing takes a moment to sync, retry
+            setTimeout(() => verifyPayment(attempts + 1), 2000);
+            return;
+          }
+          toast.error(error.response?.data?.message || 'Payment verification failed. Please try again.');
           navigate('/seller/subscription', { replace: true });
         }
       };
-      verifyPayment();
+
+      if (reference === 'true') {
+        setTimeout(() => verifyPayment(0), 1500);
+      } else {
+        verifyPayment(0);
+      }
     }
   }, [navigate]);
 
   const handleSubscribe = async (planName, planId) => {
-    if (currentTier === planName.toUpperCase()) {
+    if (planTier === planName.toUpperCase()) {
       toast('You are already on this plan!', { icon: 'ℹ️' });
       return;
     }
     
     setSubscribingId(planId || planName);
+    const loadingToast = toast.loading(`Assigning ${planName} plan...`);
     try {
-      const res = await axios.post('/api/v1/seller-plans/initiate-payment', { 
-        planId, 
-        planName,
-        isYearly, 
-        callback_url: window.location.href 
-      });
-      if (res.data.success && res.data.authorization_url) {
-        window.location.href = res.data.authorization_url;
+      // Direct upgrade endpoint assigns plan immediately in DB without requiring any payment
+      const res = await axios.post('/api/v1/seller-plans/direct-upgrade', { planName });
+      toast.dismiss(loadingToast);
+      if (res.data?.success) {
+        // Refresh user state immediately from backend
+        await useAuthStore.getState().checkAuth();
+        celebrate('major');
+        toast.success(`🎉 You are now on the ${planName} plan!`, { duration: 4000 });
+        setIsBookClosed(true);
+        // Automatically reopen after brief celebration animation so user can explore
+        setTimeout(() => {
+          setIsBookClosed(false);
+        }, 3500);
+      } else {
+        toast.error(res.data?.message || 'Failed to assign plan');
       }
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to subscribe to plan');
+      toast.dismiss(loadingToast);
+      toast.error(error.response?.data?.message || 'Failed to assign plan');
     } finally {
       setSubscribingId(null);
     }
   };
 
-  // Fallback plans if database is empty
   const defaultPlans = [
     {
-      name: 'Free',
+      name: 'Basic',
+      subtitle: 'Perfect for getting started',
       price: 0,
-      description: 'Strict limits for basic users',
-      features: ['20 products (Strict limit)', 'No portfolio switching', 'Basic analytics', 'Standard store', 'Community support'],
-      buttonText: 'Get Started',
-      buttonStyle: 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600',
-      cardStyle: 'card border-transparent bg-white/90 dark:bg-slate-800/50',
-      isPopular: false,
+      displayPrice: '₦0',
+      features: ['Create your store', 'Add up to 10 products', 'Receive and manage orders', 'Basic analytics', 'Standard support'],
+      buttonText: 'Continue Basic',
+      cardStyle: 'bg-white/10 backdrop-blur-[24px] border-white/10 text-white shadow-[0_0_5px_#ffffff]',
+      buttonStyle: 'bg-white/5 border border-white/10 text-white hover:bg-white/10',
     },
     {
       name: 'Pro',
-      price: isYearly ? 10000 : 1500,
-      priceSubtext: isYearly ? null : 'First month ₦1,500 (~$1), then ₦3,000 (~$2)/month',
-      description: 'Everything you need to grow',
-      features: ['Unlimited products', 'Portfolio choice switching', 'Access to all features', 'Advanced analytics', 'AI product tools', 'Priority support'],
-      buttonText: 'Start Pro Trial',
-      buttonStyle: 'bg-[#1976d2] text-white hover:bg-[#1565c0]',
-      cardStyle: 'card border-2 border-[#1976d2] bg-white/90 dark:bg-slate-800/50',
+      subtitle: 'For growing businesses',
+      price: 1500,
+      displayPrice: '₦1,500',
+      features: ['Unlimited products', 'Advanced analytics', 'Flash sales & promotions', 'Custom store branding', 'Priority support'],
+      buttonText: 'Start Pro Plan',
+      cardStyle: 'bg-white/10 backdrop-blur-[24px] border-white/30 text-white shadow-[0_0_10px_#ffffff] scale-[1.02] relative z-10',
+      buttonStyle: 'bg-white text-black hover:bg-gray-200 shadow-[0_0_5px_#ffffff]',
+    },
+    {
+      name: 'Premium',
+      subtitle: 'For growing businesses & enterprises',
+      price: 3500,
+      displayPrice: '₦3,500',
+      features: ['Unlimited products', 'Advanced analytics', 'Flash sales & promotions', 'Custom store branding', 'AI product recommendations', 'Premium portfolio & design', 'Dedicated account manager', 'Priority support'],
+      buttonText: 'Start Premium Plan',
+      cardStyle: 'bg-white/10 backdrop-blur-[24px] border-white/30 text-white shadow-[0_0_10px_#ffffff] scale-[1.02] relative z-10',
+      buttonStyle: 'bg-white text-black hover:bg-gray-200 shadow-[0_0_5px_#ffffff]',
       isPopular: true,
     }
   ];
 
-  // Always show all 7 tiers. If DB has matching plans, enrich the defaults with DB data (id, description, features).
   const plansToDisplay = defaultPlans.map(dp => {
-    const dbMatch = dbPlans.find(db => db.name.toLowerCase() === dp.name.toLowerCase());
-    const isCurrentPlan = currentTier === dp.name.toUpperCase() || currentTier === dp.name.replace(/\s+/g, '').toUpperCase();
+    const dbMatch = dbPlans.find(db => db?.name?.toLowerCase() === dp.name.toLowerCase());
+    const isCurrentPlan = planTier === dp.name.toUpperCase();
+    const rawPrice = dbMatch?.monthlyPriceGong != null ? Number(dbMatch.monthlyPriceGong) : dp.price;
+    const formattedPrice = rawPrice === 0 ? '₦0' : `₦${rawPrice.toLocaleString()}`;
     
     return {
       ...dp,
       id: dbMatch?.id || dp.name,
-      description: dbMatch?.description || dp.description,
-      features: (dbMatch?.features && dbMatch.features.length > 0) ? dbMatch.features : dp.features,
+      displayPrice: formattedPrice,
       buttonText: isCurrentPlan ? 'Current Plan' : dp.buttonText,
     };
   });
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-[#0a0f1c] flex items-center justify-center transition-colors duration-300">
-        <Loader2 className="w-10 h-10 text-slate-900 dark:text-white animate-spin" />
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+        <Loader2 className="w-10 h-10 text-white animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#0a0f1c] py-20 px-4 transition-colors duration-300">
-      <div className="max-w-7xl mx-auto">
-        <div className="text-center mb-12">
-          <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white mb-3 transition-colors">Choose the perfect plan</h1>
-          <p className="text-slate-600 dark:text-slate-400 transition-colors">Upgrade anytime. Cancel anytime.</p>
-          
-          <div className="flex items-center justify-center gap-3 mt-8">
-            <span className={`text-sm font-medium transition-colors ${!isYearly ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}>Monthly</span>
-            <button 
-              onClick={() => setIsYearly(!isYearly)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${isYearly ? 'bg-green-600' : 'bg-slate-300 dark:bg-slate-600'}`}
-            >
-              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isYearly ? 'translate-x-6' : 'translate-x-1'}`} />
+    <div className="min-h-screen bg-[#0a0a0a] text-white py-12 px-4 md:px-8 font-sans overflow-x-hidden relative">
+      {/* Background gradients */}
+      <div className="fixed top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
+      </div>
+
+      <div className="max-w-6xl mx-auto relative z-10 space-y-8">
+        
+        {/* Header Section */}
+        <div className="bg-white/10 backdrop-blur-[24px] rounded-3xl p-8 border border-white/10 shadow-[0_0_5px_#ffffff] flex flex-col md:flex-row justify-between items-start md:items-center gap-8 relative overflow-hidden">
+          <div className="max-w-xl z-10">
+            <div className="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-3 py-1 mb-6 text-[10px] font-bold tracking-wider text-emerald-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              PAYSTACK SECURED
+            </div>
+            <h1 className="text-4xl md:text-5xl font-extrabold mb-4 tracking-tight leading-tight">Choose Your<br/>Subscription Plan</h1>
+            <p className="text-gray-400 text-sm md:text-base max-w-sm">Unlock premium features and take your W-Commerce experience to the next level.</p>
+          </div>
+
+          <div className="flex gap-4 md:gap-6 flex-wrap z-10">
+            {[
+              { icon: TrendingUp, label: 'More Products & Sales' },
+              { icon: BarChart2, label: 'Advanced Analytics' },
+              { icon: Zap, label: 'AI Tools & Automation' },
+              { icon: Shield, label: 'Priority Support' },
+            ].map((feat, i) => (
+              <div key={i} className="flex flex-col items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
+                  <feat.icon className="w-5 h-5 text-gray-300" />
+                </div>
+                <span className="text-[10px] text-gray-400 text-center font-medium max-w-[70px] leading-tight">{feat.label}</span>
+              </div>
+            ))}
+          </div>
+
+          <Star className="absolute right-[-20px] top-[-20px] w-64 h-64 text-white/5 rotate-12 blur-sm pointer-events-none" strokeWidth={1} />
+        </div>
+
+        {/* Pricing Cards - Replaced by PlanBook */}
+        <div style={{ padding: '2rem 0' }}>
+          <PlanBook 
+            plans={plansToDisplay} 
+            currentTier={planTier}
+            onSubscribe={handleSubscribe}
+            subscribingId={subscribingId}
+            isClosed={isBookClosed}
+            isManualMode={isManualMode}
+            onOpenManual={() => { setIsBookClosed(false); setIsManualMode(true); }}
+            onCloseManual={() => { setIsBookClosed(false); setIsManualMode(false); }}
+            onReopenBook={() => { setIsBookClosed(false); setIsManualMode(false); }}
+          />
+        </div>
+
+        {/* Current Plan & Manage Section */}
+        <div className="bg-white/10 backdrop-blur-[24px] shadow-[0_0_5px_#ffffff] border border-white/10 rounded-3xl p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="flex items-center gap-5 w-full md:w-auto">
+            <div className="w-14 h-14 rounded-full bg-white/10 border border-white/20 flex items-center justify-center shadow-[0_0_15px_rgba(255,255,255,0.1)]">
+              <Star className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <p className="text-xs text-gray-400 font-medium mb-1">Your Current Plan</p>
+              <div className="flex items-center gap-3">
+                <h3 className="text-2xl font-bold">{tierDisplayName}</h3>
+                <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                  Active
+                </span>
+              </div>
+              <p className="text-xs text-gray-400 mt-2">You're on the {tierDisplayName} plan. {planTier === 'PREMIUM' ? 'You have our best plan!' : 'Upgrade to unlock more features and grow your business faster.'}</p>
+            </div>
+          </div>
+          <div className="w-full md:w-[280px] bg-white/5 rounded-2xl p-5 border border-white/10">
+            <h4 className="text-sm font-bold mb-2">Manage Subscription</h4>
+            <p className="text-xs text-gray-400 mb-4">View your billing details, change plan or cancel anytime.</p>
+            <button className="w-full py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-bold transition-colors">
+              Manage Plan
             </button>
-            <span className={`text-sm font-medium transition-colors ${isYearly ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}>Yearly (Save 20%)</span>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 max-w-7xl mx-auto">
-          {plansToDisplay.map((plan, index) => {
-            const isCurrentPlan = currentTier === plan.name.toUpperCase();
-            
-            return (
-              <div 
-                key={index} 
-                className={`rounded-2xl p-6 sm:p-8 flex flex-col relative ${plan.cardStyle}`}
-              >
-                {plan.isPopular && (
-                  <div className="absolute top-4 right-4 bg-green-100 text-green-700 text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full">
-                    MOST POPULAR
-                  </div>
-                )}
-                {plan.isBest && (
-                  <div className="absolute top-4 right-4 bg-amber-100 text-amber-700 text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full">
-                    BEST VALUE
-                  </div>
-                )}
-                
-                <div className="mb-8">
-                  <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-4 transition-colors">{plan.name}</h3>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-4xl font-black text-slate-900 dark:text-white transition-colors">₦{plan.price.toLocaleString()}</span>
-                    <span className="text-slate-500 dark:text-slate-400 font-medium text-sm transition-colors">/ {isYearly ? 'year' : 'month'}</span>
-                  </div>
-                  {plan.priceSubtext && <p className="text-sm font-bold text-[#e91e63] mt-2">{plan.priceSubtext}</p>}
-                  <p className="text-slate-600 dark:text-slate-400 text-sm mt-4 transition-colors">{plan.description}</p>
-                </div>
-
-                <div className="flex-1 space-y-4 mb-8">
-                  {plan.features.map((feature, i) => (
-                    <div key={i} className="flex items-start gap-3">
-                      <div className="mt-0.5 rounded-full bg-green-100 dark:bg-green-900/30 p-0.5">
-                        <Check className="text-green-600 dark:text-green-400" size={14} strokeWidth={3} />
-                      </div>
-                      <span className="text-slate-700 dark:text-slate-300 text-sm transition-colors">{feature}</span>
+        {/* Feature Comparison Table */}
+        <div className="bg-white/10 backdrop-blur-[24px] shadow-[0_0_5px_#ffffff] border border-white/10 rounded-3xl p-6 md:p-8 overflow-x-auto">
+          <table className="w-full text-left min-w-[600px]">
+            <thead>
+              <tr className="border-b border-white/10">
+                <th className="pb-4 text-sm font-medium text-gray-400 w-[40%]">Feature Comparison</th>
+                <th className="pb-4 text-sm font-medium text-gray-400 w-[20%] text-center">Basic</th>
+                <th className="pb-4 text-sm font-medium text-gray-400 w-[20%] text-center">Pro</th>
+                <th className="pb-4 text-sm font-medium text-gray-400 w-[20%] text-center">Premium</th>
+              </tr>
+            </thead>
+            <tbody className="text-sm text-gray-300">
+              {[
+                { name: 'Storefront & Products', icon: ShoppingBag, basic: '10 products', pro: 'Unlimited', premium: 'Unlimited' },
+                { name: 'Advanced Analytics', icon: Activity, basic: 'Basic', pro: 'Advanced', premium: 'Full AI + Insights' },
+                { name: 'Flash Sales & Promotions', icon: Zap, basic: false, pro: true, premium: true },
+                { name: 'AI Tools', icon: TrendingUp, basic: false, pro: false, premium: true },
+                { name: 'Priority Support', icon: Shield, basic: 'Basic', pro: 'Premium', premium: 'VIP' },
+                { name: 'Custom Branding', icon: Layout, basic: false, pro: true, premium: true },
+              ].map((row, i) => (
+                <tr key={i} className="border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors">
+                  <td className="py-4 flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/10">
+                      <row.icon className="w-4 h-4 text-gray-400" />
                     </div>
-                  ))}
-                </div>
-
-                <button 
-                  onClick={() => handleSubscribe(plan.name, plan.id)}
-                  disabled={isCurrentPlan || subscribingId === (plan.id || plan.name)}
-                  className={`w-full py-3 px-4 rounded-xl font-bold text-sm transition-all shadow-sm flex items-center justify-center gap-2
-                    ${isCurrentPlan ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : plan.buttonStyle}
-                    ${subscribingId === (plan.id || plan.name) ? 'opacity-75 cursor-wait' : ''}`}
-                >
-                  {subscribingId === (plan.id || plan.name) && <Loader2 size={16} className="animate-spin" />}
-                  {isCurrentPlan ? 'Current Plan' : plan.buttonText}
-                </button>
-              </div>
-            );
-          })}
+                    <span className="font-medium">{row.name}</span>
+                  </td>
+                  <td className="py-4 text-center">
+                    {typeof row.basic === 'boolean' ? (row.basic ? <Check className="w-4 h-4 text-emerald-500 mx-auto" /> : <X className="w-4 h-4 text-gray-600 mx-auto" />) : <span className="text-gray-400">{row.basic}</span>}
+                  </td>
+                  <td className="py-4 text-center">
+                    {typeof row.pro === 'boolean' ? (row.pro ? <Check className="w-4 h-4 text-emerald-500 mx-auto" /> : <X className="w-4 h-4 text-gray-600 mx-auto" />) : <span className={row.pro === 'Unlimited' ? 'text-emerald-500' : 'text-gray-300'}>{row.pro}</span>}
+                  </td>
+                  <td className="py-4 text-center">
+                    {typeof row.premium === 'boolean' ? (row.premium ? <Check className="w-4 h-4 text-emerald-500 mx-auto" /> : <X className="w-4 h-4 text-gray-600 mx-auto" />) : <span className="text-gray-300">{row.premium}</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
 
-        <p className="text-center text-slate-500 dark:text-slate-400 text-sm mt-8 transition-colors">
-          7-day free trial • No credit card required
-        </p>
+        {/* Footer */}
+        <div className="flex items-center justify-center gap-4 text-xs text-gray-500 pt-4 pb-8">
+          <span className="flex items-center gap-1.5">
+            Powered by <span className="font-bold text-gray-400 tracking-wide">RevenueCat</span>
+          </span>
+          <span>•</span>
+          <span>Secure • Simple • Reliable</span>
+        </div>
+
       </div>
     </div>
   );

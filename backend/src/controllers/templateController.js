@@ -6,7 +6,10 @@ const exchangeRates = require('../utils/exchangeRates');
 
 // Helper to get frontend base URL
 const frontendBase = (req) => {
-    return req.headers.origin || process.env.FRONTEND_URL || 'http://localhost:5175';
+    const configured = (process.env.FRONTEND_URL || 'http://localhost:5175').replace(/\/+$/, '');
+    const allowed = (process.env.CORS_ORIGINS || process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
+    const origin = req.headers.origin;
+    return origin && (origin === configured || allowed.includes(origin)) ? origin : configured;
 };
 
 // Get all published templates (Marketplace)
@@ -192,7 +195,7 @@ exports.purchaseTemplate = async (req, res) => {
         res.json({ success: true, message: 'Template purchased successfully', data: result.ownershipRecord });
     } catch (error) {
         logger.error(`Template purchase error: ${error.message}`);
-        res.status(500).json({ success: false, message: error.message || 'Purchase failed' });
+        res.status(500).json({ success: false, message: process.env.NODE_ENV === 'production' ? 'Purchase failed' : error.message });
     }
 };
 

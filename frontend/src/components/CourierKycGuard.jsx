@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import { useIsPresent } from 'framer-motion';
 
 const CourierKycGuard = ({ children }) => {
   const { user } = useAuthStore();
   const [kycStatus, setKycStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const location = useLocation();
+  const isPresent = useIsPresent();
 
   useEffect(() => {
     const checkKyc = async () => {
@@ -36,7 +38,7 @@ const CourierKycGuard = ({ children }) => {
   }
 
   // If KYC is not approved, redirect to onboarding unless we are already on the onboarding page
-  if (kycStatus !== 'APPROVED' && location.pathname !== '/courier/onboarding') {
+  if (kycStatus !== 'APPROVED' && location.pathname !== '/courier/onboarding' && isPresent) {
     return <Navigate to="/courier/onboarding" replace />;
   }
 

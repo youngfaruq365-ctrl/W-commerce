@@ -47,8 +47,8 @@ const PrintableReceiptModal = ({ isOpen, onClose, order }) => {
   })();
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-white/80 backdrop-blur-sm print:bg-white print:p-0 print:backdrop-blur-none">
-      <div className="bg-white text-black w-full max-w-2xl rounded-xl overflow-hidden shadow-2xl relative flex flex-col max-h-[90vh] print:max-h-none print:shadow-none print:rounded-none">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-md print:bg-white print:p-0 print:backdrop-blur-none">
+      <div className="modal-panel premium-glass text-black w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl relative flex flex-col max-h-[90vh] print:max-h-none print:shadow-none print:rounded-none">
         
         {/* Modal Controls (Hidden when printing) */}
         <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50 print:hidden">
@@ -110,17 +110,19 @@ const PrintableReceiptModal = ({ isOpen, onClose, order }) => {
               </tr>
             </thead>
             <tbody>
-              {order.items?.map((item, index) => (
+              {(order.items || []).map((item, index) => (
                 <tr key={index} className="border-b border-gray-100">
-                  <td className="py-4 flex items-center gap-3">
-                    <img 
-                      src={item.product?.images?.[0]?.url || '/placeholder.jpg'} 
-                      alt="product" 
-                      className="w-10 h-10 object-cover rounded"
-                    />
-                    <p className="font-bold text-gray-800">{item.product?.title || 'Unknown Product'}</p>
+                  <td className="py-4">
+                    <div className="flex items-center gap-3">
+                      <img 
+                        src={typeof item.product?.images?.[0] === 'string' ? item.product.images[0] : (item.product?.images?.[0]?.url || '/placeholder.jpg')} 
+                        alt="product" 
+                        className="w-10 h-10 object-cover rounded"
+                      />
+                      <p className="font-bold text-gray-800">{item.product?.title || item.title || 'Unknown Product'}</p>
+                    </div>
                   </td>
-                  <td className="py-4 text-center text-gray-600">{item.quantity}</td>
+                  <td className="py-4 text-center text-gray-600">{item.quantity || 1}</td>
                   <td className="py-4 text-right font-bold text-gray-800"> NGN {parseFloat(item.priceAtTime || item.price || 0).toFixed(2)}</td>
                 </tr>
               ))}
@@ -131,7 +133,7 @@ const PrintableReceiptModal = ({ isOpen, onClose, order }) => {
             <div className="w-64 space-y-3">
               <div className="flex justify-between text-sm text-gray-600">
                 <span>Subtotal</span>
-                <span> NGN {parseFloat(order.totalAmount).toFixed(2)}</span>
+                <span> NGN {parseFloat(order.totalAmount - (order.shippingCost || 0)).toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-sm text-gray-600">
                 <span>Shipping</span>
@@ -139,7 +141,7 @@ const PrintableReceiptModal = ({ isOpen, onClose, order }) => {
               </div>
               <div className="flex justify-between border-t-2 border-gray-200 pt-3 text-lg font-black" style={{ color: receiptConfig.themeColor }}>
                 <span>TOTAL PAID</span>
-                <span> NGN {(parseFloat(order.totalAmount) + parseFloat(order.shippingCost || 0)).toFixed(2)}</span>
+                <span> NGN {parseFloat(order.totalAmount).toFixed(2)}</span>
               </div>
             </div>
           </div>

@@ -155,7 +155,7 @@ const StorePreviewOS = ({ store, onBack, onPurchase }) => {
             </div>
             {/* Purchase */}
             <button onClick={onPurchase} className="flex items-center gap-1.5 bg-white text-black text-xs font-black px-4 py-2 rounded-xl hover:bg-gray-100 transition-colors">
-              <ShoppingBag size={13} /> ${store.price}/mo
+              <ShoppingBag size={13} /> ₦{store.price}/mo
             </button>
           </div>
         </div>
@@ -220,7 +220,7 @@ const StorePreviewOS = ({ store, onBack, onPurchase }) => {
                 <Star size={12} className="fill-amber-400 text-amber-400" />
                 <span className="text-xs text-white/50">{store.rating}% · {store.engine}</span>
               </div>
-              <div className="text-2xl font-black text-white">${store.price}<span className="text-xs font-normal text-white/30">/3mo</span></div>
+              <div className="text-2xl font-black text-white">₦{store.price}<span className="text-xs font-normal text-white/30">/3mo</span></div>
             </div>
             {/* Features */}
             <div className="p-5 border-b border-white/5">

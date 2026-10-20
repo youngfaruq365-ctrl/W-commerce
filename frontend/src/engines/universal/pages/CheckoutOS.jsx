@@ -251,6 +251,8 @@ export const CheckoutOS = () => {
   const [showAuthGate, setShowAuthGate] = useState(false);
   const [completedOrder, setCompletedOrder] = useState(null);
   const [selectedProvider, setSelectedProvider] = useState('paystack');
+  const operationType   = useOperationStore(state => state.operation);
+  const operationStatus = useOperationStore(state => state.status);
 
   // ── Empty cart guard ────────────────────────────────────────────────────────
   if (cart.length === 0 && !completedOrder) {
@@ -364,7 +366,7 @@ export const CheckoutOS = () => {
 
       {/* Payment processing overlay via Motion OS */}
       <AnimatePresence>
-        {useOperationStore(state => state.operation) === 'checkout' && useOperationStore(state => state.status) !== 'idle' && (
+        {operationType === 'checkout' && operationStatus !== 'idle' && (
           <WGenerationExperience
             steps={useOperationStore.getState().steps}
             onCancel={() => {
@@ -451,8 +453,8 @@ export const CheckoutOS = () => {
                     <h2 className="text-2xl font-black mb-6">Shipping Method</h2>
                     <div className="space-y-4 mb-8">
                       {[
-                        { id: 'standard', label: 'Standard Shipping', sub: '3–5 business days', price: cartTotal > 100 ? 'Free' : '$9.99', default: true },
-                        { id: 'express',  label: 'Express Shipping',   sub: '1–2 business days', price: '$14.99' },
+                        { id: 'standard', label: 'Standard Shipping', sub: '3–5 business days', price: cartTotal > 100 ? 'Free' : '₦9.99', default: true },
+                        { id: 'express',  label: 'Express Shipping',   sub: '1–2 business days', price: '₦14.99' },
                       ].map(opt => (
                         <label key={opt.id} className={`flex items-center justify-between p-5 rounded-2xl border-2 cursor-pointer transition-colors ${opt.default ? 'border-black' : 'border-gray-100 hover:border-gray-200'}`}>
                           <div className="flex items-center gap-4">

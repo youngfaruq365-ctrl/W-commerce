@@ -18,6 +18,20 @@ class ErrorBoundary extends React.Component {
   componentDidCatch(error, errorInfo) {
     this.setState({ error, errorInfo });
 
+    const msg = String(error?.message || error || '');
+    const isStaleModuleError =
+      msg.includes("Cannot read properties of null (reading 'use") ||
+      msg.includes('Failed to fetch dynamically imported module') ||
+      msg.includes('Importing a module script failed');
+    if (isStaleModuleError && typeof window !== 'undefined') {
+      const lastReload = Number(sessionStorage.getItem('gx_module_reload_ts') || 0);
+      if (Date.now() - lastReload > 10000) {
+        sessionStorage.setItem('gx_module_reload_ts', String(Date.now()));
+        window.location.reload();
+        return;
+      }
+    }
+
     // In production, log silently to the server
     if (import.meta.env.PROD) {
       try {

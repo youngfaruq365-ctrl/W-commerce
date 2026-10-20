@@ -4,10 +4,10 @@ import { Star } from 'lucide-react';
 const PopupProductGrid = ({ title, products = [], theme }) => {
   // If no products provided, render some mock placeholders for the preview
   const displayProducts = products.length > 0 ? products : [
-    { id: 1, name: 'Premium Item 1', price: '$45.00' },
-    { id: 2, name: 'Premium Item 2', price: '$85.00' },
-    { id: 3, name: 'Premium Item 3', price: '$120.00' },
-    { id: 4, name: 'Premium Item 4', price: '$25.00' }
+    { id: 1, name: 'Premium Item 1', price: '₦45.00' },
+    { id: 2, name: 'Premium Item 2', price: '₦85.00' },
+    { id: 3, name: 'Premium Item 3', price: '₦120.00' },
+    { id: 4, name: 'Premium Item 4', price: '₦25.00' }
   ];
 
   return (

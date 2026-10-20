@@ -1,3 +1,4 @@
+import { PLACEHOLDER_IMAGE } from '@/constants/placeholders';
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -91,8 +92,8 @@ const ProductCard = ({ product, onAddToCart, index = 0 }) => (
   <motion.div variants={fadeUp} custom={index}
     className="bg-[#111] rounded-2xl border border-white/5 overflow-hidden hover:border-purple-500/30 transition-all duration-300 group flex flex-col">
     <div className="aspect-square bg-[#1a1a1a] overflow-hidden relative">
-      <img src={product.images?.[0]?.url || '/assets/splash_3d_box_1781971684931.png'} alt={product.title}
-        onError={e=>{e.target.onerror=null;e.target.src='/assets/splash_3d_box_1781971684931.png';}}
+      <img src={product.images?.[0]?.url || PLACEHOLDER_IMAGE} alt={product.title}
+        onError={e=>{e.target.onerror=null;e.target.src={PLACEHOLDER_IMAGE};}}
         className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-700"/>
       <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"/>
       <motion.button whileHover={{scale:1.1}} whileTap={{scale:0.9}}
@@ -204,8 +205,8 @@ const UltraPortfolio = ({ store, brandConfig, handleAddToCart, handleFollow, isF
                   {products[0] && (
                     <div className="flex items-center gap-3">
                       <div className="w-16 h-16 rounded-xl bg-[#1a1a1a] overflow-hidden flex-shrink-0 border border-white/5">
-                        <img src={products[0].images?.[0]?.url||'/assets/splash_3d_box_1781971684931.png'} alt={products[0].title}
-                          onError={e=>{e.target.onerror=null;e.target.src='/assets/splash_3d_box_1781971684931.png';}}
+                        <img src={products[0].images?.[0]?.url||PLACEHOLDER_IMAGE} alt={products[0].title}
+                          onError={e=>{e.target.onerror=null;e.target.src={PLACEHOLDER_IMAGE};}}
                           className="w-full h-full object-cover"/>
                       </div>
                       <div>
@@ -272,8 +273,8 @@ const UltraPortfolio = ({ store, brandConfig, handleAddToCart, handleFollow, isF
                     </div>
                     <div className="flex flex-col sm:flex-row gap-3 sm:p-5 items-center flex-1">
                       <div className="w-full sm:w-60 h-60 rounded-2xl bg-[#1a1a1a] overflow-hidden flex-shrink-0 border border-white/5 shadow-2xl">
-                        <img src={products[0].images?.[0]?.url||'/assets/splash_3d_box_1781971684931.png'} alt={products[0].title}
-                          onError={e=>{e.target.onerror=null;e.target.src='/assets/splash_3d_box_1781971684931.png';}}
+                        <img src={products[0].images?.[0]?.url||PLACEHOLDER_IMAGE} alt={products[0].title}
+                          onError={e=>{e.target.onerror=null;e.target.src={PLACEHOLDER_IMAGE};}}
                           className="w-full h-full object-cover"/>
                       </div>
                       <div className="flex-1">

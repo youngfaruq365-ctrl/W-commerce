@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import toast from 'react-hot-toast';
 import { Sparkles, Download, Check, RefreshCw, Image, Zap } from 'lucide-react';
 import { WButton } from '../../design/components';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 
 const STYLES = ['Festive', 'Minimal', 'Bold', 'Gradient', 'Neon', 'Elegant'];
 

@@ -1,3 +1,4 @@
+import { PLACEHOLDER_IMAGE } from '@/constants/placeholders';
 import React, { useState } from 'react';
 import { ShieldCheck, Star, MapPin, Package, ShoppingBag, Calendar, Search, Grid, List, Filter, SortAsc } from 'lucide-react';
 
@@ -59,8 +60,8 @@ const ProductCard = ({ product, onAddToCart, view = 'grid' }) => {
     return (
       <div className="flex gap-3 sm:p-4 bg-white rounded-xl border border-gray-100 p-3 sm:p-4 hover:shadow-md transition-all group">
         <div className="w-20 h-20 rounded-lg bg-gray-50 overflow-hidden flex-shrink-0">
-          <img src={product.images?.[0]?.url || '/assets/splash_3d_box_1781971684931.png'} alt={product.title}
-            onError={e => { e.target.onerror=null; e.target.src='/assets/splash_3d_box_1781971684931.png'; }}
+          <img src={product.images?.[0]?.url || PLACEHOLDER_IMAGE} alt={product.title}
+            onError={e => { e.target.onerror=null; e.target.src={PLACEHOLDER_IMAGE}; }}
             className="w-full h-full object-cover"/>
         </div>
         <div className="flex-1 min-w-0">
@@ -81,8 +82,8 @@ const ProductCard = ({ product, onAddToCart, view = 'grid' }) => {
   return (
     <div className="group bg-white rounded-xl border border-gray-100 overflow-hidden hover:shadow-lg transition-all duration-300 flex flex-col">
       <div className="aspect-square bg-gray-50 overflow-hidden relative">
-        <img src={product.images?.[0]?.url || '/assets/splash_3d_box_1781971684931.png'} alt={product.title}
-          onError={e => { e.target.onerror=null; e.target.src='/assets/splash_3d_box_1781971684931.png'; }}
+        <img src={product.images?.[0]?.url || PLACEHOLDER_IMAGE} alt={product.title}
+          onError={e => { e.target.onerror=null; e.target.src={PLACEHOLDER_IMAGE}; }}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"/>
         {product.isFlashSale && <span className="absolute top-2 left-2 bg-red-500 text-white text-[11px] sm:text-xs font-black px-2 py-0.5 rounded-full">SALE</span>}
       </div>

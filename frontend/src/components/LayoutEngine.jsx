@@ -1,3 +1,4 @@
+import { PLACEHOLDER_IMAGE } from '@/constants/placeholders';
 import React from 'react';
 import { layoutLibrary } from '../config/layoutLibrary';
 import { Link } from 'react-router-dom';
@@ -8,8 +9,11 @@ import { EffectCoverflow, Pagination, Navigation, Autoplay } from 'swiper/module
 import 'swiper/css';
 import 'swiper/css/effect-coverflow';
 import 'swiper/css/pagination';
+import toast from 'react-hot-toast';
 import 'swiper/css/navigation';
 import confetti from 'canvas-confetti';
+import { celebrate } from './CelebrationController';
+
 
 const HoverSlideshowImage = ({ product, ...props }) => {
   const [isHovered, setIsHovered] = React.useState(false);
@@ -20,7 +24,7 @@ const HoverSlideshowImage = ({ product, ...props }) => {
         const url = img.url || img;
         return (typeof url === 'string' && (url.startsWith('http') || url.startsWith('/'))) ? url : `/${url}`;
       })
-    : [product?.coverUrl || product?.imageUrl || '/assets/splash_3d_box_1781971684931.png'];
+    : [product?.coverUrl || product?.imageUrl || PLACEHOLDER_IMAGE];
 
   React.useEffect(() => {
     if (!isHovered || productImages.length <= 1) return;
@@ -67,7 +71,7 @@ const triggerCartAnimation = (e, product, addToCart) => {
     : parseInt(product.stockQuantity || '0') <= 0;
     
   if (isOutOfStock) {
-    alert("This product is currently out of stock.");
+    toast.error('This product is currently out of stock.');
     return;
   }
 
@@ -82,7 +86,11 @@ const triggerCartAnimation = (e, product, addToCart) => {
     colors: ['#facc15', '#ffffff', '#aaaaaa'],
     disableForReducedMotion: true
   });
-  addToCart(product);
+  addToCart(product.id).then(() => {
+    celebrate('standard', e);
+  }).catch((err) => {
+    toast.error(err.response?.data?.message || err.message || 'Failed to add to cart');
+  });
 };
 
 // -------------------------------------------------------------
@@ -156,7 +164,7 @@ const PremiumCoverflow = ({ section, products, addToCart, wishlist, toggleWishli
                     }}
                     title="Add to Cart"
                   >
-                    <ShoppingCart size={20} color="#000" />
+                    <ShoppingCart size={20} color="currentColor" className="text-[var(--text-main)]" />
                   </motion.button>
                 </div>
               </div>

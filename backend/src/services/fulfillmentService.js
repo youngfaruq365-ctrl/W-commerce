@@ -148,12 +148,8 @@ async function transition({ fulfillmentOrderId, sellerId, action, data = {} }) {
 // ─── Timestamp helper ─────────────────────────────────────────────────────────
 
 function _timestampsForStatus(status, now) {
-    switch (status) {
-        case 'PACKED':            return { packedAt: now };
-        case 'AWAITING_COURIER':  return { readyToShipAt: now };
-        case 'HANDED_TO_COURIER': return {};
-        default:                  return {};
-    }
+    // These timestamps do not exist on FulfillmentOrder schema in V2.
+    return {};
 }
 
 // ─── Public transition actions ────────────────────────────────────────────────
@@ -174,9 +170,7 @@ async function advanceToReview(fulfillmentOrderId) {
 async function accept({ fulfillmentOrderId, sellerId, estimatedPackingMinutes }) {
     return transition({
         fulfillmentOrderId, sellerId, action: 'accept',
-        data: estimatedPackingMinutes
-            ? { estimatedDeliveryDate: new Date(Date.now() + estimatedPackingMinutes * 60_000) }
-            : {},
+        data: {},
     });
 }
 
@@ -187,7 +181,7 @@ async function reject({ fulfillmentOrderId, sellerId, reason }) {
     }
     return transition({
         fulfillmentOrderId, sellerId, action: 'reject',
-        data: { delayReason: reason },
+        data: {}, // delayReason removed as it does not exist on FulfillmentOrder
     });
 }
 
@@ -201,7 +195,7 @@ async function markPacked({ fulfillmentOrderId, sellerId, notes, packageDetails 
     // 1. Advance fulfillment state machine: PREPARING → PACKED
     const fo = await transition({
         fulfillmentOrderId, sellerId, action: 'mark_packed',
-        data: notes ? { delayReason: null } : {},
+        data: {},
     });
 
     // 2. Auto-create Package record with barcode/QR (non-fatal if already exists)

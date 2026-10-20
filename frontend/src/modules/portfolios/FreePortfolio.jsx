@@ -116,7 +116,7 @@ export default function FreePortfolio({ store = {} }) {
                       <span className="text-xs text-[var(--text-muted)]">{product.rating} ({product.reviews})</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="font-bold text-[var(--text-main)]">${product.price}</span>
+                      <span className="font-bold text-[var(--text-main)]">₦{product.price}</span>
                       <WButton onClick={() => toast('Feature coming soon', { icon: '🚀' })}  variant="ghost" size="xs" icon={<ShoppingCart size={12} />}>Add</WButton>
                     </div>
                   </div>

@@ -30,7 +30,7 @@ export const StreetFoodMobile = ({ store, motionVariants, onCheckout }) => {
             <div className="flex-1">
               <h3 className="font-bold text-lg leading-tight mb-1">{p.title}</h3>
               <p className="text-xs text-white/50 line-clamp-2 mb-2">{p.description}</p>
-              <div className="font-black text-[var(--store-primary)]">${p.price.toFixed(2)}</div>
+              <div className="font-black text-[var(--store-primary)]">₦{p.price.toFixed(2)}</div>
             </div>
             <button onClick={() => toast('Feature coming soon', { icon: '🚀' })}  className="w-10 h-10 shrink-0 bg-[var(--store-primary)] text-black rounded-full flex items-center justify-center font-bold text-xl">+</button>
           </motion.div>

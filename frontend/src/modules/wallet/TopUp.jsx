@@ -9,8 +9,7 @@ import { apiClient } from '../../utils/apiClient';
 const PRESET_AMOUNTS = [10, 25, 50, 100, 200];
 
 const PAYMENT_METHODS = [
-  { id: 'paystack', label: 'Credit / Debit Card (Paystack)', icon: CreditCard },
-  { id: 'flutterwave', label: 'Bank Transfer (Flutterwave)', icon: Building2 },
+  { id: 'paystack', label: 'Card Payment (Paystack)', icon: CreditCard },
 ];
 
 export default function TopUp() {
@@ -49,7 +48,7 @@ export default function TopUp() {
         const verifyRes = await apiClient.get(`/api/v1/wallet/fund/verify-${selectedMethod}/${reference}`);
         if (verifyRes.data.success) {
           setSuccess(true);
-          setTimeout(() => navigate('/wallet'), 2000);
+          setTimeout(() => navigate(-1), 2000);
         } else {
           throw new Error('Mock verification failed');
         }
@@ -124,7 +123,7 @@ export default function TopUp() {
                 onClick={() => setAmount(p.toString())}
                 className={`py-2 rounded-xl text-sm font-semibold border transition-all ${amount === p.toString() ? 'bg-[var(--text-main)] border-[var(--text-main)] text-[var(--bg-primary)]' : 'border-[var(--border-color)] text-[var(--text-muted)] hover:border-[var(--border-hover)] hover:text-[var(--text-main)]'}`}
               >
-                ${p}
+                ₦{p}
               </button>
             ))}
           </div>
@@ -185,7 +184,7 @@ export default function TopUp() {
           </button>
           <div className="flex items-center justify-center gap-1.5 mt-3">
             <Shield size={12} className="text-[var(--text-faint)]" />
-            <p className="text-xs text-[var(--text-faint)]">Secured payment via {selectedMethod === 'paystack' ? 'Paystack' : 'Flutterwave'}</p>
+            <p className="text-xs text-[var(--text-faint)]">Secured payment via {selectedMethod === 'paystack' ? 'Paystack' : 'Monnify'}</p>
           </div>
         </div>
       </div>

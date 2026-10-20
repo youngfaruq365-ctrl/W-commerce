@@ -30,7 +30,7 @@ class PaymentService {
         
         try {
             // Validate order exists and belongs to buyer
-            const order = await prisma.order.findFirst({
+            const order = await prisma.fulfillmentOrder.findFirst({
                 where: { 
                     id: orderId,
                     buyerId: buyerId,
@@ -80,11 +80,10 @@ class PaymentService {
             });
             
             // Update order status
-            await prisma.order.update({
+            await prisma.fulfillmentOrder.update({
                 where: { id: orderId },
                 data: { 
-                    status: 'PAYMENT_SUBMITTED',
-                    proofUrl: proofImageUrl
+                    status: 'PAYMENT_SUBMITTED'
                 }
             });
             
@@ -194,7 +193,7 @@ class PaymentService {
             
             // If completed, ensure order is updated
             if (status === this.STATUS.COMPLETED) {
-                await prisma.order.update({
+                await prisma.fulfillmentOrder.update({
                     where: { id: proof.orderId },
                     data: { status: 'PAID' }
                 });
@@ -241,7 +240,7 @@ class PaymentService {
         });
         
         // Update order status
-        await prisma.order.update({
+        await prisma.fulfillmentOrder.update({
             where: { id: proof.orderId },
             data: { status: 'PAID' }
         });

@@ -269,7 +269,7 @@ async function _notify(userId, { type, title, body, linkUrl, actionUrl, imageUrl
         type,
         title,
         body,
-        channel:   'in_app',
+        channel:   'push',
         actionUrl: actionUrl || linkUrl || null,
         linkUrl:   linkUrl   || actionUrl || null,
         imageUrl:  imageUrl  || null,

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { Link, useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
+import { isVideoUrl, getImageUrl } from '@/utils/imageHelpers';
 import {
   Flame, ShoppingCart, Heart, Star, Clock, ChevronLeft, ChevronRight,
   MapPin, Eye, Zap, TrendingUp, Grid, Package, Radio, Users, MessageCircle,
@@ -53,49 +54,23 @@ const CATEGORIES = [
   { name: 'Jewelry', emoji: '💍', count: '9K+', slug: 'jewelry', color: 'from-rose-600 to-pink-600' },
 ];
 
-const NEARBY_STORES = [
-  { id: 1, name: 'TechVault Store', category: 'Electronics', rating: 4.9, reviews: 2300, distance: '0.8 km', avatar: '🏪' },
-  { id: 2, name: 'Fashionista Hub', category: 'Fashion', rating: 4.7, reviews: 1800, distance: '1.2 km', avatar: '👗' },
-  { id: 3, name: 'GreenLife Market', category: 'Health & Food', rating: 4.8, reviews: 956, distance: '2.1 km', avatar: '🌿' },
-  { id: 4, name: 'GameZone Pro', category: 'Gaming', rating: 4.9, reviews: 3100, distance: '3.4 km', avatar: '🎮' },
-];
-
-const STORIES = [
-  { id: 1, seller: 'Sarah K.', avatar: '👩', viewed: false, color: 'from-pink-500 to-rose-500' },
-  { id: 2, seller: 'TechMaster', avatar: '👨‍💻', viewed: false, color: 'from-blue-500 to-cyan-500' },
-  { id: 3, seller: 'StyleHouse', avatar: '🧑', viewed: true, color: 'from-purple-500 to-violet-500' },
-  { id: 4, seller: 'FitGear', avatar: '💪', viewed: false, color: 'from-green-500 to-emerald-500' },
-  { id: 5, seller: 'CozyNest', avatar: '🏡', viewed: true, color: 'from-amber-500 to-orange-500' },
-  { id: 6, seller: 'BeautyBar', avatar: '💅', viewed: false, color: 'from-rose-500 to-pink-500' },
-];
-
-const COMMUNITY_POSTS = [
-  {
-    id: 1, user: 'Alex M.', avatar: '🧑‍🎤', time: '2h ago',
-    caption: 'Just got my new setup! The RGB keyboard from TechVault is absolutely fire 🔥 Totally worth the price.',
-    image: '💻', likes: 847, comments: 134, tag: 'Tech Setup'
-  },
-  {
-    id: 2, user: 'Mia Chen', avatar: '👩‍🎨', time: '4h ago',
-    caption: 'Summer haul arrived! StyleHouse never disappoints 💯 Sizing is perfect, material feels premium.',
-    image: '👗', likes: 1200, comments: 89, tag: 'Fashion Haul'
-  },
-  {
-    id: 3, user: 'Jordan T.', avatar: '🧑‍💼', time: '6h ago',
-    caption: 'Made my home office dream a reality thanks to W-Commerce. Links in bio for all items!',
-    image: '🖥️', likes: 2340, comments: 267, tag: 'Home Office'
-  },
-];
-
 const COLLECTIONS = [
-  { id: 1, name: 'Work From Home Essentials', items: 48, gradient: 'from-violet-900 to-indigo-900', emoji: '🖥️' },
-  { id: 2, name: 'Summer Beach Vibes', items: 62, gradient: 'from-orange-800 to-rose-900', emoji: '🏖️' },
-  { id: 3, name: "Gamer's Paradise", items: 35, gradient: 'from-emerald-900 to-cyan-900', emoji: '🎮' },
+  { id: 1, name: 'Work From Home Essentials', items: 48, gradient: 'from-violet-900 to-indigo-900', emoji: '🖥️', slug: 'work-from-home' },
+  { id: 2, name: 'Summer Beach Vibes', items: 62, gradient: 'from-orange-800 to-rose-900', emoji: '🏖️', slug: 'summer' },
+  { id: 3, name: "Gamer's Paradise", items: 35, gradient: 'from-emerald-900 to-cyan-900', emoji: '🎮', slug: 'gaming' },
 ];
 
 const LIVE_SESSIONS = [
   { id: 1, seller: 'TechMaster Pro', avatar: '👨‍💻', viewers: 4320, product: 'iPhone 16 Pro Unboxing', duration: '1:24:30' },
   { id: 2, seller: 'StyleQueen', avatar: '👩‍🎤', viewers: 2100, product: 'Summer Fashion Haul', duration: '0:45:12' },
+];
+
+// Gradient ring colors for seller story circles
+const STORY_COLORS = [
+  'from-pink-500 to-rose-500', 'from-blue-500 to-cyan-500',
+  'from-purple-500 to-violet-500', 'from-green-500 to-emerald-500',
+  'from-amber-500 to-orange-500', 'from-rose-500 to-pink-500',
+  'from-indigo-500 to-blue-500', 'from-teal-500 to-cyan-500',
 ];
 
 // ── Countdown Timer Hook ──────────────────────────────────────────────────────
@@ -124,9 +99,7 @@ function SmartProductCard({ product, onAddToCart }) {
 
   const handleAdd = async () => {
     setAdding(true);
-    await new Promise(r => setTimeout(r, 600));
-    onAddToCart?.(product);
-    setAdding(false);
+    try { await onAddToCart?.(product); } finally { setAdding(false); }
   };
 
   return (
@@ -142,19 +115,28 @@ function SmartProductCard({ product, onAddToCart }) {
       >
         <Heart size={14} className={wishlisted ? 'fill-rose-400 text-rose-400' : 'text-[var(--text-muted)]'} />
       </button>
-      <div className="h-32 bg-gradient-to-br from-[var(--bg-secondary)] to-[var(--bg-tertiary)] flex items-center justify-center text-5xl">
-        {product.image}
+      <div className="h-32 bg-gradient-to-br from-[var(--bg-secondary)] to-[var(--bg-tertiary)] flex items-center justify-center overflow-hidden">
+        {(product.images?.[0]?.url || product.images?.[0] || product.imageUrl) ? (() => {
+          const mediaSrc = getImageUrl(product.images?.[0]?.url || product.images?.[0] || product.imageUrl);
+          return isVideoUrl(mediaSrc)
+            ? <video src={mediaSrc} className="w-full h-full object-cover" muted playsInline preload="metadata" />
+            : <img src={mediaSrc} alt={product.title || product.name} loading="lazy" className="w-full h-full object-cover" />;
+        })() : (
+          <span className="text-[var(--text-faint)] text-xs">No image</span>
+        )}
       </div>
       <div className="p-3">
-        <p className="text-[var(--text-main)] text-xs font-medium truncate">{product.name}</p>
+        <p className="text-[var(--text-main)] text-xs font-medium truncate">{product.title || product.name}</p>
+        {(product.averageRating ?? product.rating) > 0 && (
         <div className="flex items-center gap-1 mt-1">
           <Star size={10} className="fill-amber-400 text-amber-400" />
-          <span className="text-[var(--text-muted)] text-xs">{product.rating}</span>
+          <span className="text-[var(--text-muted)] text-xs">{product.averageRating ?? product.rating}</span>
         </div>
+        )}
         <div className="flex items-center gap-1.5 mt-1.5">
-          <span className="text-[var(--text-main)] font-bold text-sm">${product.price}</span>
-          {product.original && (
-            <span className="text-[var(--text-faint)] text-xs line-through">${product.original}</span>
+          <span className="text-[var(--text-main)] font-bold text-sm">₦{Number(product.price || 0).toLocaleString()}</span>
+          {product.compareAtPrice > product.price && (
+            <span className="text-[var(--text-faint)] text-xs line-through">₦{Number(product.compareAtPrice).toLocaleString()}</span>
           )}
         </div>
         <button
@@ -176,6 +158,9 @@ export default function Home() {
   const { addToCart } = useCartStore();
   const [currentBanner, setCurrentBanner] = useState(0);
   const [products, setProducts] = useState([]);
+  const [stories, setStories] = useState([]);         // real seller stores as story rings
+  const [nearbyStores, setNearbyStores] = useState([]); // top-rated approved stores
+  const [communityPosts, setCommunityPosts] = useState([]); // real FeedPosts
 
   const bannerRef = useRef(null);
 
@@ -188,8 +173,58 @@ export default function Home() {
   // Fetch products (with fallback)
   useEffect(() => {
     axios.get('/api/v1/products?limit=10')
-      .then(r => setProducts(r.data?.products || TRENDING))
-      .catch(() => setProducts(TRENDING));
+      .then(r => setProducts(r.data?.products || r.data?.data || []))
+      .catch(() => setProducts([]));
+  }, []);
+
+  // Fetch real stores for Stories + Nearby Stores
+  useEffect(() => {
+    axios.get('/api/v1/stores/public')
+      .then(r => {
+        const stores = r.data?.stores || [];
+        // Stories: first 8 stores as seller story rings
+        setStories(stores.slice(0, 8).map((s, i) => ({
+          id: s.id,
+          sellerId: s.sellerId,
+          seller: s.storeName,
+          logoUrl: s.logoUrl,
+          color: STORY_COLORS[i % STORY_COLORS.length],
+          slug: s.portfolioSlug,
+        })));
+        // Nearby Stores: sort by rating descending, take 6
+        const sorted = [...stores].sort((a, b) => (b.averageRating || 0) - (a.averageRating || 0));
+        setNearbyStores(sorted.slice(0, 6).map(s => ({
+          id: s.id,
+          name: s.storeName,
+          category: s.category || 'General',
+          rating: Number(s.averageRating || 0).toFixed(1),
+          reviews: s.totalReviews || 0,
+          logoUrl: s.logoUrl,
+          slug: s.portfolioSlug,
+          isVerified: s.isVerified,
+        })));
+      })
+      .catch(() => {});
+  }, []);
+
+  // Fetch real FeedPosts for Community section
+  useEffect(() => {
+    axios.get('/api/v1/products?limit=6&sort=newest')
+      .then(r => {
+        const items = r.data?.products || r.data?.data || [];
+        setCommunityPosts(items.slice(0, 3).map(p => ({
+          id: p.id,
+          user: p.store?.storeName || 'Verified Seller',
+          time: 'Recently',
+          caption: p.description?.slice(0, 120) || p.title,
+          imageUrl: p.images?.[0]?.url || p.images?.[0] || null,
+          likes: p.viewCount || p.soldCount || 0,
+          comments: p._count?.reviews || 0,
+          tag: p.category || 'Product',
+          productId: p.id,
+        })));
+      })
+      .catch(() => {});
   }, []);
 
   const handleAddToCart = useCallback((product) => {
@@ -261,18 +296,26 @@ export default function Home() {
         </div>
 
 
-        {/* ── Section 3: Seller Stories ──────────────────────────────────────── */}
+        {/* ── Section 3: Seller Stories (real store data) ───────────────────── */}
+        {stories.length > 0 && (
         <div className="mt-8">
           <h2 className="text-[var(--text-main)] font-bold text-base mb-3 flex items-center gap-2">
             <span className="w-1 h-5 bg-gradient-to-b from-violet-400 to-pink-400 rounded-full inline-block" />
             Seller Stories
           </h2>
           <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-none">
-            {STORIES.map(s => (
-              <button onClick={() => toast('Feature coming soon', { icon: '🚀' })}  key={s.id} className="flex-shrink-0 flex flex-col items-center gap-1.5">
-                <div className={`p-0.5 rounded-full bg-gradient-to-br ${s.viewed ? 'from-gray-600 to-gray-700' : s.color}`}>
-                  <div className="w-14 h-14 rounded-full bg-[var(--bg-secondary)] flex items-center justify-center text-2xl border-2 border-[var(--bg-primary)]">
-                    {s.avatar}
+            {stories.map(s => (
+              <button
+                key={s.id}
+                onClick={() => s.slug ? navigate(`/store/${s.slug}`) : navigate('/feed')}
+                className="flex-shrink-0 flex flex-col items-center gap-1.5"
+              >
+                <div className={`p-0.5 rounded-full bg-gradient-to-br ${s.color}`}>
+                  <div className="w-14 h-14 rounded-full bg-[var(--bg-secondary)] flex items-center justify-center overflow-hidden border-2 border-[var(--bg-primary)]">
+                    {s.logoUrl
+                      ? <img src={s.logoUrl} alt={s.seller} className="w-full h-full object-cover" />
+                      : <span className="text-xl font-bold text-[var(--text-main)]">{(s.seller || 'S')[0].toUpperCase()}</span>
+                    }
                   </div>
                 </div>
                 <span className="text-[var(--text-muted)] text-xs truncate w-16 text-center">{s.seller}</span>
@@ -280,6 +323,7 @@ export default function Home() {
             ))}
           </div>
         </div>
+        )}
 
         {/* ── Section 4: Trending Products ──────────────────────────────────── */}
         <div className="mt-8">
@@ -293,13 +337,17 @@ export default function Home() {
             </Link>
           </div>
           <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none">
-            {TRENDING.map(p => (
+            {(products || []).length === 0 && (
+              <p className="text-[var(--text-muted)] text-sm py-6">No products yet.</p>
+            )}
+            {(products || []).map(p => (
               <SmartProductCard key={p.id} product={p} onAddToCart={handleAddToCart} />
             ))}
           </div>
         </div>
 
-        {/* ── Section 5: Live Shopping ───────────────────────────────────────── */}
+        {/* ── Section 5: Live Shopping (hidden until real live sessions exist) ── */}
+        {false && LIVE_SESSIONS.length > 0 && (
         <div className="mt-8">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-[var(--text-main)] font-bold text-lg flex items-center gap-2">
@@ -333,6 +381,7 @@ export default function Home() {
             ))}
           </div>
         </div>
+        )}
 
         {/* ── Section 6: Categories Grid ────────────────────────────────────── */}
         <div className="mt-8">
@@ -356,7 +405,6 @@ export default function Home() {
                   {cat.emoji}
                 </div>
                 <span className="text-[var(--text-main)] text-xs font-medium text-center leading-tight">{cat.name}</span>
-                <span className="text-[var(--text-faint)] text-xs">{cat.count}</span>
               </Link>
             ))}
           </div>
@@ -374,15 +422,22 @@ export default function Home() {
             </Link>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {[...TRENDING].slice(0, 4).map(p => (
+            {(products || []).slice(0, 4).map(p => (
               <Link key={p.id} to={`/product/${p.id}`} className="bg-[var(--bg-card)] rounded-2xl border border-[var(--border-subtle)] hover:border-[var(--border-hover)] transition-all hover:-translate-y-1 overflow-hidden group">
-                <div className="h-36 bg-gradient-to-br from-[var(--bg-secondary)] to-[var(--bg-tertiary)] flex items-center justify-center text-5xl">
-                  {p.image}
+                <div className="h-36 bg-gradient-to-br from-[var(--bg-secondary)] to-[var(--bg-tertiary)] flex items-center justify-center overflow-hidden">
+                  {(p.images?.[0]?.url || p.images?.[0] || p.imageUrl) ? (() => {
+                    const mediaSrc = getImageUrl(p.images?.[0]?.url || p.images?.[0] || p.imageUrl);
+                    return isVideoUrl(mediaSrc)
+                      ? <video src={mediaSrc} className="w-full h-full object-cover" muted playsInline preload="metadata" />
+                      : <img src={mediaSrc} alt={p.title || p.name} loading="lazy" className="w-full h-full object-cover" />;
+                  })() : (
+                    <span className="text-[var(--text-faint)] text-xs">No image</span>
+                  )}
                 </div>
                 <div className="p-3">
-                  <p className="text-[var(--text-main)] text-sm font-medium truncate">{p.name}</p>
+                  <p className="text-[var(--text-main)] text-sm font-medium truncate">{p.title || p.name}</p>
                   <div className="flex items-center justify-between mt-1">
-                    <span className="text-[var(--text-main)] font-bold">${p.price}</span>
+                    <span className="text-[var(--text-main)] font-bold">₦{Number(p.price || 0).toLocaleString()}</span>
                   </div>
                 </div>
               </Link>
@@ -390,92 +445,110 @@ export default function Home() {
           </div>
         </div>
 
-        {/* ── Section 8: Nearby Stores ───────────────────────────────────────── */}
+        {/* ── Section 8: Nearby Stores (real top-rated stores) ──────────────── */}
+        {nearbyStores.length > 0 && (
         <div className="mt-8">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-[var(--text-main)] font-bold text-lg flex items-center gap-2">
               <MapPin size={18} className="text-emerald-400" />
-              Nearby Stores
+              Top Stores
             </h2>
-            <Link to="/nearby-stores" className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-sm flex items-center gap-1 transition-colors">
-              View map <ArrowRight size={14} />
+            <Link to="/search" className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-sm flex items-center gap-1 transition-colors">
+              Browse all <ArrowRight size={14} />
             </Link>
           </div>
           <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none">
-            {NEARBY_STORES.map(store => (
-              <div key={store.id} className="flex-shrink-0 w-48 bg-[var(--bg-card)] rounded-2xl border border-[var(--border-subtle)] hover:border-[var(--border-hover)] transition-all p-4 hover:-translate-y-1">
-                <div className="text-4xl mb-2">{store.avatar}</div>
-                <p className="text-[var(--text-main)] font-semibold text-sm">{store.name}</p>
-                <p className="text-[var(--text-muted)] text-xs mt-0.5">{store.category}</p>
+            {nearbyStores.map(store => (
+              <Link
+                key={store.id}
+                to={store.slug ? `/store/${store.slug}` : '/search'}
+                className="flex-shrink-0 w-48 bg-[var(--bg-card)] rounded-2xl border border-[var(--border-subtle)] hover:border-[var(--border-hover)] transition-all p-4 hover:-translate-y-1 block"
+              >
+                <div className="w-10 h-10 rounded-xl bg-[var(--bg-secondary)] flex items-center justify-center overflow-hidden mb-2">
+                  {store.logoUrl
+                    ? <img src={store.logoUrl} alt={store.name} className="w-full h-full object-cover" />
+                    : <span className="text-xl font-bold text-[var(--text-main)]">{(store.name || 'S')[0]}</span>
+                  }
+                </div>
+                <p className="text-[var(--text-main)] font-semibold text-sm truncate">{store.name}</p>
+                <p className="text-[var(--text-muted)] text-xs mt-0.5 truncate">{store.category}</p>
                 <div className="flex items-center justify-between mt-3">
                   <div className="flex items-center gap-1">
                     <Star size={12} className="fill-amber-400 text-amber-400" />
                     <span className="text-[var(--text-main)] text-xs font-bold">{store.rating}</span>
                   </div>
-                  <div className="flex items-center gap-1 text-[var(--text-faint)] text-xs">
-                    <MapPin size={10} /> {store.distance}
-                  </div>
+                  {store.isVerified && (
+                    <span className="text-xs text-emerald-400 font-semibold">✓ Verified</span>
+                  )}
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         </div>
+        )}
 
-        {/* ── Section 9: Community Posts ────────────────────────────────────── */}
+        {/* ── Section 9: Community — real product posts ─────────────────────── */}
+        {communityPosts.length > 0 && (
         <div className="mt-8">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-[var(--text-main)] font-bold text-lg flex items-center gap-2">
               <Users size={18} className="text-cyan-400" />
               Community
             </h2>
-            <button onClick={() => toast('Feature coming soon', { icon: '🚀' })}  className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-sm flex items-center gap-1 transition-colors">
-              See all <ArrowRight size={14} />
-            </button>
+            <Link to="/feed" className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-sm flex items-center gap-1 transition-colors">
+              See feed <ArrowRight size={14} />
+            </Link>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {COMMUNITY_POSTS.map(post => (
-              <div key={post.id} className="bg-[var(--bg-card)] rounded-2xl border border-[var(--border-subtle)] overflow-hidden hover:border-[var(--border-hover)] transition-all">
-                <div className="h-40 bg-gradient-to-br from-[var(--bg-secondary)] to-[var(--bg-tertiary)] flex items-center justify-center text-7xl">
-                  {post.image}
+            {communityPosts.map(post => (
+              <Link key={post.id} to={`/product/${post.productId}`} className="bg-[var(--bg-card)] rounded-2xl border border-[var(--border-subtle)] overflow-hidden hover:border-[var(--border-hover)] transition-all block">
+                <div className="h-40 bg-gradient-to-br from-[var(--bg-secondary)] to-[var(--bg-tertiary)] flex items-center justify-center overflow-hidden">
+                  {post.imageUrl
+                    ? <img src={post.imageUrl} alt={post.tag} loading="lazy" className="w-full h-full object-cover" />
+                    : <Package size={40} className="text-[var(--text-faint)]" />
+                  }
                 </div>
                 <div className="p-4">
                   <div className="flex items-center gap-2 mb-2">
-                    <div className="w-7 h-7 rounded-full bg-[var(--bg-tertiary)] flex items-center justify-center text-sm">{post.avatar}</div>
-                    <span className="text-[var(--text-main)] text-sm font-medium">{post.user}</span>
-                    <span className="text-[var(--text-faint)] text-xs ml-auto">{post.time}</span>
+                    <div className="w-7 h-7 rounded-full bg-[var(--bg-tertiary)] flex items-center justify-center text-sm font-bold text-[var(--text-main)]">
+                      {(post.user || 'S')[0].toUpperCase()}
+                    </div>
+                    <span className="text-[var(--text-main)] text-sm font-medium truncate">{post.user}</span>
+                    <span className="text-[var(--text-faint)] text-xs ml-auto whitespace-nowrap">{post.time}</span>
                   </div>
                   <p className="text-[var(--text-muted)] text-xs leading-relaxed line-clamp-2">{post.caption}</p>
                   <div className="flex items-center gap-4 mt-3 pt-3 border-t border-[var(--border-subtle)]">
-                    <button onClick={() => toast('Feature coming soon', { icon: '🚀' })}  className="flex items-center gap-1.5 text-[var(--text-muted)] hover:text-rose-400 transition-colors text-xs">
-                      <Heart size={14} /> {post.likes.toLocaleString()}
-                    </button>
-                    <button onClick={() => toast('Feature coming soon', { icon: '🚀' })}  className="flex items-center gap-1.5 text-[var(--text-muted)] hover:text-blue-400 transition-colors text-xs">
+                    <span className="flex items-center gap-1.5 text-[var(--text-muted)] text-xs">
+                      <Eye size={14} /> {Number(post.likes).toLocaleString()}
+                    </span>
+                    <span className="flex items-center gap-1.5 text-[var(--text-muted)] text-xs">
                       <MessageCircle size={14} /> {post.comments}
-                    </button>
+                    </span>
                     <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-[var(--bg-tertiary)] text-[var(--text-faint)]">{post.tag}</span>
                   </div>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         </div>
+        )}
 
-        {/* ── Section 10: Collections ────────────────────────────────────────── */}
+        {/* ── Section 10: Curated Collections (static, links to category search) */}
         <div className="mt-8">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-[var(--text-main)] font-bold text-lg flex items-center gap-2">
               <Package size={18} className="text-amber-400" />
               Curated Collections
             </h2>
-            <Link to="/collections" className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-sm flex items-center gap-1 transition-colors">
-              All collections <ArrowRight size={14} />
+            <Link to="/categories" className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-sm flex items-center gap-1 transition-colors">
+              All categories <ArrowRight size={14} />
             </Link>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {COLLECTIONS.map(col => (
               <Link
                 key={col.id}
-                to={`/collections`}
+                to={`/categories/${col.slug}`}
                 className={`relative h-48 rounded-2xl overflow-hidden bg-gradient-to-br ${col.gradient} group`}
               >
                 <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors" />
@@ -483,7 +556,7 @@ export default function Home() {
                   <div className="text-4xl mb-2">{col.emoji}</div>
                   <h3 className="text-white font-bold text-lg leading-tight">{col.name}</h3>
                   <div className="flex items-center justify-between mt-2">
-                    <span className="text-white/70 text-sm">{col.items} items</span>
+                    <span className="text-white/70 text-sm">{col.items}+ items</span>
                     <span className="flex items-center gap-1 bg-white/20 hover:bg-white/30 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-colors">
                       Shop <ArrowRight size={12} />
                     </span>

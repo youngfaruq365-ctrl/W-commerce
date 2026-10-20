@@ -3,6 +3,7 @@ import { X, Wallet, ShieldCheck, ArrowRight, Building } from 'lucide-react';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import { useBuyerStore } from '../../store/buyerStore';
+import PinVerificationModal from '../shared/PinVerificationModal';
 
 const WithdrawModal = ({ isOpen, onClose, balance }) => {
   const [amount, setAmount] = useState('');
@@ -12,6 +13,7 @@ const WithdrawModal = ({ isOpen, onClose, balance }) => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const { fetchWallet, fetchWalletTransactions } = useBuyerStore();
+  const [isPinModalOpen, setIsPinModalOpen] = useState(false);
 
   if (!isOpen) return null;
 
@@ -26,6 +28,11 @@ const WithdrawModal = ({ isOpen, onClose, balance }) => {
       return;
     }
     setError('');
+    setIsPinModalOpen(true);
+  };
+
+  const executeWithdrawal = async (pin) => {
+    setIsPinModalOpen(false);
     setLoading(true);
 
     try {
@@ -36,8 +43,9 @@ const WithdrawModal = ({ isOpen, onClose, balance }) => {
           accountNumber,
           type: 'bank_account'
         },
+        pin,
         idempotencyKey: uuidv4()
-      });
+      }, { withCredentials: true });
 
       if (response.data.success) {
         setSuccess(true);
@@ -54,15 +62,27 @@ const WithdrawModal = ({ isOpen, onClose, balance }) => {
         setError('Failed to initiate withdrawal. Please try again.');
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'An error occurred during withdrawal');
+      if (err.response?.data?.message === 'PIN_NOT_SET') {
+        setError('Please set your withdrawal PIN first. Click Withdraw to set it.');
+        setIsPinModalOpen(true);
+      } else {
+        setError(err.response?.data?.message || 'An error occurred during withdrawal');
+      }
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-white/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-      <div className="modal-3d-glass rounded-2xl w-full max-w-md overflow-hidden relative">
+    <>
+      <PinVerificationModal 
+        isOpen={isPinModalOpen} 
+        onClose={() => setIsPinModalOpen(false)} 
+        onSuccess={executeWithdrawal} 
+        store={useBuyerStore} 
+      />
+      <div className="fixed inset-0 bg-white/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+        <div className="modal-3d-glass rounded-2xl w-full max-w-md overflow-hidden relative">
         <div className="p-6 border-b border-gray-200 flex justify-between items-center">
           <h2 className="text-xl font-bold flex items-center gap-2">
             <Wallet className="text-[var(--text-muted)]" /> Withdraw Funds
@@ -152,7 +172,8 @@ const WithdrawModal = ({ isOpen, onClose, balance }) => {
           </form>
         )}
       </div>
-    </div>
+      </div>
+    </>
   );
 };
 

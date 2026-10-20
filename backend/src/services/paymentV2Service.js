@@ -137,22 +137,24 @@ exports.initializePaystack = async ({
     });
 
     // Phase 12: Create authoritative PaymentIntent record (PENDING)
-    await prisma.paymentIntent.upsert({
-        where:  { reference },
-        create: {
-            marketplaceOrderId,
-            gateway:    'PAYSTACK',
-            reference,
-            accessCode: data.access_code || null,
-            amount:     amountNGN,
-            currency:   'NGN',
-            status:     'PENDING',
-        },
-        update: {
-            accessCode: data.access_code || null,
-            status:     'PENDING',
-        },
-    }).catch(e => logger.warn(`[PaymentV2] PaymentIntent upsert warning: ${e.message}`));
+    if (prisma.paymentIntent) {
+        await prisma.paymentIntent.upsert({
+            where:  { reference },
+            create: {
+                marketplaceOrderId,
+                gateway:    'PAYSTACK',
+                reference,
+                accessCode: data.access_code || null,
+                amount:     amountNGN,
+                currency:   'NGN',
+                status:     'PENDING',
+            },
+            update: {
+                accessCode: data.access_code || null,
+                status:     'PENDING',
+            },
+        }).catch(e => logger.warn(`[PaymentV2] PaymentIntent upsert warning: ${e.message}`));
+    }
 
     return {
         authorizationUrl: data.authorization_url,
@@ -168,27 +170,95 @@ exports.initializePaystack = async ({
  * Calls the same onChargeSuccess logic if the transaction is successful.
  */
 exports.verifyAndConfirm = async (reference) => {
+    if (reference.startsWith('pi_') || reference.startsWith('cs_') || reference.startsWith('ch_')) {
+        // Verify with Stripe directly — never trust the client-supplied reference.
+        if (!process.env.STRIPE_SECRET_KEY) throw new Error('Stripe is not configured');
+        const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+        let paid = false, amount = 0, currency = 'USD';
+        if (reference.startsWith('cs_')) {
+            const s = await stripe.checkout.sessions.retrieve(reference);
+            paid = s.payment_status === 'paid'; amount = (s.amount_total || 0) / 100; currency = s.currency;
+        } else if (reference.startsWith('pi_')) {
+            const pi = await stripe.paymentIntents.retrieve(reference);
+            paid = pi.status === 'succeeded'; amount = (pi.amount_received || 0) / 100; currency = pi.currency;
+        } else {
+            const ch = await stripe.charges.retrieve(reference);
+            paid = ch.paid && ch.status === 'succeeded'; amount = (ch.amount || 0) / 100; currency = ch.currency;
+        }
+        if (!paid) throw new Error('Stripe payment not completed');
+        return { status: 'success', reference, amount, currency: String(currency).toUpperCase(), paidAt: new Date() };
+    }
+
     if (!PAYSTACK_SECRET) {
         throw Object.assign(new Error('Paystack not configured.'), { statusCode: 503 });
     }
 
-    const txData = await paystackRequest(`/transaction/verify/${encodeURIComponent(reference)}`);
+    const response = await paystackRequest(`/transaction/verify/${encodeURIComponent(reference)}`);
+    const txData = response.data || {};
 
     if (txData.status === 'success') {
-        await onChargeSuccess({
-            reference:  txData.reference,
-            amount:     txData.amount,
-            channel:    txData.channel,
-            gateway_response: txData.gateway_response,
+        await onChargeSuccess(txData);
+    }
+
+    const txReference = txData.reference || txData.id || reference;
+    let order = null;
+    let receipt = null;
+
+    // Fetch the V2 order
+    const marketplaceOrder = await prisma.marketplaceOrder.findFirst({
+        where: {
+            OR: [
+                { paymentReference: txReference },
+                ...(txData.metadata?.marketplaceOrderId ? [{ id: txData.metadata.marketplaceOrderId }] : [])
+            ]
+        },
+        include: {
+            fulfillmentOrders: {
+                include: { items: true }
+            }
+        },
+    });
+
+    if (marketplaceOrder) {
+        order = marketplaceOrder;
+        receipt = {
+            orderId: marketplaceOrder.id,
+            subtotal: marketplaceOrder.subtotal,
+            shipping: marketplaceOrder.shippingCost,
+            discount: marketplaceOrder.discountTotal,
+            total: marketplaceOrder.grandTotal,
+            items: marketplaceOrder.fulfillmentOrders.flatMap(fo => fo.items)
+        };
+    } else {
+        // Fallback to legacy order
+        const legacyOrder = await prisma.order.findFirst({
+            where: { stripePaymentId: txReference },
+            include: { items: true }
         });
+        if (legacyOrder) {
+            order = legacyOrder;
+            const subtotal = legacyOrder.items.reduce((acc, i) => acc + (Number(i.priceAtTime) * Number(i.quantity)), 0);
+            const shipping = Number(legacyOrder.shippingCost || 0);
+            const total = Number(legacyOrder.totalAmount);
+            receipt = {
+                orderId: legacyOrder.id,
+                subtotal: subtotal,
+                shipping: shipping,
+                discount: Math.max(0, subtotal + shipping - total),
+                total: total,
+                items: legacyOrder.items
+            };
+        }
     }
 
     return {
         status:    txData.status,
         reference: txData.reference,
-        amount:    txData.amount / 100,
+        amount:    (txData.amount || 0) / 100,
         currency:  txData.currency,
         paidAt:    txData.paid_at,
+        order:     order,
+        receipt:   receipt
     };
 };
 
@@ -288,8 +358,13 @@ async function onChargeSuccess(data) {
     const amountNGN = (data.amount || 0) / 100;
 
     // Locate MarketplaceOrder
-    const marketplaceOrder = await prisma.marketplaceOrder.findUnique({
-        where: { paymentReference: reference },
+    const marketplaceOrder = await prisma.marketplaceOrder.findFirst({
+        where: {
+            OR: [
+                { paymentReference: reference },
+                ...(data.metadata?.marketplaceOrderId ? [{ id: data.metadata.marketplaceOrderId }] : [])
+            ]
+        },
         include: {
             fulfillmentOrders: {
                 include: { items: true }
@@ -333,8 +408,6 @@ async function onChargeSuccess(data) {
                 where: { id: fo.id },
                 data: {
                     paymentStatus:   'HELD',
-                    status:          'CONFIRMED',
-                    escrowReleaseAt,
                 },
             });
 
@@ -350,7 +423,8 @@ async function onChargeSuccess(data) {
                     sellerAmount:     fo.sellerAmount,
                     paymentReference: reference,
                     paymentProvider:  (data.channel || 'PAYSTACK').toUpperCase(),
-                    status:           'HELD'
+                    status:           'HELD',
+                    releaseScheduledAt: escrowReleaseAt,
                 }
             });
 
@@ -375,30 +449,46 @@ async function onChargeSuccess(data) {
                 description: `Paystack payment for MarketplaceOrder #${marketplaceOrder.id.substring(0, 8)}`,
             },
         });
+
+        // d. Clear purchased cart items for V2 online payments
+        if (marketplaceOrder.buyerId) {
+            const purchasedProductIds = marketplaceOrder.fulfillmentOrders.flatMap(fo => fo.items.map(i => i.productId));
+            const cart = await tx.cart.findUnique({ where: { userId: marketplaceOrder.buyerId } });
+            if (cart && purchasedProductIds.length > 0) {
+                await tx.cartItem.deleteMany({
+                    where: {
+                        cartId: cart.id,
+                        productId: { in: purchasedProductIds }
+                    }
+                });
+            }
+        }
     });
 
     // Phase 12: Create authoritative PaymentIntent row (CAPTURED)
-    await prisma.paymentIntent.upsert({
-        where:  { reference },
-        create: {
-            marketplaceOrderId: marketplaceOrder.id,
-            gateway:         'PAYSTACK',
-            reference,
-            amount:          amountNGN,
-            currency:        'NGN',
-            channel:         data.channel || null,
-            status:          'CAPTURED',
-            authorizedAt:    now,
-            capturedAt:      now,
-            gatewayResponse: JSON.stringify(data),
-        },
-        update: {
-            status:          'CAPTURED',
-            channel:         data.channel || null,
-            capturedAt:      now,
-            gatewayResponse: JSON.stringify(data),
-        },
-    }).catch(e => logger.warn(`[PaymentV2] PaymentIntent captured upsert: ${e.message}`));
+    if (prisma.paymentIntent) {
+        await prisma.paymentIntent.upsert({
+            where:  { reference },
+            create: {
+                marketplaceOrderId: marketplaceOrder.id,
+                gateway:         'PAYSTACK',
+                reference,
+                amount:          amountNGN,
+                currency:        'NGN',
+                channel:         data.channel || null,
+                status:          'CAPTURED',
+                authorizedAt:    now,
+                capturedAt:      now,
+                gatewayResponse: JSON.stringify(data),
+            },
+            update: {
+                status:          'CAPTURED',
+                channel:         data.channel || null,
+                capturedAt:      now,
+                gatewayResponse: JSON.stringify(data),
+            },
+        }).catch(e => logger.warn(`[PaymentV2] PaymentIntent captured upsert: ${e.message}`));
+    }
 
     // Phase 13: Mark all inventory reservations as DEDUCTED (stock already decremented at reserve())
     for (const fo of marketplaceOrder.fulfillmentOrders) {
@@ -434,6 +524,18 @@ async function onChargeSuccess(data) {
                 { id: 'SYSTEM', type: 'SYSTEM' }
             ).catch(() => {});
         } catch { /* eventBus may not be initialized yet in tests */ }
+        
+        try {
+            const orderEventService = require('./orderEventService');
+            const sellerIds = marketplaceOrder.fulfillmentOrders.map(fo => fo.sellerId);
+            orderEventService.emitOrderUpdated({
+                orderId: marketplaceOrder.id,
+                buyerId: marketplaceOrder.buyerId,
+                sellerIds: sellerIds
+            });
+        } catch (e) {
+            logger.error(`[PaymentV2] orderEventService error: ${e.message}`);
+        }
     });
 
     logger.info(
@@ -454,7 +556,12 @@ async function onChargeFailed(data) {
     });
 
     if (!marketplaceOrder) {
-        logger.warn(`[PaymentV2] charge.failed: no MarketplaceOrder for ref ${reference}`);
+        logger.info(`[PaymentV2] charge.failed: checking legacy Order for ref ${reference}`);
+        const checkoutService = require('./checkoutService');
+        await checkoutService.cancelAndRestoreOrder({
+            orderId: data.metadata?.orderId,
+            reference
+        }).catch(err => logger.error(`[PaymentV2] legacy cancel error: ${err.message}`));
         return;
     }
 
@@ -494,26 +601,28 @@ async function onChargeFailed(data) {
     }
 
     // Phase 12: Create FAILED PaymentIntent row (outside tx — non-blocking)
-    await prisma.paymentIntent.upsert({
-        where:  { reference },
-        create: {
-            marketplaceOrderId: marketplaceOrder.id,
-            gateway:         'PAYSTACK',
-            reference,
-            amount:          (data.amount || 0) / 100,
-            currency:        'NGN',
-            channel:         data.channel || null,
-            status:          'FAILED',
-            failedAt:        new Date(),
-            failureReason:   data.gateway_response || 'Payment declined',
-            gatewayResponse: JSON.stringify(data),
-        },
-        update: {
-            status:        'FAILED',
-            failedAt:      new Date(),
-            failureReason: data.gateway_response || 'Payment declined',
-        },
-    }).catch(e => logger.warn(`[PaymentV2] PaymentIntent failed upsert: ${e.message}`));
+    if (prisma.paymentIntent) {
+        await prisma.paymentIntent.upsert({
+            where:  { reference },
+            create: {
+                marketplaceOrderId: marketplaceOrder.id,
+                gateway:         'PAYSTACK',
+                reference,
+                amount:          (data.amount || 0) / 100,
+                currency:        'NGN',
+                channel:         data.channel || null,
+                status:          'FAILED',
+                failedAt:        new Date(),
+                failureReason:   data.gateway_response || 'Payment declined',
+                gatewayResponse: JSON.stringify(data),
+            },
+            update: {
+                status:        'FAILED',
+                failedAt:      new Date(),
+                failureReason: data.gateway_response || 'Payment declined',
+            },
+        }).catch(e => logger.warn(`[PaymentV2] PaymentIntent failed upsert: ${e.message}`));
+    }
 
     // Notify buyer via V2 service
     await notificationV2.notify(marketplaceOrder.buyerId, {
@@ -608,44 +717,19 @@ async function _legacyChargeSuccess(reference, amountNGN) {
         logger.warn(`[PaymentV2] Legacy fallback: no Order for ref "${reference}"`);
         return;
     }
-    if (order.paymentStatus === 'HELD') {
-        logger.info(`[PaymentV2] Legacy order ${orderId} already HELD — skipping`);
+    
+    if (order.paymentStatus === 'HELD' || order.status === 'PAID') {
+        logger.info(`[PaymentV2] Legacy order ${orderId} already HELD/PAID — skipping`);
         return;
     }
 
-    await prisma.order.update({
-        where: { id: orderId },
-        data:  {
-            paymentStatus:   'HELD',
-            status:          'PAID',
-            stripePaymentId: reference,
-        },
-    });
-
     try {
-        for (const item of order.items) {
-            await prisma.product.update({
-                where: { id: item.productId },
-                data: { soldCount: { increment: item.quantity } }
-            }).catch(() => null); // ignore if product deleted
-        }
-
-        const productIds = order.items.map(item => item.productId);
-        if (productIds.length > 0) {
-            const cart = await prisma.cart.findUnique({ where: { userId: order.buyerId } });
-            if (cart) {
-                await prisma.cartItem.deleteMany({
-                    where: {
-                        cartId: cart.id,
-                        productId: { in: productIds }
-                    }
-                });
-                logger.info(`[PaymentV2] Legacy order ${orderId} cart items cleared for buyer ${order.buyerId}`);
-            }
-        }
+        const paymentController = require('../controllers/paymentController');
+        await paymentController.finalizeOrder(orderId, reference, amountNGN, order.buyerId);
     } catch (err) {
-        logger.error(`[PaymentV2] Failed to clear cart items for legacy order ${orderId}: ${err.message}`);
+        logger.error(`[PaymentV2] Failed to finalize legacy order ${orderId}: ${err.message}`);
     }
-
-    logger.info(`[PaymentV2] Legacy order ${orderId} → PAID (via legacy fallback)`);
 }
+
+exports.onChargeSuccess = onChargeSuccess;
+

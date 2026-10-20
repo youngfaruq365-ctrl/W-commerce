@@ -101,6 +101,19 @@ const ApiClient = {
                         }
                     });
                 }
+                if (endpoint.startsWith('/transaction/verify/')) {
+                    return Promise.resolve({
+                        status: true,
+                        data: {
+                            status: 'success',
+                            metadata: {
+                                type: 'GONG_FUNDING',
+                                amountGong: 100, // Dummy value for testing
+                                idempotencyKey: 'mock_paystack_fund_' + Date.now()
+                            }
+                        }
+                    });
+                }
                 return Promise.resolve({ status: true, data: { status: 'success' } });
             }
 
@@ -136,6 +149,19 @@ const ApiClient = {
                         message: 'Hosted Link',
                         data: {
                             link: 'https://checkout.flutterwave.com/mock-checkout'
+                        }
+                    });
+                }
+                if (endpoint.startsWith('/transactions/verify_by_reference')) {
+                    return Promise.resolve({
+                        status: 'success',
+                        data: {
+                            status: 'successful',
+                            meta: {
+                                type: 'GONG_FUNDING',
+                                amountGong: 100, // Dummy value for testing
+                                idempotencyKey: 'mock_flw_fund_' + Date.now()
+                            }
                         }
                     });
                 }

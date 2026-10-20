@@ -23,19 +23,13 @@ router.post('/initialize',           protect, ctrl.initializePayment);
 router.post('/vault-card',           protect, ctrl.vaultCard);
 
 // Manual verify on frontend callback (after Paystack redirects buyer back)
-router.get('/verify/:reference',     protect, ctrl.verifyPayment);
+router.get('/verify/:reference', ctrl.verifyPayment);
 
 // BNPL mock routes
 router.post('/bnpl/initialize',      protect, ctrl.initializeBnpl);
 router.post('/bnpl/verify',          protect, ctrl.verifyBnpl);
 
-// ── Paystack webhook (no auth — verified by HMAC signature) ──────────────────
-// express.raw() captures the body as a Buffer BEFORE the global json() middleware
-// would parse it, preserving the exact bytes needed for HMAC verification.
-router.post(
-    '/webhook/paystack',
-    express.raw({ type: 'application/json' }),
-    ctrl.paystackWebhook
-);
+// Webhook is now handled centrally in server.cjs
+router.post('/webhook/stripe', express.raw({ type: 'application/json' }), ctrl.stripeWebhook);
 
 module.exports = router;

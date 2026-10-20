@@ -95,25 +95,25 @@ const schemas = {
 
     walletAmount: z.object({
         amount: z.preprocess((value) => Number(value), z.number().positive())
-    }),
+    }).passthrough(),
 
     walletWithdraw: z.object({
         amount: z.preprocess((value) => Number(value), z.number().positive()),
         destination: z.string().min(2).max(200).optional()
-    }),
+    }).passthrough(),
 
     walletTransfer: z.object({
         toUserId: z.string().uuid('Invalid recipient ID'),
         coin: z.enum(['GONG', 'GX', 'XP']).default('GONG'),
         amount: z.preprocess((value) => Number(value), z.number().positive()),
         description: z.string().max(200).optional()
-    }),
+    }).passthrough(),
 
     walletConvert: z.object({
         fromCoin: z.enum(['GONG', 'GX', 'XP']),
         toCoin: z.enum(['GONG', 'GX', 'XP']),
         amount: z.preprocess((value) => Number(value), z.number().positive())
-    }),
+    }).passthrough(),
 
     walletHold: z.object({
         coin: z.enum(['GONG', 'GX', 'XP']).default('GONG'),

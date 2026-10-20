@@ -14,8 +14,6 @@ export const VirtualConcierge = ({ store }) => {
   // Tier awareness
   const tier = store?.tier || 'essential';
   const isAvailable = ['pro', 'studio', 'signature'].includes(tier);
-  
-  if (!isAvailable) return null;
 
   useEffect(() => {
     if (isOpen && messages.length === 0) {
@@ -32,6 +30,8 @@ export const VirtualConcierge = ({ store }) => {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, isTyping]);
+
+  if (!isAvailable) return null;
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -111,7 +111,7 @@ export const VirtualConcierge = ({ store }) => {
                           <img src={p.image} alt={p.name} className="w-full h-32 object-cover bg-gray-100" />
                           <div className="p-3">
                             <div className="text-xs font-bold truncate mb-1">{p.name}</div>
-                            <div className="text-xs text-gray-500 mb-2">${p.price}</div>
+                            <div className="text-xs text-gray-500 mb-2">₦{p.price}</div>
                             <button onClick={() => addToCart(p)} className="w-full py-2 bg-gray-100 hover:bg-black hover:text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition-colors">
                               <ShoppingCart size={12} /> Add
                             </button>

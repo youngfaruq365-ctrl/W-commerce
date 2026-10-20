@@ -9,7 +9,7 @@ export const setupPWA = () => {
             }
         },
         onOfflineReady() {
-            console.log('App ready to work offline');
+            if (import.meta.env.DEV) console.log('App ready to work offline');
         },
     });
 };

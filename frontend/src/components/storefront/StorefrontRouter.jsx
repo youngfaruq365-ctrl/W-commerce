@@ -1,17 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import { apiClient } from '../../utils/apiClient';
 import { useCartStore } from '../../store/cartStore';
+import { useAuthStore } from '../../store/authStore';
 import { Loader2 } from 'lucide-react';
+import { showInterstitialAd } from '../../services/adMobService';
 
-// Import all portfolio versions
-import FreePortfolio from '../../pages/portfolios/FreePortfolio';
-import PremiumPortfolio from '../../pages/portfolios/PremiumPortfolio';
-import ProPortfolio from '../../pages/portfolios/ProPortfolio';
-import ProUltraPortfolio from '../../pages/portfolios/ProUltraPortfolio';
-import Ultra1ProPortfolio from '../../pages/portfolios/Ultra1ProPortfolio';
-import Ultra2ProPortfolio from '../../pages/portfolios/Ultra2ProPortfolio';
-import UltraPortfolio from '../../pages/portfolios/UltraPortfolio';
+import UnifiedPortfolio from '../../pages/portfolios/UnifiedPortfolio';
 
 const StorefrontRouter = () => {
     const { slug } = useParams();
@@ -19,11 +14,21 @@ const StorefrontRouter = () => {
     const [store, setStore] = useState(null);
     const [loading, setLoading] = useState(true);
     const { addToCart } = useCartStore();
+    const { user, isAuthenticated } = useAuthStore();
 
     const [isFollowing, setIsFollowing] = useState(false);
     const [followersCount, setFollowersCount] = useState(0);
 
+    const isOwner = Boolean(
+        user?.id && (
+            user.id === store?.sellerId ||
+            user.id === store?.seller?.id ||
+            user.id === store?.store?.sellerId
+        )
+    );
+
     useEffect(() => {
+        window.scrollTo(0, 0);
         if (!slug || slug === 'null' || slug === 'undefined') {
             setLoading(false);
             return;
@@ -31,18 +36,7 @@ const StorefrontRouter = () => {
         
         const fetchStore = async () => {
             try {
-                // Determine token to pass if buyer is logged in
-                const tokenString = localStorage.getItem('auth-storage');
-                let token = null;
-                if (tokenString) {
-                    try {
-                        const parsed = JSON.parse(tokenString);
-                        token = parsed.state?.token;
-                    } catch(e) {}
-                }
-                const headers = token ? { Authorization: `Bearer ${token}` } : {};
-                
-                const res = await axios.get(`/api/v1/stores/by-slug/${slug}`, { headers });
+                const res = await apiClient.get(`/api/v1/stores/by-slug/${slug}`);
                 if (res.data.success) {
                     const payload = res.data.data;
                     if (payload && payload.store) {
@@ -54,14 +48,22 @@ const StorefrontRouter = () => {
                             metrics: payload.metrics,
                             products: payload.products || [],
                             posts: payload.posts || [],
-                            portfolio: payload.portfolio
+                            portfolio: payload.portfolio,
+                            brandConfig: payload.brandConfig
                         };
                         setStore(mergedStoreData);
                         setIsFollowing(payload.isFollowing || false);
                         setFollowersCount(payload.metrics?.followers || 0);
+
+                        // Trigger Ad if seller is on Free tier
+                        const tier = payload.store?.sellerTier?.toUpperCase() || payload.seller?.subscriptionTier?.toUpperCase() || payload.store?.subscriptionTier?.toUpperCase() || 'FREE';
+                        if (tier === 'FREE' || tier === 'BASIC' || tier === 'STANDARD') {
+                            showInterstitialAd().catch(e => console.warn('Ad error:', e));
+                        }
                     }
                 }
             } catch (err) {
+                console.error("Store fetch error:", err);
             } finally {
                 setLoading(false);
             }
@@ -74,33 +76,32 @@ const StorefrontRouter = () => {
         if (!store?.store?.id && !store?.id) return;
         const storeId = store?.store?.id || store?.id;
         
-        const tokenString = localStorage.getItem('auth-storage');
-        let token = null;
-        if (tokenString) {
-            try {
-                const parsed = JSON.parse(tokenString);
-                token = parsed.state?.token;
-            } catch(e) {}
-        }
-        
-        if (!token) {
+        if (!isAuthenticated) {
             const toast = (await import('react-hot-toast')).default;
             toast.error("Please login to follow stores");
             return;
         }
 
+        if (isOwner) {
+            const toast = (await import('react-hot-toast')).default;
+            toast("This is your store! Opening seller dashboard...", { icon: '🏪' });
+            navigate('/seller/dashboard');
+            return;
+        }
+
         try {
-            const res = await axios.post(`/api/v1/store/${storeId}/follow`, {}, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const res = await apiClient.post(`/api/v1/stores/${storeId}/follow`, {});
             if (res.data.success) {
                 const newIsFollowing = res.data.isFollowing;
                 setIsFollowing(newIsFollowing);
                 setFollowersCount(prev => newIsFollowing ? prev + 1 : Math.max(0, prev - 1));
+                const toast = (await import('react-hot-toast')).default;
+                toast.success(newIsFollowing ? "Followed store!" : "Unfollowed store");
             }
         } catch (error) {
             const toast = (await import('react-hot-toast')).default;
-            toast.error(error.response?.data?.message || "Failed to follow store");
+            const message = error.response?.data?.message || error.response?.data?.error || error.message || "Failed to follow store";
+            toast.error(message);
         }
     };
 
@@ -140,8 +141,16 @@ const StorefrontRouter = () => {
         }
     }
     
-    // Choose portfolio based on tier or default to ProUltra
-    const tier = store.subscriptionTier?.toLowerCase() || 'ultra';
+    // Extract tier override from URL path if present (e.g., /store/slug/ultra)
+    const currentPath = window.location.pathname.toLowerCase();
+    let overrideTier = null;
+    if (currentPath.endsWith('/free')) overrideTier = 'free';
+    else if (currentPath.endsWith('/premium')) overrideTier = 'premium';
+    else if (currentPath.endsWith('/pro')) overrideTier = 'pro';
+    else if (currentPath.endsWith('/ultra')) overrideTier = 'ultra';
+    
+    // Choose portfolio based on URL override, tier, or default to premium
+    const tier = overrideTier || store.subscriptionTier?.toLowerCase() || 'premium';
     
     const props = {
         store, 
@@ -162,20 +171,12 @@ const StorefrontRouter = () => {
         },
         handleFollow,
         isFollowing,
-        followersCount
+        followersCount,
+        isOwner,
+        onManageStore: () => navigate('/seller/dashboard')
     };
 
-    switch(tier) {
-        case 'free': return <FreePortfolio {...props} />;
-        case 'premium': return <PremiumPortfolio {...props} />;
-        case 'pro': return <ProPortfolio {...props} />;
-        case 'ultra': return <UltraPortfolio {...props} />;
-        case 'pro ultra':
-        case 'proultra': return <ProUltraPortfolio {...props} />;
-        case 'ultra1pro': return <Ultra1ProPortfolio {...props} />;
-        case 'ultra2pro': return <Ultra2ProPortfolio {...props} />;
-        default: return <FreePortfolio {...props} />;
-    }
+    return <UnifiedPortfolio {...props} tier={tier} />;
 };
 
 export default StorefrontRouter;

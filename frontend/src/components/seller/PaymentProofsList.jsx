@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 import { ShieldCheck, XCircle, CheckCircle, ExternalLink, Image as ImageIcon } from 'lucide-react';
 import { useSellerStore } from '../../store/sellerStore';
 import GenerateReceiptModal from './GenerateReceiptModal';
 import { getImageUrl } from '../../utils/imageHelpers';
+import { useSocket } from '../../hooks/useSocket';
+import toast from 'react-hot-toast';
 
 const PaymentProofsList = () => {
   const [proofs, setProofs] = useState([]);
@@ -16,6 +18,10 @@ const PaymentProofsList = () => {
   useEffect(() => {
     fetchProofs();
   }, []);
+
+  useSocket({
+    'payment_proof:new': () => fetchProofs(),
+  });
 
   const fetchProofs = async () => {
     try {
@@ -54,7 +60,7 @@ const PaymentProofsList = () => {
         }
       }
     } catch (err) {
-      alert('Verification failed: ' + (err.response?.data?.message || err.message));
+      toast.error('Verification failed: ' + (err.response?.data?.message || err.message));
     } finally {
       setActionLoading(null);
     }
@@ -98,7 +104,7 @@ const PaymentProofsList = () => {
                   <p className="text-xl font-extrabold text-emerald-400"> ₦{Number(proof.amount).toFixed(2)}</p>
                   <span className={`inline-block px-2 py-1 rounded text-xs font-bold mt-1 ${
                     proof.status === 'APPROVED' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
-                    proof.status === 'REJECTED' ? 'bg-gray-400 500/20 text-gray-700 400 border border-gray-400 500/30' :
+                    proof.status === 'REJECTED' ? 'bg-gray-500/20 text-gray-400 border border-gray-500/30' :
                     'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
                   }`}>
                     {proof.status}
@@ -114,7 +120,7 @@ const PaymentProofsList = () => {
                     rel="noreferrer"
                     className="px-4 py-2 bg-white text-emerald-400 border border-emerald-500/30 rounded-lg flex items-center gap-2 hover:bg-emerald-500/10 transition"
                   >
-                    View Receipt <ExternalLink size={16} />
+                    View Proof <ExternalLink size={16} />
                   </a>
                   
                   {selectedProof === proof.id ? (
@@ -124,12 +130,12 @@ const PaymentProofsList = () => {
                         placeholder="Reason for rejection..." 
                         value={rejectReason}
                         onChange={(e) => setRejectReason(e.target.value)}
-                        className="flex-1 bg-white/50 border border-gray-400 500/50 rounded-lg px-3 py-2 text-black focus:outline-none"
+                        className="flex-1 bg-white/50 border border-gray-500/50 rounded-lg px-3 py-2 text-black focus:outline-none"
                       />
                       <button 
                         onClick={() => handleVerify(proof.id, 'REJECT')}
                         disabled={actionLoading === proof.id}
-                        className="px-4 py-2 bg-gray-400 500 text-black font-bold rounded-lg hover:bg-gray-400 600 transition"
+                        className="px-4 py-2 bg-gray-500 text-black font-bold rounded-lg hover:bg-gray-600 transition"
                       >
                         {actionLoading === proof.id ? 'Processing...' : 'Confirm Reject'}
                       </button>
@@ -151,7 +157,7 @@ const PaymentProofsList = () => {
                       </button>
                       <button 
                         onClick={() => setSelectedProof(proof.id)}
-                        className="px-4 py-2 bg-gray-400 500/10 text-gray-700 400 border border-gray-400 500/20 font-bold rounded-lg hover:bg-gray-400 500/20 transition flex items-center gap-2"
+                        className="px-4 py-2 bg-gray-500/10 text-gray-400 border border-gray-500/20 font-bold rounded-lg hover:bg-gray-500/20 transition flex items-center gap-2"
                       >
                         <XCircle size={18} /> Reject
                       </button>

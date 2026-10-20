@@ -10,7 +10,7 @@ const logger = require('../utils/logger');
 // In production, set SMS_PROVIDER env var to 'twilio' or 'nexmo'.
 // In development (NODE_ENV !== 'production'), defaults to 'mock' for local testing.
 const SMS_CONFIG = {
-    provider: process.env.SMS_PROVIDER || (process.env.NODE_ENV !== 'production' ? 'mock' : 'none'),
+    provider: (process.env.SMS_PROVIDER || (process.env.NODE_ENV !== 'production' ? 'mock' : 'none')).toLowerCase(),
     from: process.env.SMS_FROM_NUMBER || 'WCOMMERCE',
     twilio: {
         accountSid: process.env.TWILIO_ACCOUNT_SID,
@@ -21,6 +21,10 @@ const SMS_CONFIG = {
         apiKey: process.env.NEXMO_API_KEY,
         apiSecret: process.env.NEXMO_API_SECRET,
         fromNumber: process.env.NEXMO_FROM_NUMBER
+    },
+    termii: {
+        apiUrl: process.env.TERMII_API_URL || 'https://v4.api.termii.com/',
+        apiKey: process.env.TERMII_API_KEY
     }
 };
 
@@ -53,7 +57,11 @@ class SMSService {
                 case 'nexmo':
                     result = await this.sendViaNexmo(formattedNumber, message);
                     break;
+                case 'termii':
+                    result = await this.sendViaTermii(formattedNumber, message);
+                    break;
                 case 'mock':
+                case 'simulation':
                     result = await this.sendMockSMS(formattedNumber, message);
                     break;
                 default:
@@ -76,11 +84,14 @@ class SMSService {
         // Remove all non-numeric characters
         const cleaned = phoneNumber.replace(/\D/g, '');
         
-        // Add country code if not present (assuming US/Canada +1)
+        // Add country code if not present
         if (cleaned.length === 10) {
             return '+1' + cleaned;
         } else if (cleaned.length === 11 && cleaned.startsWith('1')) {
             return '+' + cleaned;
+        } else if (cleaned.length === 11 && cleaned.startsWith('0')) {
+            // Convert Nigerian 070... to +23470...
+            return '+234' + cleaned.substring(1);
         } else if (!phoneNumber.startsWith('+')) {
             return '+' + cleaned;
         }
@@ -140,6 +151,39 @@ class SMSService {
         } catch (error) {
             logger.error('Nexmo SMS error:', error);
             return { success: false, message: error.message, provider: 'nexmo' };
+        }
+    }
+    
+    /**
+     * Send SMS via Termii
+     */
+    static async sendViaTermii(phoneNumber, message) {
+        try {
+            const axios = require('axios');
+            // Termii requires phone number without '+' sign
+            const termiiNumber = phoneNumber.replace('+', '');
+            
+            const payload = {
+                to: termiiNumber,
+                from: SMS_CONFIG.from,
+                sms: message,
+                type: 'plain',
+                channel: 'generic',
+                api_key: SMS_CONFIG.termii.apiKey
+            };
+            
+            // Format URL to prevent double slashes
+            const baseUrl = SMS_CONFIG.termii.apiUrl.endsWith('/') 
+                ? SMS_CONFIG.termii.apiUrl.slice(0, -1) 
+                : SMS_CONFIG.termii.apiUrl;
+                
+            const response = await axios.post(`${baseUrl}/api/sms/send`, payload);
+            
+            logger.info(`Termii SMS sent: ${JSON.stringify(response.data)}`);
+            return { success: true, messageId: response.data.message_id, provider: 'termii' };
+        } catch (error) {
+            logger.error('Termii SMS error:', error.response?.data || error.message);
+            return { success: false, message: error.message, provider: 'termii' };
         }
     }
     
@@ -208,6 +252,14 @@ class SMSService {
      */
     static async sendOrderStatusUpdate(phone, orderId, status) {
         const message = `W-Commerce: Your order #${orderId.substring(0, 8)} status has been updated to ${status}.`;
+        return this.sendSMS(phone, message);
+    }
+    
+    /**
+     * Send verification code (OTP) via SMS
+     */
+    static async sendVerificationCode(phone, code) {
+        const message = `W-Commerce: Your verification code is ${code}. It expires in 15 minutes.`;
         return this.sendSMS(phone, message);
     }
 }

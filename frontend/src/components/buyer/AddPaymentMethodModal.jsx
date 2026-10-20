@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, CreditCard, ShieldCheck, Loader2, CheckCircle } from 'lucide-react';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 
 const AddPaymentMethodModal = ({ isOpen, onClose }) => {
   const [cardNumber, setCardNumber] = useState('');
@@ -16,7 +16,7 @@ const AddPaymentMethodModal = ({ isOpen, onClose }) => {
     setLoading(true);
 
     try {
-      const response = await axios.post('/api/v1/payment/v2/vault-card', {
+      const response = await axios.post('/api/v1/payment/vault-card', {
         cardNumber,
         expiry,
         cvv
@@ -58,7 +58,7 @@ const AddPaymentMethodModal = ({ isOpen, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-white/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-fade-in">
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-fade-in">
       <div className="modal-3d-glass rounded-2xl w-full max-w-md overflow-hidden relative shadow-2xl">
         <div className="p-6 border-b border-gray-200 flex justify-between items-center">
           <h2 className="text-xl font-bold flex items-center gap-2 text-black">

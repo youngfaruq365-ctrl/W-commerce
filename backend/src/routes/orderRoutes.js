@@ -7,9 +7,9 @@ const express = require('express');
 
  router.post('/', protect, requirePaidAccess, orderController.createOrder);
  router.post('/direct', protect, requirePaidAccess, orderController.createDirectOrder);
- router.get('/seller', protect, authorize('SELLER', 'ADMIN'), requirePaidAccess, orderController.getSellerOrders);
+ router.get('/seller', protect, authorize('SELLER', 'ADMIN'), orderController.getSellerOrders);
  router.get('/buyer', protect, orderController.getBuyerOrders);
- router.post('/update-status', protect, authorize('SELLER', 'ADMIN'), requirePaidAccess, orderController.updateOrderStatus);
+ router.post('/update-status', protect, authorize('SELLER', 'ADMIN'), orderController.updateOrderStatus);
  router.post('/dispute', protect, requirePaidAccess, orderController.raiseDispute);
  router.post('/confirm-receipt', protect, orderController.confirmReceipt);
  router.get('/buy-again', protect, orderController.getBuyAgainSuggestions);

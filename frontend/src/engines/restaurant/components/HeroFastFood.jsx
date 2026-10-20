@@ -61,7 +61,7 @@ export const HeroFastFood = ({ store, motionVariants, onCheckout }) => {
              <div className="text-4xl">🍔</div>
              <div>
                <div className="font-black text-gray-900">Spicy Double</div>
-               <div className="text-[var(--store-primary)] font-bold">$8.99</div>
+               <div className="text-[var(--store-primary)] font-bold">₦8.99</div>
              </div>
            </motion.div>
         </motion.div>

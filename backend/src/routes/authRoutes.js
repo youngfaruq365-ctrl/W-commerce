@@ -102,9 +102,17 @@ router.get('/google', (req, res, next) => {
                   return res.redirect(`${frontendUrl}/login?error=google_not_configured`);
               }
   
-              passport.authenticate('google', {
-                  failureRedirect: `${frontendUrl}/login?error=google_auth_failed`,
-                  session: false // We use JWT, not sessions
+              passport.authenticate('google', { session: false }, (err, user, info) => {
+                  if (err) {
+                      logger.error(`Google authenticate error: ${err.message}`);
+                      // If it's a TokenError (e.g. reused code, invalid secret), redirect to login
+                      return res.redirect(`${frontendUrl}/login?error=google_callback_failed`);
+                  }
+                  if (!user) {
+                      return res.redirect(`${frontendUrl}/login?error=google_auth_failed`);
+                  }
+                  req.user = user;
+                  next();
               })(req, res, next);
           } catch (err) {
               logger.error(`Google callback error: ${err.message}`);
@@ -124,10 +132,22 @@ router.get('/google', (req, res, next) => {
                   { expiresIn: '30d' }
               );
   
+              // Record session
+              const prisma = require('../utils/prismaClient');
+              prisma.userSession.create({
+                  data: {
+                      userId: user.id,
+                      token: token,
+                      userAgent: req.headers['user-agent'] || null,
+                      ipAddress: req.ip || req.connection?.remoteAddress || null,
+                      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+                  }
+              }).catch(err => logger.error(`Google OAuth session creation error: ${err.message}`));
+
               // Set httpOnly cookie
               res.cookie('token', token, {
                   httpOnly: true,
-                  secure: process.env.NODE_ENV === 'production',
+                  secure: process.env.NODE_ENV === 'production' && !req.hostname.includes('localhost') && !req.hostname.includes('127.0.0.1'),
                   sameSite: 'lax',
                   maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
               });
@@ -154,5 +174,32 @@ router.get('/google', (req, res, next) => {
 
 // Apple Sign In
 router.post('/apple', rateLimiters.login, authController.appleLogin);
+
+router.post('/verify-2fa', async (req, res) => {
+    try {
+        const { email, code } = req.body;
+        const prisma = require('../utils/prismaClient');
+        const user = await prisma.user.findUnique({ where: { email } });
+        if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+        
+        const jwt = require('jsonwebtoken');
+        const token = jwt.sign(
+            { id: user.id, role: user.role, email: user.email }, 
+            process.env.JWT_SECRET || 'dev_secret', 
+            { expiresIn: '24h' }
+        );
+        
+        res.cookie('token', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: 24 * 60 * 60 * 1000
+        });
+        
+        res.json({ success: true, user, token });
+    } catch(err) {
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+});
 
 module.exports = router;

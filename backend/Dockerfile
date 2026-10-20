@@ -1,19 +1,20 @@
-FROM node:20-alpine
+FROM node:22-alpine
 
 # Set working directory
 WORKDIR /app
 
-# Copy root package.json and lockfile
-COPY package.json package-lock.json ./
+# Copy backend package.json
+COPY backend/package.json ./
 
 # Install dependencies
-RUN npm ci
+RUN npm install
 
-# Copy the rest of the source code
-COPY . .
+# Copy the rest of the backend source code
+COPY backend/ ./backend/
+COPY database/ ./database/
 
 # Generate Prisma client
-RUN npm run db:generate
+RUN npx prisma generate --schema=database/prisma/schema.prisma
 
 # Set the Node environment to production
 ENV NODE_ENV=production
@@ -23,4 +24,6 @@ ENV PORT=5000
 EXPOSE 5000
 
 # Start the Node.js backend
-CMD ["npm", "run", "start:production"]
+WORKDIR /app
+CMD ["node", "backend/server.cjs"]
+

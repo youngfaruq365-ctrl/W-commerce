@@ -22,9 +22,18 @@ function resolveWindow(period = '30d') {
 }
 
 function getSellerItemTotal(order, storeId) {
-    return order.items
-        .filter((item) => item.product?.storeId === storeId)
-        .reduce((sum, item) => sum + (Number(item.priceAtTime || 0) * item.quantity), 0);
+    let multiplier = 1;
+    if (order.currency === 'USD') {
+        multiplier = 1500; // Placeholder conversion to NGN
+    }
+
+    if (order.sellerAmount !== undefined) {
+        return Number(order.sellerAmount) * multiplier;
+    }
+    const storeItems = order.items ? order.items.filter(item => item.product?.storeId === storeId) : [];
+    const gross = storeItems.reduce((sum, item) => sum + (Number(item.priceAtTime || 0) * item.quantity), 0);
+    const commissionRate = Number(order.commissionRate) || 0.10;
+    return (gross - (gross * commissionRate)) * multiplier;
 }
 
 function average(values = []) {
@@ -40,7 +49,12 @@ function round(value, precision = 1) {
 class SellerAnalyticsService {
     async collectSellerContext(sellerId, period = '30d') {
         const store = await prisma.store.findUnique({
-            where: { sellerId }
+            where: { sellerId },
+            include: {
+                _count: {
+                    select: { products: true }
+                }
+            }
         });
 
         if (!store) {
@@ -58,103 +72,9 @@ class SellerAnalyticsService {
 
         const fulfillmentWhere = { sellerId: store.sellerId };
         const [
-            orders, previousOrders, pendingOrders, 
             fulfillmentOrders, previousFulfillmentOrders, pendingFulfillmentOrders,
-            reviews, disputes, topProductGroups, topFulfillmentProductGroups, buyerMessages, sellerReplies
+            reviews, disputes, topFulfillmentProductGroups, buyerMessages, sellerReplies
         ] = await Promise.all([
-            prisma.order.findMany({
-                where: {
-                    ...baseOrderWhere,
-                    createdAt: { gte: startDate, lte: endDate }
-                },
-                include: {
-                    buyer: {
-                        select: { id: true, fullName: true }
-                    },
-                    items: {
-                        where: {
-                            product: { storeId: store.id }
-                        },
-                        include: {
-                            product: {
-                                select: { id: true, title: true, storeId: true }
-                            }
-                        }
-                    }
-                },
-                orderBy: { createdAt: 'desc' }
-            }),
-            prisma.order.findMany({
-                where: {
-                    ...baseOrderWhere,
-                    createdAt: { gte: previousStart, lt: startDate }
-                },
-                include: {
-                    buyer: {
-                        select: { id: true }
-                    },
-                    items: {
-                        where: {
-                            product: { storeId: store.id }
-                        },
-                        include: {
-                            product: {
-                                select: { id: true, title: true, storeId: true }
-                            }
-                        }
-                    }
-                }
-            }),
-            prisma.order.count({
-                where: {
-                    ...baseOrderWhere,
-                    status: { in: ['PENDING', 'PAID', 'PACKED', 'CONFIRMED', 'SHIPPED'] }
-                }
-            }),
-            prisma.review.findMany({
-                where: {
-                    product: { storeId: store.id }
-                },
-                select: { rating: true }
-            }),
-            prisma.dispute.findMany({
-                where: {
-                    sellerId,
-                    createdAt: { gte: startDate, lte: endDate }
-                },
-                select: { createdAt: true }
-            }),
-            prisma.orderItem.groupBy({
-                by: ['productId'],
-                where: {
-                    product: { storeId: store.id },
-                    order: {
-                        createdAt: { gte: startDate, lte: endDate },
-                        status: { in: ['PAID', 'PACKED', 'CONFIRMED', 'SHIPPED', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED'] }
-                    }
-                },
-                _sum: { quantity: true },
-                orderBy: {
-                    _sum: { quantity: 'desc' }
-                },
-                take: 1
-            }),
-            prisma.message.findMany({
-                where: {
-                    recipientId: sellerId,
-                    sender: { role: 'BUYER' },
-                    createdAt: { gte: startDate, lte: endDate }
-                },
-                select: { id: true, createdAt: true }
-            }),
-            prisma.message.findMany({
-                where: {
-                    senderId: sellerId,
-                    responseTimeMinutes: { not: null },
-                    createdAt: { gte: startDate, lte: endDate }
-                },
-                select: { responseTimeMinutes: true, createdAt: true }
-            }),
             prisma.fulfillmentOrder.findMany({
                 where: { ...fulfillmentWhere, createdAt: { gte: startDate, lte: endDate } },
                 include: { buyer: { select: { id: true, fullName: true } }, items: { include: { product: { select: { id: true, title: true, storeId: true } } } } },
@@ -167,12 +87,28 @@ class SellerAnalyticsService {
             prisma.fulfillmentOrder.count({
                 where: { ...fulfillmentWhere, status: { in: ['PENDING', 'PAID', 'PACKED', 'CONFIRMED', 'SHIPPED'] } }
             }),
+            prisma.review.findMany({
+                where: { product: { storeId: store.id } },
+                select: { rating: true }
+            }),
+            prisma.dispute.findMany({
+                where: { sellerId, createdAt: { gte: startDate, lte: endDate } },
+                select: { createdAt: true }
+            }),
             prisma.fulfillmentItem.groupBy({
                 by: ['productId'],
-                where: { fulfillmentOrder: { sellerId: store.sellerId, createdAt: { gte: startDate, lte: endDate }, status: { in: ['PAID', 'PACKED', 'CONFIRMED', 'SHIPPED', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED'] } } },
+                where: { fulfillmentOrder: { sellerId: store.sellerId, createdAt: { gte: startDate, lte: endDate }, status: { in: ['PAID', 'PROCESSING', 'PACKED', 'CONFIRMED', 'SHIPPED', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED'] } } },
                 _sum: { quantity: true },
                 orderBy: { _sum: { quantity: 'desc' } },
                 take: 1
+            }),
+            prisma.message.findMany({
+                where: { recipientId: sellerId, sender: { role: 'BUYER' }, createdAt: { gte: startDate, lte: endDate } },
+                select: { id: true, createdAt: true }
+            }),
+            prisma.message.findMany({
+                where: { senderId: sellerId, responseTimeMinutes: { not: null }, createdAt: { gte: startDate, lte: endDate } },
+                select: { responseTimeMinutes: true, createdAt: true }
             })
         ]);
 
@@ -188,6 +124,11 @@ class SellerAnalyticsService {
             };
         }
 
+        const orders = [];
+        const previousOrders = [];
+        const pendingOrders = 0;
+        const topProductGroups = [];
+
         const mergedOrders = [...orders, ...fulfillmentOrders.map(mapFulfillmentToLegacy)].sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
         const mergedPreviousOrders = [...previousOrders, ...previousFulfillmentOrders.map(mapFulfillmentToLegacy)];
         const totalPendingOrders = pendingOrders + pendingFulfillmentOrders;
@@ -199,7 +140,7 @@ class SellerAnalyticsService {
             }
         }
 
-        const fulfilledOrders = mergedOrders.filter((order) => ['PAID', 'PACKED', 'CONFIRMED', 'SHIPPED', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED'].includes(order.status));
+        const fulfilledOrders = mergedOrders.filter((order) => ['PAID', 'PROCESSING', 'PACKED', 'CONFIRMED', 'SHIPPED', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED'].includes(order.status));
         const totalSales = round(fulfilledOrders.reduce((sum, order) => sum + getSellerItemTotal(order, store.id), 0), 2);
         const totalOrders = fulfilledOrders.length;
         const buyerSpend = new Map();
@@ -229,7 +170,7 @@ class SellerAnalyticsService {
         const disputeRate = totalOrders > 0 ? (disputes.length / totalOrders) * 100 : 0;
 
         const revenuePrevious = mergedPreviousOrders
-            .filter((order) => ['PAID', 'PACKED', 'CONFIRMED', 'SHIPPED', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED'].includes(order.status))
+            .filter((order) => ['PAID', 'PROCESSING', 'PACKED', 'CONFIRMED', 'SHIPPED', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED'].includes(order.status))
             .reduce((sum, order) => sum + getSellerItemTotal(order, store.id), 0);
         const decliningSales = revenuePrevious > 0 && totalSales < (revenuePrevious * 0.85);
 
@@ -338,6 +279,7 @@ class SellerAnalyticsService {
             return {
                 totalRevenue: metrics.totalSales,
                 totalOrders: metrics.totalOrders,
+                totalProducts: metrics.store?._count?.products || 0,
                 repeatBuyers: metrics.repeatBuyers,
                 averageRating: metrics.averageRating,
                 pendingOrders: metrics.pendingOrders,
@@ -356,6 +298,7 @@ class SellerAnalyticsService {
                 revenueTrendPercent: metrics.revenueTrendPercent,
                 topBuyer: metrics.topBuyer,
                 bestProduct: metrics.bestProduct,
+                banningRate: metrics.store?.banningRate || 0,
                 alerts: [
                     metrics.decliningSales ? 'Improve conversion on your best-performing listings.' : null,
                     metrics.lowResponseRate ? 'Improve response time to keep buyers engaged.' : null,

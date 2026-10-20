@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Landmark, Bitcoin, AlertCircle, Loader2, Wallet } from 'lucide-react';
 import { useSellerStore } from '../../../store/sellerStore';
+import PinVerificationModal from '../../shared/PinVerificationModal';
 
 const WithdrawModal = ({ isOpen, onClose }) => {
   const { withdrawFunds, isLoading, error } = useSellerStore();
@@ -14,18 +15,39 @@ const WithdrawModal = ({ isOpen, onClose }) => {
   const [cryptoAddress, setCryptoAddress] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [isPinModalOpen, setIsPinModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setSubmitError('');
+      useSellerStore.getState().clearError?.();
+    }
+  }, [isOpen]);
+
+  const handleClose = () => {
+    setSubmitError('');
+    useSellerStore.getState().clearError?.();
+    onClose();
+  };
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitError('');
+    useSellerStore.getState().clearError?.();
     
     if (!amount || Number(amount) <= 0) {
       setSubmitError('Please enter a valid amount');
       return;
     }
+    
+    setIsPinModalOpen(true);
+  };
 
+  const executeWithdrawal = async (pin) => {
+    setIsPinModalOpen(false);
+    
     const destination = destinationType === 'BANK' ? {
       type: 'BANK',
       ...bankDetails
@@ -34,7 +56,7 @@ const WithdrawModal = ({ isOpen, onClose }) => {
       address: cryptoAddress
     };
 
-    const success = await withdrawFunds(Number(amount), destination);
+    const success = await withdrawFunds(Number(amount), destination, pin);
     if (success) {
       setIsSuccess(true);
       setTimeout(() => {
@@ -43,19 +65,33 @@ const WithdrawModal = ({ isOpen, onClose }) => {
         onClose();
       }, 2000);
     } else {
-      setSubmitError(useSellerStore.getState().error || 'Withdrawal request failed');
+      const errorMsg = useSellerStore.getState().error;
+      if (errorMsg === 'PIN_NOT_SET') {
+        setSubmitError('Please set your withdrawal PIN first. Click Withdraw Funds again to set it.');
+        setIsPinModalOpen(true);
+      } else {
+        setSubmitError(errorMsg || 'Withdrawal request failed');
+      }
     }
   };
 
+
   return (
-    <div className="fixed inset-0 bg-white/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+    <>
+      <PinVerificationModal 
+        isOpen={isPinModalOpen} 
+        onClose={() => setIsPinModalOpen(false)} 
+        onSuccess={executeWithdrawal} 
+        store={useSellerStore} 
+      />
+      <div className="fixed inset-0 bg-black/40 backdrop-blur-md z-[100] flex items-center justify-center p-4">
       <div className="modal-3d-glass rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-[0_0_50px_rgba(255,0,50,0.15)]">
         <div className="flex items-center justify-between p-6 border-b border-[var(--accent-gray)] sticky top-0 bg-[#0a0a0a] z-10">
           <h2 className="text-2xl font-bold text-black flex items-center gap-2">
             <Wallet className="text-[var(--accent-gray)]" />
             Withdraw Funds
           </h2>
-          <button onClick={onClose} className="p-2 bg-gray-50 rounded-full hover:bg-gray-100 text-gray-700 hover:text-black transition-colors">
+          <button onClick={handleClose} className="p-2 bg-gray-50 rounded-full hover:bg-gray-100 text-gray-700 hover:text-black transition-colors">
             <X size={20} />
           </button>
         </div>
@@ -180,6 +216,7 @@ const WithdrawModal = ({ isOpen, onClose }) => {
         </div>
       </div>
     </div>
+    </>
   );
 };
 

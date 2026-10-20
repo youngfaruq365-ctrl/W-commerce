@@ -1,6 +1,19 @@
 const prisma = require('../utils/prismaClient');
 const logger = require('../utils/logger');
 
+// Get unread notification count only (lightweight — used by the notification bell badge)
+exports.getUnreadCount = async (req, res) => {
+    try {
+        const count = await prisma.notification.count({
+            where: { userId: req.user.id, isRead: false }
+        });
+        res.json({ success: true, count, unreadCount: count });
+    } catch (error) {
+        logger.error(`Get Unread Count Error: ${error.message}`);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+};
+
 // Get user notifications
 exports.getNotifications = async (req, res) => {
     try {
@@ -186,7 +199,8 @@ exports.interactWithNotification = async (req, res) => {
         const updated = await prisma.notification.update({
             where: { id: notificationId },
             data: {
-                isRead: true
+                isRead: true,
+                metadata: JSON.stringify(meta)
             }
         });
 

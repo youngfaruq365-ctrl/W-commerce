@@ -72,7 +72,7 @@ const OrderCard = ({ order }) => (
     </div>
     <div className="flex justify-between items-center">
       <p className="text-xs opacity-50">{order.items.length} item{order.items.length !== 1 ? 's' : ''}</p>
-      <p className="font-black text-sm">${order.total.toFixed(2)}</p>
+      <p className="font-black text-sm">₦{order.total.toFixed(2)}</p>
     </div>
   </div>
 );
@@ -82,7 +82,7 @@ const WishlistCard = ({ item, onAddToCart, onRemove }) => (
     <img src={item.image} alt={item.name} className="w-16 h-16 rounded-xl object-cover flex-shrink-0" />
     <div className="flex-1 min-w-0">
       <p className="font-bold text-sm truncate">{item.name}</p>
-      <p className="font-black text-sm" style={{ color: 'var(--s-primary)' }}>${item.price.toFixed(2)}</p>
+      <p className="font-black text-sm" style={{ color: 'var(--s-primary)' }}>₦{item.price.toFixed(2)}</p>
       <div className="flex gap-1 items-center mt-1">
         <Star size={10} fill="currentColor" className="text-yellow-400" />
         <span className="text-xs opacity-50">{item.rating}</span>

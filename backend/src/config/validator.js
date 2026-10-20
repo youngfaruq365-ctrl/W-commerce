@@ -129,7 +129,7 @@ class ConfigValidator {
 
         if (process.env.NODE_ENV === 'production' && this.config.ENABLE_AI_CHAT) {
             if (!process.env.GEMINI_API_KEY) {
-                this.errors.push('❌ FEATURE_FLAG: ENABLE_AI_CHAT=true but GEMINI_API_KEY is not set. AI routes will crash at runtime.');
+                this.warnings.push('⚠️ FEATURE_FLAG: ENABLE_AI_CHAT=true but GEMINI_API_KEY is not set. AI routes will degrade gracefully.');
             }
         }
     }
@@ -211,6 +211,7 @@ class ConfigValidator {
             Paystack:  ['PAYSTACK_SECRET_KEY', 'PAYSTACK_PUBLIC_KEY'],
             Stripe:    ['STRIPE_SECRET_KEY', 'STRIPE_PUBLISHABLE_KEY'],
             Monnify:   ['MONNIFY_API_KEY', 'MONNIFY_SECRET_KEY', 'MONNIFY_CONTRACT_CODE'],
+            RevenueCat: ['REVENUECAT_API_KEY', 'REVENUECAT_WEBHOOK_SECRET']
         };
 
         let hasValidGateway = false;
@@ -254,26 +255,32 @@ class ConfigValidator {
 
     validateSMS() {
         const provider = (process.env.SMS_PROVIDER || 'SIMULATION').toUpperCase();
+        const isProduction = process.env.NODE_ENV === 'production';
+        const allowSimInProd = process.env.ALLOW_SMS_SIMULATION_IN_PRODUCTION === 'true';
+        const required = {
+            TWILIO: ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_VERIFY_SID'],
+            NEXMO:  ['NEXMO_API_KEY', 'NEXMO_API_SECRET'],
+            TERMII: ['TERMII_API_KEY'],
+        };
 
-        if (provider === 'TWILIO') {
-            const missing = ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_VERIFY_SID'].filter(k => !process.env[k]);
-            if (missing.length === 0) {
-                this.config.TWILIO_CONFIGURED = true;
+        const flagSimulation = (reason) => {
+            this.config.ALLOW_SMS_SIMULATION = true;
+            if (isProduction && !allowSimInProd) {
+                this.errors.push(`❌ SMS: ${reason} Phone OTP/2FA will never reach users. Configure a real provider or set ALLOW_SMS_SIMULATION_IN_PRODUCTION=true to override.`);
             } else {
-                this.warnings.push(`⚠️ SMS: SMS_PROVIDER=TWILIO but missing: ${missing.join(', ')}. SMS will be simulated.`);
-                this.config.ALLOW_SMS_SIMULATION = true;
+                this.warnings.push(`⚠️ SMS: ${reason} OTP codes will be logged to console only.`);
             }
-        } else if (provider === 'NEXMO') {
-            const missing = ['NEXMO_API_KEY', 'NEXMO_API_SECRET'].filter(k => !process.env[k]);
+        };
+
+        if (required[provider]) {
+            const missing = required[provider].filter(k => !process.env[k]);
             if (missing.length === 0) {
-                this.config.NEXMO_CONFIGURED = true;
+                this.config[`${provider}_CONFIGURED`] = true;
             } else {
-                this.warnings.push(`⚠️ SMS: SMS_PROVIDER=NEXMO but missing: ${missing.join(', ')}. SMS will be simulated.`);
-                this.config.ALLOW_SMS_SIMULATION = true;
+                flagSimulation(`SMS_PROVIDER=${provider} but missing: ${missing.join(', ')}.`);
             }
         } else {
-            this.warnings.push('⚠️ SMS: SMS_PROVIDER=SIMULATION. OTP codes will be logged to console only.');
-            this.config.ALLOW_SMS_SIMULATION = true;
+            flagSimulation(`SMS_PROVIDER=${provider}.`);
         }
     }
 
@@ -340,7 +347,11 @@ class ConfigValidator {
         } else if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_S3_BUCKET_NAME) {
             this.config.S3_CONFIGURED = true;
         } else {
-            this.warnings.push('⚠️ STORAGE: No cloud storage configured (no Cloudinary or S3). Files will be stored locally under backend/storage/uploads/.');
+            if (process.env.NODE_ENV === 'production') {
+                this.errors.push('❌ STORAGE: No Cloudinary or S3 configured. Local uploads are wiped on redeploy — set CLOUDINARY_CLOUD_NAME/API_KEY/API_SECRET.');
+            } else {
+                this.warnings.push('⚠️ STORAGE: No cloud storage configured (no Cloudinary or S3). Files will be stored locally under backend/storage/uploads/.');
+            }
         }
 
         // Exchange Rate

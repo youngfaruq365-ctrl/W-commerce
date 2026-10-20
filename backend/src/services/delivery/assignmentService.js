@@ -1,7 +1,6 @@
 // src/backend/services/delivery/assignmentService.js
 
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const prisma = require('../../utils/prismaClient');
 const { DELIVERY_STATES } = require('./deliveryStateMachine.js');
 
 const createAssignmentForOrder = async (orderId) => {

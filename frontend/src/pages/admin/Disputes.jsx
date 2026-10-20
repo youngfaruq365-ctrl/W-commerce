@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
-import axios from 'axios';
+import { apiClient as axios } from '../../utils/apiClient';
 import { AlertTriangle, MessageSquare, Unlock, ShieldAlert, Loader2 } from 'lucide-react';
 
 const Disputes = () => {

@@ -1,32 +1,28 @@
-import axios from 'axios';
-
-// Ensure cookies/JWT are sent
-axios.defaults.withCredentials = true;
-
-const api = axios.create({
-    baseURL: '/api/v1/courier',
-    withCredentials: true
-});
+import { apiClient } from '@/utils/apiClient';
 
 export const courierApi = {
     getProfile: async () => {
-        const response = await api.get('/profile');
+        const response = await apiClient.get('/api/v1/courier/profile');
+        return response.data;
+    },
+    
+    getDashboard: async () => {
+        const response = await apiClient.get('/api/v1/delivery/dashboard');
         return response.data;
     },
     
     updateAvailability: async (status) => {
-        const response = await api.patch('/availability', { status });
+        const response = await apiClient.patch('/api/v1/courier/availability', { status });
         return response.data;
     },
 
     getEarnings: async () => {
-        // Now hitting the delivery service endpoint
-        const response = await axios.get('/api/v1/delivery/earnings/summary', { withCredentials: true });
+        const response = await apiClient.get('/api/v1/delivery/earnings/summary');
         return response.data.summary;
     },
     
     getEarningHistory: async () => {
-        const response = await axios.get('/api/v1/delivery/earnings/history', { withCredentials: true });
+        const response = await apiClient.get('/api/v1/delivery/earnings/history');
         return response.data.history;
     }
 };

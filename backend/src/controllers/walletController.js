@@ -25,7 +25,7 @@ exports.getSummary = async (req, res) => {
         res.json({ success: true, summary });
     } catch (error) {
         logger.error(`Wallet summary error: ${error.message}`);
-        res.status(error.statusCode || 500).json({ success: false, message: error.message });
+        res.status(error.statusCode || 500).json({ success: false, message: process.env.NODE_ENV === 'production' ? 'An error occurred' : error.message });
     }
 };
 
@@ -35,7 +35,7 @@ exports.getTransactions = async (req, res) => {
         res.json({ success: true, transactions });
     } catch (error) {
         logger.error(`Wallet transaction error: ${error.message}`);
-        res.status(error.statusCode || 500).json({ success: false, message: error.message });
+        res.status(error.statusCode || 500).json({ success: false, message: process.env.NODE_ENV === 'production' ? 'An error occurred' : error.message });
     }
 };
 
@@ -43,7 +43,7 @@ exports.fundPaystack = async (req, res) => {
     try {
         const idempotencyKey = requireIdempotency(req);
         const amountGong = walletService.normalizeAmount(req.body.amount);
-        const amountNgn = Math.round(amountGong * exchangeRates.getRate('USD', 'NGN'));
+        const amountNgn = amountGong; // Every amount is calculated in Naira
         const reference = `GONG-FUND-${req.user.id.substring(0, 8)}-${Date.now()}`;
         const response = await ApiClient.paystack('/transaction/initialize', 'POST', {
             email: req.user.email,
@@ -69,7 +69,7 @@ exports.fundPaystack = async (req, res) => {
         });
     } catch (error) {
         logger.error(`Paystack wallet funding error: ${error.message}`);
-        res.status(error.statusCode || 500).json({ success: false, message: error.message });
+        res.status(error.statusCode || 500).json({ success: false, message: process.env.NODE_ENV === 'production' ? 'An error occurred' : error.message });
     }
 };
 
@@ -77,7 +77,7 @@ exports.fundFlutterwave = async (req, res) => {
     try {
         const idempotencyKey = requireIdempotency(req);
         const amountGong = walletService.normalizeAmount(req.body.amount);
-        const amountNgn = Math.round(amountGong * exchangeRates.getRate('USD', 'NGN'));
+        const amountNgn = amountGong; // Every amount is calculated in Naira
         const txRef = `GONG-FLW-${req.user.id.substring(0, 8)}-${Date.now()}`;
         const response = await ApiClient.flutterwave('/payments', 'POST', {
             tx_ref: txRef,
@@ -104,7 +104,7 @@ exports.fundFlutterwave = async (req, res) => {
         });
     } catch (error) {
         logger.error(`Flutterwave wallet funding error: ${error.message}`);
-        res.status(error.statusCode || 500).json({ success: false, message: error.message });
+        res.status(error.statusCode || 500).json({ success: false, message: process.env.NODE_ENV === 'production' ? 'An error occurred' : error.message });
     }
 };
 
@@ -112,7 +112,7 @@ exports.fundBankTransfer = async (req, res) => {
     try {
         const idempotencyKey = requireIdempotency(req);
         const amountGong = walletService.normalizeAmount(req.body.amount);
-        const amountNgn = Math.round(amountGong * exchangeRates.getRate('USD', 'NGN'));
+        const amountNgn = amountGong; // Every amount is calculated in Naira
         
         // Generate a transaction reference for tracking
         const txRef = `GONG-BANK-${req.user.id.substring(0, 8)}-${Date.now()}`;
@@ -135,7 +135,7 @@ exports.fundBankTransfer = async (req, res) => {
         });
     } catch (error) {
         logger.error(`Bank transfer wallet funding error: ${error.message}`);
-        res.status(error.statusCode || 500).json({ success: false, message: error.message });
+        res.status(error.statusCode || 500).json({ success: false, message: process.env.NODE_ENV === 'production' ? 'An error occurred' : error.message });
     }
 };
 
@@ -163,7 +163,7 @@ exports.verifyPaystackFunding = async (req, res) => {
         res.json({ success: true, entry });
     } catch (error) {
         logger.error(`Verify Paystack funding error: ${error.message}`);
-        res.status(error.statusCode || 500).json({ success: false, message: error.message });
+        res.status(error.statusCode || 500).json({ success: false, message: process.env.NODE_ENV === 'production' ? 'An error occurred' : error.message });
     }
 };
 
@@ -190,7 +190,7 @@ exports.verifyFlutterwaveFunding = async (req, res) => {
         res.json({ success: true, entry });
     } catch (error) {
         logger.error(`Verify Flutterwave funding error: ${error.message}`);
-        res.status(error.statusCode || 500).json({ success: false, message: error.message });
+        res.status(error.statusCode || 500).json({ success: false, message: process.env.NODE_ENV === 'production' ? 'An error occurred' : error.message });
     }
 };
 
@@ -202,7 +202,7 @@ exports.withdraw = async (req, res) => {
         res.json({ success: true, payout });
     } catch (error) {
         logger.error(`Wallet withdraw error: ${error.message}`);
-        res.status(error.statusCode || 500).json({ success: false, message: error.message });
+        res.status(error.statusCode || 500).json({ success: false, message: process.env.NODE_ENV === 'production' ? 'An error occurred' : error.message });
     }
 };
 
@@ -216,7 +216,7 @@ exports.transfer = async (req, res) => {
         res.json({ success: true, result });
     } catch (error) {
         logger.error(`Wallet transfer error: ${error.message}`);
-        res.status(error.statusCode || 500).json({ success: false, message: error.message });
+        res.status(error.statusCode || 500).json({ success: false, message: process.env.NODE_ENV === 'production' ? 'An error occurred' : error.message });
     }
 };
 
@@ -229,7 +229,7 @@ exports.convert = async (req, res) => {
         res.json({ success: true, result });
     } catch (error) {
         logger.error(`Wallet conversion error: ${error.message}`);
-        res.status(error.statusCode || 500).json({ success: false, message: error.message });
+        res.status(error.statusCode || 500).json({ success: false, message: process.env.NODE_ENV === 'production' ? 'An error occurred' : error.message });
     }
 };
 
@@ -245,14 +245,15 @@ exports.hold = async (req, res) => {
         res.json({ success: true, hold });
     } catch (error) {
         logger.error(`Wallet hold error: ${error.message}`);
-        res.status(error.statusCode || 500).json({ success: false, message: error.message });
+        res.status(error.statusCode || 500).json({ success: false, message: process.env.NODE_ENV === 'production' ? 'An error occurred' : error.message });
     }
 };
 
 exports.releaseHold = async (req, res) => {
     try {
-        requireIdempotency(req);
+        const idempotencyKey = requireIdempotency(req);
         const hold = await walletService.releaseHold(req.body.holdId, {
+            idempotencyKey,
             referenceType: req.body.referenceType,
             referenceId: req.body.referenceId,
             description: 'Admin hold release'
@@ -260,14 +261,15 @@ exports.releaseHold = async (req, res) => {
         res.json({ success: true, hold });
     } catch (error) {
         logger.error(`Wallet release hold error: ${error.message}`);
-        res.status(error.statusCode || 500).json({ success: false, message: error.message });
+        res.status(error.statusCode || 500).json({ success: false, message: process.env.NODE_ENV === 'production' ? 'An error occurred' : error.message });
     }
 };
 
 exports.refundHold = async (req, res) => {
     try {
-        requireIdempotency(req);
+        const idempotencyKey = requireIdempotency(req);
         const hold = await walletService.refundHold(req.body.holdId, {
+            idempotencyKey,
             referenceType: req.body.referenceType,
             referenceId: req.body.referenceId,
             description: 'Admin hold refund'
@@ -275,6 +277,108 @@ exports.refundHold = async (req, res) => {
         res.json({ success: true, hold });
     } catch (error) {
         logger.error(`Wallet refund hold error: ${error.message}`);
-        res.status(error.statusCode || 500).json({ success: false, message: error.message });
+        res.status(error.statusCode || 500).json({ success: false, message: process.env.NODE_ENV === 'production' ? 'An error occurred' : error.message });
+    }
+};
+
+const bcrypt = require('bcryptjs');
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
+const emailService = require('../services/emailService');
+
+exports.setWithdrawPin = async (req, res) => {
+    try {
+        const { pin } = req.body;
+        if (!pin || pin.length < 4) {
+            return res.status(400).json({ success: false, message: 'PIN must be at least 4 digits' });
+        }
+        const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+        if (user.withdrawPin) {
+            return res.status(400).json({ success: false, message: 'PIN is already set. Use reset flow if forgotten.' });
+        }
+        const salt = await bcrypt.genSalt(10);
+        const hashedPin = await bcrypt.hash(pin, salt);
+        await prisma.user.update({
+            where: { id: req.user.id },
+            data: { withdrawPin: hashedPin }
+        });
+        res.json({ success: true, message: 'Withdrawal PIN set successfully' });
+    } catch (error) {
+        logger.error(`setWithdrawPin error: ${error.message}`);
+        res.status(500).json({ success: false, message: 'Failed to set PIN' });
+    }
+};
+
+exports.forgotWithdrawPin = async (req, res) => {
+    try {
+        const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'User not found' });
+        }
+        // Generate a 6-digit OTP
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        // Set expiry to 15 mins
+        const expires = new Date(Date.now() + 15 * 60000);
+        
+        await prisma.user.update({
+            where: { id: user.id },
+            data: {
+                verificationCode: otp,
+                verificationCodeExpires: expires
+            }
+        });
+        
+        logger.info(`[PIN OTP] Generated OTP for user ${user.email}: ${otp}`);
+
+        // Send email safely so transporter/quota failure doesn't crash the request
+        try {
+            if (typeof emailService.sendVerificationEmail === 'function') {
+                await emailService.sendVerificationEmail(user, otp, 'PIN Reset');
+            } else if (typeof emailService.sendVerificationCode === 'function') {
+                await emailService.sendVerificationCode(user.email, user.fullName, otp);
+            }
+        } catch (mailError) {
+            logger.warn(`Failed to send email verification for PIN reset: ${mailError.message}`);
+        }
+        
+        res.json({ 
+            success: true, 
+            message: 'OTP sent to your email',
+            devOtp: otp
+        });
+    } catch (error) {
+        logger.error(`forgotWithdrawPin error: ${error.message}`);
+        res.status(500).json({ success: false, message: 'Failed to send OTP' });
+    }
+};
+
+exports.resetWithdrawPin = async (req, res) => {
+    try {
+        const { otp, newPin } = req.body;
+        if (!newPin || newPin.length < 4) {
+            return res.status(400).json({ success: false, message: 'New PIN must be at least 4 digits' });
+        }
+        
+        const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+        if (!user.verificationCode || user.verificationCode !== otp || new Date() > user.verificationCodeExpires) {
+            return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
+        }
+        
+        const salt = await bcrypt.genSalt(10);
+        const hashedPin = await bcrypt.hash(newPin, salt);
+        
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { 
+                withdrawPin: hashedPin,
+                verificationCode: null,
+                verificationCodeExpires: null
+            }
+        });
+        
+        res.json({ success: true, message: 'Withdrawal PIN reset successfully' });
+    } catch (error) {
+        logger.error(`resetWithdrawPin error: ${error.message}`);
+        res.status(500).json({ success: false, message: 'Failed to reset PIN' });
     }
 };

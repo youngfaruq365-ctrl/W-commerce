@@ -45,7 +45,7 @@ exports.getProfile = async (req, res) => {
         res.json({ success: true, user });
     } catch (error) {
         logger.error(`Get Profile Error: ${error.message}`);
-        res.status(500).json({ success: false, message: 'Server Error' });
+        res.status(500).json({ success: false, message: 'Server Error', error: error.message, stack: error.stack });
     }
 };
 
@@ -109,12 +109,22 @@ exports.getMemberProfile = async (req, res) => {
         const user = await prisma.user.findUnique({
             where: { id: userId },
             include: {
-                store: true
+                store: true,
+                addresses: {
+                    where: { isDefault: true },
+                    take: 1
+                }
             }
         });
 
         if (!user) {
             return res.status(404).json({ success: false, message: 'User not found' });
+        }
+
+        let formattedAddress = null;
+        if (user.addresses && user.addresses.length > 0) {
+            const a = user.addresses[0];
+            formattedAddress = `${a.street}, ${a.city}, ${a.state} ${a.postalCode}, ${a.country}`;
         }
 
         const publicProfile = {
@@ -125,7 +135,10 @@ exports.getMemberProfile = async (req, res) => {
             isVerified: user.isVerified,
             storeName: user.store?.storeName || null,
             rating: user.store?.averageRating || 0,
-            country: user.store?.country || null
+            country: user.store?.country || null,
+            email: user.email,
+            phone: user.phone,
+            address: formattedAddress
         };
 
         res.json({ success: true, user: publicProfile });
@@ -167,6 +180,7 @@ exports.requestWalletWithdrawal = async (req, res) => {
     try {
         const amount = Number(req.body.amount);
         const destination = String(req.body.destination || '').trim();
+        const { bankCode, accountNumber, accountName } = req.body;
 
         if (!Number.isFinite(amount) || amount <= 0) {
             return res.status(400).json({ success: false, message: 'Invalid amount' });
@@ -176,7 +190,7 @@ exports.requestWalletWithdrawal = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Withdrawal destination is required' });
         }
 
-        const payout = await payoutService.requestPayout(req.user.id, amount, destination);
+        const payout = await payoutService.requestPayout(req.user.id, amount, destination, bankCode, accountNumber, accountName);
         const summary = await walletService.getSummary(req.user.id);
 
         res.json({
@@ -187,7 +201,7 @@ exports.requestWalletWithdrawal = async (req, res) => {
         });
     } catch (error) {
         logger.error(`Wallet Withdrawal Error: ${error.message}`);
-        res.status(500).json({ success: false, message: 'Failed to request withdrawal' });
+        res.status(error.statusCode || 500).json({ success: false, message: process.env.NODE_ENV === 'production' ? 'Failed to request withdrawal' : error.message });
     }
 };
 
@@ -322,6 +336,7 @@ exports.getBuyerDashboard = async (req, res) => {
 
         const recommendedProducts = await prisma.product.findMany({
             take: 4,
+            where: { isArchived: false, store: { approvalStatus: 'APPROVED' } },
             orderBy: { createdAt: 'desc' },
             include: { store: true, images: { take: 1 } }
         });
@@ -407,17 +422,43 @@ exports.uploadAvatar = async (req, res) => {
 exports.updateProfile = async (req, res) => {
     try {
         const userId = req.user.id;
-        const { fullName, phone, notificationPrefs, shippingAddress, shippingCity, shippingState, shippingZip, shippingCountry } = req.body;
+        const { fullName, phone, notificationPrefs, shippingAddress, shippingCity, shippingState, shippingZip, shippingCountry, username, dob, gender, bio, instagram, twitter, website } = req.body;
 
         const updateData = {};
-        if (fullName) updateData.fullName = fullName;
-        if (phone !== undefined) updateData.phone = phone;
+        if (fullName) updateData.fullName = fullName.trim();
+        if (phone !== undefined) updateData.phone = phone ? phone.trim() : null;
         if (notificationPrefs) updateData.notificationPrefs = notificationPrefs;
+
+        if (username !== undefined) {
+            const cleanUsername = typeof username === 'string' ? username.trim().replace(/^@/, '') : null;
+            if (!cleanUsername) {
+                updateData.username = null;
+            } else {
+                // Check if username is taken by another user
+                const existing = await prisma.user.findFirst({
+                    where: {
+                        username: cleanUsername,
+                        NOT: { id: userId }
+                    }
+                });
+                if (existing) {
+                    return res.status(400).json({ success: false, message: 'Username is already taken' });
+                }
+                updateData.username = cleanUsername;
+            }
+        }
+
+        if (dob !== undefined) updateData.dob = dob ? String(dob).trim() : null;
+        if (gender !== undefined) updateData.gender = gender;
+        if (bio !== undefined) updateData.bio = bio;
+        if (instagram !== undefined) updateData.instagram = instagram;
+        if (twitter !== undefined) updateData.twitter = twitter;
+        if (website !== undefined) updateData.website = website;
 
         const user = await prisma.user.update({
             where: { id: userId },
             data: updateData,
-            select: { id: true, fullName: true, email: true, phone: true, avatarUrl: true, role: true }
+            select: { id: true, fullName: true, email: true, phone: true, avatarUrl: true, role: true, username: true }
         });
 
         if (shippingAddress || shippingCity || shippingState || shippingZip || shippingCountry) {
@@ -432,12 +473,12 @@ exports.updateProfile = async (req, res) => {
                 await prisma.address.update({
                     where: { id: defaultAddress.id },
                     data: {
-                        street: shippingAddress || defaultAddress.street,
-                        city: shippingCity || defaultAddress.city,
-                        state: shippingState || defaultAddress.state,
-                        postalCode: shippingZip || defaultAddress.postalCode,
-                        country: shippingCountry || defaultAddress.country,
-                        type: defaultAddress.type === 'SHIPPING' ? 'Home' : defaultAddress.type,
+                        street: shippingAddress !== undefined ? shippingAddress : defaultAddress.street,
+                        city: shippingCity !== undefined ? shippingCity : defaultAddress.city,
+                        state: shippingState !== undefined ? shippingState : defaultAddress.state,
+                        postalCode: shippingZip !== undefined ? shippingZip : defaultAddress.postalCode,
+                        country: shippingCountry !== undefined ? shippingCountry : defaultAddress.country,
+                        type: defaultAddress.type || 'SHIPPING',
                         isDefault: true
                     }
                 });
@@ -445,7 +486,7 @@ exports.updateProfile = async (req, res) => {
                 await prisma.address.create({
                     data: {
                         userId,
-                        type: 'Home',
+                        type: 'SHIPPING',
                         isDefault: true,
                         street: shippingAddress || '',
                         city: shippingCity || '',
@@ -460,7 +501,14 @@ exports.updateProfile = async (req, res) => {
         res.json({ success: true, message: 'Profile updated successfully', user });
     } catch (error) {
         logger.error(`Update Profile Error: ${error.message}`);
-        res.status(500).json({ success: false, message: 'Failed to update profile' });
+        if (error.code === 'P2002') {
+            const target = error.meta?.target || [];
+            if (target.includes('username') || String(error.message).includes('username')) {
+                return res.status(400).json({ success: false, message: 'Username is already taken' });
+            }
+            return res.status(400).json({ success: false, message: 'A unique field conflict occurred' });
+        }
+        res.status(500).json({ success: false, message: error.message || 'Failed to update profile' });
     }
 };
 
@@ -470,7 +518,7 @@ exports.getAddresses = async (req, res) => {
     try {
         const addresses = await prisma.address.findMany({
             where: { userId: req.user.id },
-            orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }]
+            orderBy: [{ isDefault: 'desc' }]
         });
         res.json({ success: true, addresses });
     } catch (error) {

@@ -1,3 +1,4 @@
+import { PLACEHOLDER_IMAGE } from '@/constants/placeholders';
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, useInView } from 'framer-motion';
 import {
@@ -157,8 +158,8 @@ const EnterpriseCard = ({ product, onAddToCart, accent='#6366f1', i=0 }) => {
       style={{background:'#0d0020',borderColor:'rgba(99,102,241,0.1)'}}
       whileHover={{borderColor:`${accent}35`,boxShadow:`0 0 24px ${accent}0c`}}>
       <div className="aspect-square overflow-hidden relative" style={{background:'#150030'}}>
-        <img src={product.images?.[0]?.url||'/assets/splash_3d_box_1781971684931.png'} alt={product.title}
-          onError={e=>{e.target.onerror=null;e.target.src='/assets/splash_3d_box_1781971684931.png';}}
+        <img src={product.images?.[0]?.url||PLACEHOLDER_IMAGE} alt={product.title}
+          onError={e=>{e.target.onerror=null;e.target.src={PLACEHOLDER_IMAGE};}}
           className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"/>
         <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
           style={{background:'linear-gradient(to top, rgba(13,0,32,0.85) 0%, transparent 60%)'}}/>
@@ -286,7 +287,7 @@ const Ultra2ProPortfolio = ({ store, brandConfig, handleAddToCart, handleFollow,
                   {products[0] && (
                     <div className="flex items-center gap-3 p-3 rounded-xl border" style={{background:'#08000f',borderColor:`${accent}15`}}>
                       <div className="w-14 h-14 rounded-xl overflow-hidden flex-shrink-0 border" style={{borderColor:`${accent}15`}}>
-                        <img src={products[0].images?.[0]?.url||'/assets/splash_3d_box_1781971684931.png'} alt="" onError={e=>{e.target.onerror=null;e.target.src='/assets/splash_3d_box_1781971684931.png';}} className="w-full h-full object-cover"/>
+                        <img src={products[0].images?.[0]?.url||PLACEHOLDER_IMAGE} alt="" onError={e=>{e.target.onerror=null;e.target.src={PLACEHOLDER_IMAGE};}} className="w-full h-full object-cover"/>
                       </div>
                       <div>
                         <p className="text-xs font-bold text-white line-clamp-1">{products[0].title}</p>
@@ -351,8 +352,8 @@ const Ultra2ProPortfolio = ({ store, brandConfig, handleAddToCart, handleFollow,
                     <div className="flex flex-col sm:flex-row gap-3 sm:p-5 items-center flex-1">
                       <div className="w-full sm:w-64 h-64 rounded-2xl overflow-hidden flex-shrink-0 border shadow-2xl"
                         style={{background:'#150030',borderColor:`${accent}20`,boxShadow:`0 0 40px ${accent}18`}}>
-                        <img src={products[0].images?.[0]?.url||'/assets/splash_3d_box_1781971684931.png'} alt={products[0].title}
-                          onError={e=>{e.target.onerror=null;e.target.src='/assets/splash_3d_box_1781971684931.png';}}
+                        <img src={products[0].images?.[0]?.url||PLACEHOLDER_IMAGE} alt={products[0].title}
+                          onError={e=>{e.target.onerror=null;e.target.src={PLACEHOLDER_IMAGE};}}
                           className="w-full h-full object-cover"/>
                       </div>
                       <div className="flex-1">
@@ -489,8 +490,8 @@ const Ultra2ProPortfolio = ({ store, brandConfig, handleAddToCart, handleFollow,
                       <motion.div key={p.id} variants={fadeUp} className="flex gap-3 sm:p-4 rounded-2xl border p-3 sm:p-4 transition"
                         style={{background:'#0d0020',borderColor:`${accent}15`}}>
                         <div className="w-20 h-20 rounded-xl overflow-hidden flex-shrink-0" style={{background:'#150030'}}>
-                          <img src={p.images?.[0]?.url||'/assets/splash_3d_box_1781971684931.png'} alt={p.title}
-                            onError={e=>{e.target.onerror=null;e.target.src='/assets/splash_3d_box_1781971684931.png';}}
+                          <img src={p.images?.[0]?.url||PLACEHOLDER_IMAGE} alt={p.title}
+                            onError={e=>{e.target.onerror=null;e.target.src={PLACEHOLDER_IMAGE};}}
                             className="w-full h-full object-cover"/>
                         </div>
                         <div className="flex-1">

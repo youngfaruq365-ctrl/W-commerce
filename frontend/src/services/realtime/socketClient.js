@@ -26,7 +26,7 @@ class SocketClient {
         });
 
         this.socket.on('connect', () => {
-            console.log('Connected to realtime delivery namespace');
+            if (import.meta.env.DEV) console.log('Connected to realtime delivery namespace');
             this.isConnected = true;
             this._notifyStatusChange('connected');
         });

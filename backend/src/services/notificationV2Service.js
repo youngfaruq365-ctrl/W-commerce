@@ -45,6 +45,11 @@ function getSmsService() {
     if (!_smsService) _smsService = require('./smsService');
     return _smsService;
 }
+let _pushService = null;
+function getPushService() {
+    if (!_pushService) _pushService = require('./pushService');
+    return _pushService;
+}
 
 // ─── Core Notify ─────────────────────────────────────────────────────────────
 
@@ -97,17 +102,16 @@ async function notify(userId, payload) {
                 type:       payload.type,
                 title:      payload.title,
                 body:       payload.body,
-                channel:    payload.channel    || 'in_app',
-                actionUrl:  payload.actionUrl  || payload.linkUrl || null,
-                linkUrl:    payload.linkUrl    || payload.actionUrl || null,
-                imageUrl:   payload.imageUrl   || null,
-                orderId:    payload.orderId    || null,
-                metadata:   payload.metadata
-                    ? JSON.stringify(payload.metadata)
-                    : null,
-                expiresAt:  payload.expiresAt  || null,
+                linkUrl:    payload.linkUrl || payload.actionUrl || null
             },
         });
+
+        // Emit real-time in-app notification via socket
+        const socketService = require('./socketService');
+        const io = socketService.getIO();
+        if (io) {
+            io.to(String(userId)).emit('notification', notification);
+        }
 
         // Attempt multi-channel delivery asynchronously
         _dispatchChannels(notification, payload).catch(err => {
@@ -132,30 +136,55 @@ async function notify(userId, payload) {
 async function notifyMany(userIds, payload) {
     if (!Array.isArray(userIds) || userIds.length === 0) return;
 
-    // Use createMany for efficiency (no individual dispatch — fire via outbox cron)
-    const rows = userIds
-        .filter(id => id && id !== 'PLATFORM')
-        .map(userId => ({
-            userId,
-            type:      payload.type,
-            title:     payload.title,
-            body:      payload.body,
-            channel:   payload.channel   || 'in_app',
-            actionUrl: payload.actionUrl || payload.linkUrl || null,
-            linkUrl:   payload.linkUrl   || payload.actionUrl || null,
-            imageUrl:  payload.imageUrl  || null,
-            orderId:   payload.orderId   || null,
-            metadata:  payload.metadata ? JSON.stringify(payload.metadata) : null,
-            expiresAt: payload.expiresAt || null,
-        }));
+    const uniqueIds = [...new Set(userIds.filter(id => id && id !== 'PLATFORM').map(String))];
+    if (uniqueIds.length === 0) return;
 
-    if (rows.length === 0) return;
+    // Only columns that exist on the Notification model (id, userId, title, body, type, isRead, linkUrl, data).
+    const extra = {};
+    if (payload.orderId)  extra.orderId  = payload.orderId;
+    if (payload.metadata) extra.metadata = payload.metadata;
+    const data = Object.keys(extra).length ? JSON.stringify(extra) : null;
 
     try {
-        await prisma.notification.createMany({ data: rows, skipDuplicates: false });
-        logger.info(`[NotificationV2] Batch notified ${rows.length} users: ${payload.type}`);
+        // Individual creates (not createMany) so we get the created rows back and can push each over the socket.
+        const created = await Promise.all(uniqueIds.map(userId =>
+            prisma.notification.create({
+                data: {
+                    userId,
+                    type:    payload.type,
+                    title:   payload.title,
+                    body:    payload.body,
+                    linkUrl: payload.linkUrl || payload.actionUrl || null,
+                    data,
+                },
+            }).catch(err => {
+                logger.error(`[NotificationV2] notifyMany row failed for ${userId}: ${err.message}`);
+                return null;
+            })
+        ));
+
+        try {
+            const io = require('./socketService').getIO();
+            if (io) {
+                created.filter(Boolean).forEach(n => io.to(String(n.userId)).emit('notification', n));
+            }
+        } catch (_) { /* socket not ready */ }
+
+        logger.info(`[NotificationV2] Batch notified ${created.filter(Boolean).length} users: ${payload.type}`);
     } catch (err) {
         logger.error(`[NotificationV2] notifyMany failed: ${err.message}`);
+    }
+}
+
+/**
+ * Notify every ADMIN user (in-app + live socket push).
+ */
+async function notifyAdmins(payload) {
+    try {
+        const admins = await prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } });
+        await notifyMany(admins.map(a => a.id), payload);
+    } catch (err) {
+        logger.error(`[NotificationV2] notifyAdmins failed: ${err.message}`);
     }
 }
 
@@ -212,7 +241,6 @@ async function getUnreadCount(userId) {
         where: {
             userId,
             isRead: false,
-            OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
         },
     });
 }
@@ -227,7 +255,7 @@ async function _dispatchChannels(notification, payload) {
     // Fetch user contact details
     const user = await prisma.user.findUnique({
         where:  { id: notification.userId },
-        select: { email: true, phone: true, fullName: true, notificationPrefs: true, deviceToken: true },
+        select: { email: true, phone: true, fullName: true, notificationPrefs: true, pushSubscription: true },
     }).catch(() => null);
 
     if (!user) return;
@@ -258,44 +286,18 @@ async function _dispatchChannels(notification, payload) {
         }
 
         if (channel === 'push') {
-            if (!user.deviceToken) {
-                logger.debug(`[NotificationV2] Push skipped: user ${notification.userId} has no device token`);
-            } else {
-                const webpush = require('web-push');
-                const publicVapidKey = process.env.VAPID_PUBLIC_KEY || 'dummy-public-key';
-                const privateVapidKey = process.env.VAPID_PRIVATE_KEY || 'dummy-private-key';
-                const subject = process.env.VAPID_SUBJECT || 'mailto:admin@example.com';
-                
-                if (publicVapidKey !== 'dummy-public-key' && privateVapidKey !== 'dummy-private-key') {
-                    webpush.setVapidDetails(subject, publicVapidKey, privateVapidKey);
+            await getPushService().sendPushNotification(notification.userId, {
+                title: notification.title,
+                body: notification.body,
+                data: {
+                    actionUrl: notification.actionUrl,
+                    type: notification.type
                 }
-
-                let pushSubscription;
-                try {
-                    pushSubscription = JSON.parse(user.deviceToken);
-                } catch (e) {
-                    logger.error(`[NotificationV2] Invalid device token format for user ${notification.userId}`);
-                    pushSubscription = null;
-                }
-
-                if (pushSubscription) {
-                    const payload = JSON.stringify({
-                        title: notification.title,
-                        body: notification.body,
-                        actionUrl: notification.actionUrl
-                    });
-
-                    await webpush.sendNotification(pushSubscription, payload);
-                    logger.debug(`[NotificationV2] Push notification sent to ${notification.userId}`);
-                }
-            }
+            });
         }
 
-        // Mark as delivered
-        await prisma.notification.update({
-            where: { id: notification.id },
-            data:  { deliveredAt: new Date() },
-        }).catch(() => {});
+        // Mark as delivered (no-op since Notification schema has no deliveredAt)
+        // await prisma.notification.update({ where: { id: notification.id }, data: {} }).catch(() => {});
 
     } catch (err) {
         logger.error(`[NotificationV2] Channel "${channel}" delivery failed for ${notification.id}: ${err.message}`);
@@ -318,13 +320,52 @@ async function _dispatchChannels(notification, payload) {
     }
 }
 
+async function createWorkflowNotifications({ userId, orderId = null, message, type, channels = ['in_app'] }) {
+    const created = [];
+    for (const channel of [...new Set(channels)]) {
+        const notification = await notify(userId, {
+            type,
+            title: type === 'repeat_purchase_reminder' ? 'Reorder Reminder' : (type === 'followed_seller_flash_deal' ? 'Flash Deal Alert' : 'Notification'),
+            body: message,
+            channel,
+            orderId
+        });
+        if (notification) created.push(notification);
+    }
+    return created;
+}
+
+async function sendRepeatPurchaseReminder({ userId, productTitle, orderId = null }) {
+    return createWorkflowNotifications({
+        userId,
+        orderId,
+        message: `${productTitle} may be running low. Reorder now before stock tightens.`,
+        type: 'repeat_purchase_reminder',
+        channels: ['in_app', 'email', 'push']
+    });
+}
+
+async function sendFollowedSellerDealAlert({ userId, productTitle, orderId = null }) {
+    return createWorkflowNotifications({
+        userId,
+        orderId,
+        message: `${productTitle} just went live from a seller you follow.`,
+        type: 'followed_seller_flash_deal',
+        channels: ['in_app', 'email', 'push']
+    });
+}
+
 // ─── Exports ──────────────────────────────────────────────────────────────────
 
 module.exports = {
     notify,
     notifyMany,
+    notifyAdmins,
     getUserNotifications,
     markRead,
     markAllRead,
     getUnreadCount,
+    createWorkflowNotifications,
+    sendRepeatPurchaseReminder,
+    sendFollowedSellerDealAlert,
 };

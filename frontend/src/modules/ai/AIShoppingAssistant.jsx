@@ -5,7 +5,7 @@ import { WButton, WCard, WBadge } from '../../design/components';
 import { apiClient } from '../../utils/apiClient';
 
 const SUGGESTED_QUESTIONS = [
-  'Find me gaming headphones under $80',
+  'Find me gaming headphones under ₦80',
   "What's trending in fashion?",
   'Help me find a gift for my mom',
   'Best laptop for video editing?',
@@ -26,7 +26,7 @@ function ProductCardInline({ product }) {
         </div>
       </div>
       <div className="text-right shrink-0">
-        <p className="text-white font-bold text-sm">${product.price}</p>
+        <p className="text-white font-bold text-sm">₦{product.price}</p>
         <button onClick={() => toast('Feature coming soon', { icon: '🚀' })}  className="text-[10px] text-[var(--text-muted)] hover:text-white transition-colors mt-0.5">Add to cart</button>
       </div>
     </div>

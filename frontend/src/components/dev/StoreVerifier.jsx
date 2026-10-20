@@ -76,7 +76,7 @@ export const StoreVerifier = () => {
                   </td>
                   <td className="px-6 py-4 font-bold text-gray-900">{store.id}</td>
                   <td className="px-6 py-4 text-gray-500 capitalize">{store.engine}</td>
-                  <td className="px-6 py-4 font-black">${store.price}</td>
+                  <td className="px-6 py-4 font-black">₦{store.price}</td>
                   <td className="px-6 py-4 text-sm text-gray-500 font-mono">
                     {store.profile?.hero} + {store.profile?.grid} + {store.profile?.nav}
                   </td>

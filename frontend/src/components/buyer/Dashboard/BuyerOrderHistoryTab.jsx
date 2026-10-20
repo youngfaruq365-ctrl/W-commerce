@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { History, Star, ShoppingCart } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useCartStore } from '../../../../store/cartStore';
+import { useCartStore } from '../../../store/cartStore';
+import { PLACEHOLDER_IMAGE } from '@/constants/placeholders';
 
 const HISTORY_STATUSES = ['DELIVERED', 'COMPLETED', 'CANCELLED', 'REFUNDED', 'REJECTED'];
 
@@ -39,7 +40,7 @@ const BuyerOrderHistoryTab = ({ orders = [], onLeaveReview }) => {
             <div className="flex gap-4">
               <div className="w-16 h-16 bg-white rounded-lg overflow-hidden border border-[var(--border-color)]">
                 <img
-                  src={order.items?.[0]?.product?.images?.[0]?.url || 'https://placehold.co/100x100/111/333?text=No+Image'}
+                  src={order.items?.[0]?.product?.images?.[0]?.url || PLACEHOLDER_IMAGE}
                   className="w-full h-full object-cover grayscale"
                   alt="product"
                   loading="lazy"

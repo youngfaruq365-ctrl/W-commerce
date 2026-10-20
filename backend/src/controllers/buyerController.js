@@ -1,6 +1,6 @@
 const prisma = require('../utils/prismaClient');
 const logger = require('../utils/logger');
-const notificationService = require('../services/notificationService');
+const notificationService = require('../services/notificationV2Service');
 const buyerIntelligenceService = require('../services/buyerIntelligenceService');
 
 function formatOrderForSeller(order, sellerId) {

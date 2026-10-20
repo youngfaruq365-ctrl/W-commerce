@@ -51,7 +51,7 @@ const StoreCard = ({ store, onClick }) => {
             {store.name}
           </h3>
           <div className="font-bold text-black text-[16px] md:text-[18px] whitespace-nowrap">
-            ${store.price} <span className="text-xs text-gray-500 font-normal">/3mo</span>
+            ₦{store.price} <span className="text-xs text-gray-500 font-normal">/3mo</span>
           </div>
         </div>
         

@@ -261,7 +261,7 @@ class RecommendationService {
 
             const products = await prisma.product.findMany({
                 where: {
-                    stock: { gt: 0 },
+                    stock: { gt: 0 }, store: { approvalStatus: 'APPROVED' }, isArchived: false,
                     ...(signals.excludeIds.size > 0 ? { id: { notIn: [...signals.excludeIds] } } : {}),
                     ...(preferredCategories.length > 0 ? {
                         OR: [
@@ -309,7 +309,7 @@ class RecommendationService {
         const alternatives = await prisma.product.findMany({
             where: {
                 id: { not: productId },
-                stock: { gt: 0 },
+                stock: { gt: 0 }, store: { approvalStatus: 'APPROVED' }, isArchived: false,
                 OR: [
                     referenceProduct.productGroupId ? { productGroupId: referenceProduct.productGroupId } : undefined,
                     referenceProduct.sku ? { sku: referenceProduct.sku } : undefined,
@@ -358,7 +358,7 @@ class RecommendationService {
             const candidates = await prisma.product.findMany({
                 where: {
                     id: { not: productId },
-                    stock: { gt: 0 },
+                    stock: { gt: 0 }, store: { approvalStatus: 'APPROVED' }, isArchived: false,
                     category: referenceProduct.category
                 },
                 include: baseInclude(),
@@ -425,7 +425,7 @@ class RecommendationService {
             const products = await prisma.product.findMany({
                 where: {
                     id: { in: topProductIds },
-                    stock: { gt: 0 }
+                    stock: { gt: 0 }, store: { approvalStatus: 'APPROVED' }, isArchived: false
                 },
                 include: baseInclude()
             });
@@ -453,7 +453,7 @@ class RecommendationService {
             const products = await prisma.product.findMany({
                 where: {
                     id: { in: browsingHistory.slice(0, limit) },
-                    stock: { gt: 0 }
+                    stock: { gt: 0 }, store: { approvalStatus: 'APPROVED' }, isArchived: false
                 },
                 include: baseInclude()
             });
@@ -539,7 +539,7 @@ class RecommendationService {
     static async getFallbackRecommendations(limit = 8) {
         const products = await prisma.product.findMany({
             where: {
-                stock: { gt: 0 }
+                stock: { gt: 0 }, store: { approvalStatus: 'APPROVED' }, isArchived: false
             },
             include: baseInclude(),
             take: limit,

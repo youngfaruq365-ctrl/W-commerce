@@ -23,6 +23,7 @@ const notificationEngine = require('../notifications/marketplaceNotificationEngi
  const disputeService = require('./disputeService');
  const wishlistService = require('./wishlistService');
  const cancelExpiredOrders = require('../cron/cancelExpiredOrders');
+ const { runReconciliation } = require('../controllers/webhookController');
 
  // ... existing code for escrow, verification, pools, etc. remains above ...
 
@@ -107,6 +108,7 @@ const notificationEngine = require('../notifications/marketplaceNotificationEngi
      setInterval(processWishlistAlerts, 2 * 60 * 60 * 1000); // Every 2 hours
      setInterval(generateSellerInsights, 24 * 60 * 60 * 1000); // Daily at midnight (approx)
      setInterval(autoEscalateDisputes, 30 * 60 * 1000); // Every 30 min
+     setInterval(runReconciliation, 15 * 60 * 1000); // Every 15 min
 
      logger.info('⏰ Cron Jobs Started:');
      logger.info('   - Escrow Release Check (every 5 min)');
@@ -143,7 +145,7 @@ const checkEscrowStatus = async () => {
                 paymentStatus: 'HELD',
                 escrowReleaseAt: { lte: new Date() },
                 escrowReleasedAt: null,
-                dispute: null
+                dispute: { is: null }
             },
             select: { id: true }
         });
@@ -156,7 +158,9 @@ const checkEscrowStatus = async () => {
             where: {
                 status: { in: ['DELIVERED', 'COMPLETED'] },
                 paymentStatus: 'HELD',
-                escrowReleaseAt: { lte: new Date() }
+                escrowPayment: {
+                    releaseScheduledAt: { lte: new Date() }
+                }
             },
             select: { id: true }
         });
@@ -215,7 +219,7 @@ const sendVerificationReminders = async () => {
                     { expiresIn: '12h' }
                 );
                 const port = process.env.PORT || 3000;
-                const verifyLink = `http://localhost:${port}/api/auth/verify?token=${verificationToken}`;
+                const verifyLink = `${(process.env.BACKEND_URL || process.env.API_URL || `http://localhost:${port}`).replace(/\/+$/, '').replace(/\/api$/, '')}/api/auth/verify?token=${verificationToken}`;
 
                 await emailService.sendVerificationReminder(user.email, {
                     verifyLink,
@@ -411,9 +415,240 @@ const resetFlashDealViewerCounts = async () => {
 };
 
 /**
- * Escalate unattended packing issues after 24 hours.
- * Runs every 15 minutes.
+ * Check for out-of-stock products:
+ * - Archive (hide) the product so it doesn't appear in listings
+ * - Cancel any active flash deals on that product
+ * - Notify the seller to restock or remove the product
+ * Runs every 5 minutes.
  */
+
+/**
+ * Permanently and completely deletes a product and all related records from the database
+ */
+const completelyDeleteProduct = async (productId) => {
+    // 1. Clean up pool and pool participants if any
+    try {
+        const pool = await prisma.pool.findUnique({ where: { productId } });
+        if (pool) {
+            await prisma.poolParticipant.deleteMany({ where: { poolId: pool.id } });
+            await prisma.pool.delete({ where: { id: pool.id } });
+        }
+    } catch (e) {
+        logger.warn(`[DELETE_PRODUCT] Pool cleanup note for ${productId}: ${e.message}`);
+    }
+
+    // 2. Unlink promo codes and messages
+    try {
+        await prisma.promoCode.updateMany({ where: { productId }, data: { productId: null } });
+        await prisma.message.updateMany({ where: { productId }, data: { productId: null } });
+    } catch (e) {
+        logger.warn(`[DELETE_PRODUCT] Unlink promo/message note for ${productId}: ${e.message}`);
+    }
+
+    // 3. Delete in transaction to avoid foreign key violations
+    await prisma.$transaction([
+        prisma.cartItem.deleteMany({ where: { productId } }),
+        prisma.wishlist.deleteMany({ where: { productId } }),
+        prisma.productImage.deleteMany({ where: { productId } }),
+        prisma.productVideo.deleteMany({ where: { productId } }),
+        prisma.productOption.deleteMany({ where: { productId } }),
+        prisma.productOffer.deleteMany({ where: { productId } }),
+        prisma.productQuestion.deleteMany({ where: { productId } }),
+        prisma.productComparison.deleteMany({ where: { OR: [{ productId }, { comparedProductId: productId }] } }),
+        prisma.productModelAsset.deleteMany({ where: { productId } }),
+        prisma.productUrgency.deleteMany({ where: { productId } }),
+        prisma.review.deleteMany({ where: { productId } }),
+        prisma.adDiscountSession.deleteMany({ where: { productId } }),
+        prisma.restockNotification.deleteMany({ where: { productId } }),
+        prisma.inventoryReservation.deleteMany({ where: { productId } }),
+        prisma.fulfillmentItem.deleteMany({ where: { productId } }),
+        prisma.feedPost.deleteMany({ where: { productId } }),
+        prisma.buyerProductInteraction.deleteMany({ where: { productId } }),
+        prisma.orderItem.deleteMany({ where: { productId } }),
+        prisma.product.delete({ where: { id: productId } })
+    ]);
+};
+
+const cleanupArchivedProducts = async () => {
+    try {
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        
+        // Find products that are archived, out of stock, and updated more than 24h ago
+        const expiredProducts = await prisma.product.findMany({
+            where: {
+                isArchived: true,
+                stock: { lte: 0 },
+                updatedAt: { lte: twentyFourHoursAgo }
+            }
+        });
+
+        if (expiredProducts.length === 0) return;
+
+        let deletedCount = 0;
+        for (const p of expiredProducts) {
+            try {
+                await completelyDeleteProduct(p.id);
+                deletedCount++;
+            } catch (delErr) {
+                logger.warn(`[CRON] Skipped delete for archived product ${p.id}: ${delErr.message}`);
+            }
+        }
+
+        if (deletedCount > 0) {
+            logger.info(`[CRON] Permanently deleted ${deletedCount} of ${expiredProducts.length} archived product(s) older than 24 hours`);
+        }
+    } catch (err) {
+        logger.error('[CRON] Cleanup archived products error:', err.message);
+    }
+};
+
+const checkOutOfStockProducts = async () => {
+    try {
+        const now = Date.now();
+        const threeHoursAgo = new Date(now - 3 * 60 * 60 * 1000);
+        const fortyEightHoursAgo = new Date(now - 48 * 60 * 60 * 1000);
+
+        // Find all products that are out of stock (stock <= 0)
+        const outOfStockProducts = await prisma.product.findMany({
+            where: {
+                stock: { lte: 0 }
+            },
+            include: {
+                store: { select: { sellerId: true, storeName: true } },
+                flashDeals: {
+                    where: { isActive: true }
+                }
+            },
+            take: 200
+        });
+
+        if (outOfStockProducts.length === 0) return;
+
+        let notifiedCount = 0;
+        let deletedCount = 0;
+
+        for (const product of outOfStockProducts) {
+            const sellerId = product.store?.sellerId;
+
+            // Deactivate any active flash sales on out-of-stock products
+            if (product.flashDeals && product.flashDeals.length > 0) {
+                try {
+                    await prisma.flashDeal.updateMany({
+                        where: { productId: product.id, isActive: true },
+                        data: { isActive: false }
+                    });
+                } catch (fdErr) {
+                    logger.warn(`[OOS] Failed to deactivate flash deals for ${product.id}: ${fdErr.message}`);
+                }
+            }
+
+            // Check if product has been out of stock for 48 hours or more
+            const isExpired48h = new Date(product.updatedAt).getTime() <= fortyEightHoursAgo.getTime();
+
+            if (isExpired48h) {
+                logger.info(`[OOS] Product "${product.title}" (${product.id}) out of stock for >48h. Deleting completely...`);
+
+                // 1. Find all buyers who have this product in their active cart
+                const activeCartItems = await prisma.cartItem.findMany({
+                    where: { productId: product.id },
+                    include: {
+                        cart: {
+                            select: { userId: true }
+                        }
+                    }
+                });
+
+                const buyerIds = [...new Set(activeCartItems.map(item => item.cart?.userId).filter(Boolean))];
+
+                // 2. Alert all buyers with active cart containing this product
+                for (const buyerId of buyerIds) {
+                    try {
+                        await notificationEngine.sendMultiChannelNotification({
+                            userId: buyerId,
+                            title: '🛒 Item Removed from Cart',
+                            body: `"${product.title}" in your cart has been out of stock for 48 hours and was removed.`,
+                            type: 'ALERT',
+                            linkUrl: '/cart.html',
+                            channels: ['in_app']
+                        });
+                    } catch (buyerErr) {
+                        logger.warn(`[OOS] Failed to alert buyer ${buyerId} for product ${product.id}: ${buyerErr.message}`);
+                    }
+                }
+
+                // 3. Alert the seller that product has been completely deleted after 48h
+                if (sellerId) {
+                    try {
+                        await notificationEngine.sendMultiChannelNotification({
+                            userId: sellerId,
+                            title: '🗑️ Out of Stock Product Deleted',
+                            body: `"${product.title}" was completely deleted from the database after remaining out of stock for 48 hours.`,
+                            type: 'ALERT',
+                            linkUrl: '/seller-dashboard.html?tab=products',
+                            channels: ['in_app', 'email'],
+                            data: JSON.stringify({ productId: product.id, action: 'DELETED_OOS_48H' })
+                        });
+                    } catch (sellerErr) {
+                        logger.warn(`[OOS] Failed to alert seller ${sellerId} about deleted product ${product.id}: ${sellerErr.message}`);
+                    }
+                }
+
+                // 4. Completely delete the product from the database
+                try {
+                    await completelyDeleteProduct(product.id);
+                    deletedCount++;
+                    logger.info(`[OOS] Permanently deleted out-of-stock product "${product.title}" (${product.id})`);
+                } catch (delErr) {
+                    logger.error(`[OOS] Failed to completely delete product ${product.id}: ${delErr.message}`);
+                }
+
+                continue;
+            }
+
+            // If product has been out of stock for less than 48 hours:
+            // RATE LIMIT: At most once per 3 hours per product to prevent spamming
+            if (!sellerId) continue;
+
+            const recentNotification = await prisma.notification.findFirst({
+                where: {
+                    userId: sellerId,
+                    title: '🚫 Product Out of Stock',
+                    createdAt: { gte: threeHoursAgo },
+                    OR: [
+                        { body: { contains: product.title } },
+                        { data: { contains: product.id } }
+                    ]
+                }
+            });
+
+            if (recentNotification) {
+                // Already notified within the last 3 hours, skip!
+                continue;
+            }
+
+            // Send notification to seller (max once every 3 hours)
+            try {
+                await notificationEngine.sendMultiChannelNotification({
+                    userId: sellerId,
+                    title: '🚫 Product Out of Stock',
+                    body: `"${product.title}" has run out of stock. Please restock it within 48 hours to avoid permanent deletion.`,
+                    type: 'ALERT',
+                    linkUrl: `/seller-dashboard.html?tab=products`,
+                    channels: ['in_app', 'email'],
+                    data: JSON.stringify({ productId: product.id, type: 'OOS_ALERT' })
+                });
+                notifiedCount++;
+            } catch (notifyErr) {
+                logger.warn(`[OOS] Failed to notify seller ${sellerId} for product ${product.id}: ${notifyErr.message}`);
+            }
+        }
+
+        logger.info(`[OOS] Out-of-stock check finished: ${notifiedCount} notified (3hr limit), ${deletedCount} deleted (48h limit)`);
+    } catch (err) {
+        logger.error('[CRON] Out-of-stock check error:', err.message);
+    }
+};
+
 const checkPackingEscalations = async () => {
     try {
         const escalatedIssues = await packingWorkflowService.escalateExpiredIssues();
@@ -531,6 +766,8 @@ const startCronJobs = (cronJobManager = null) => {
         cronJobManager.register('update-exchange-rates', '0 */6 * * *', updateExchangeRates);
         cronJobManager.register('manage-flash-deals', '*/5 * * * *', manageFlashDeals);
         cronJobManager.register('notify-flash-deals', '0 * * * *', notifyExpiringFlashDeals);
+        cronJobManager.register('out-of-stock-check', '*/5 * * * *', checkOutOfStockProducts);
+        cronJobManager.register('cleanup-archived', '0 * * * *', cleanupArchivedProducts);
         cronJobManager.register('reset-flash-viewers', '0 0 * * *', resetFlashDealViewerCounts);
         cronJobManager.register('notification-scheduler', '*/15 * * * *', () => notificationScheduler.runAllChecks());
         cronJobManager.register('packing-escalations', '*/15 * * * *', checkPackingEscalations);
@@ -543,6 +780,9 @@ const startCronJobs = (cronJobManager = null) => {
         cronJobManager.register('nightly-payouts', '0 0 * * *', processNightlyPayouts);
         cronJobManager.register('expire-sessions', '0 0 * * *', expireOldSessions);
         cronJobManager.register('cart-abandonment', '0 * * * *', handleCartAbandonment);
+        
+        const notifyPendingAdClaims = require('../cron/adNotificationCron');
+        cronJobManager.register('ad-notification-reminders', '* * * * *', notifyPendingAdClaims);
         logger.info('✅ All cron jobs registered with distributed locking');
     } else {
         logger.warn('⚠️ Using legacy setInterval-based cron jobs (not recommended for production)');
@@ -553,6 +793,8 @@ const startCronJobs = (cronJobManager = null) => {
         setInterval(updateExchangeRates, 6 * 60 * 60 * 1000);
         setInterval(manageFlashDeals, 5 * 60 * 1000);
         setInterval(notifyExpiringFlashDeals, 60 * 60 * 1000);
+        setInterval(checkOutOfStockProducts, 5 * 60 * 1000);
+        setInterval(cleanupArchivedProducts, 60 * 60 * 1000);
         setInterval(resetFlashDealViewerCounts, 24 * 60 * 60 * 1000);
         setInterval(() => notificationScheduler.runAllChecks(), 15 * 60 * 1000);
         setInterval(checkPackingEscalations, 15 * 60 * 1000);
@@ -584,6 +826,8 @@ module.exports = {
     manageFlashDeals,
     notifyExpiringFlashDeals,
     resetFlashDealViewerCounts,
+    cleanupArchivedProducts,
+    checkOutOfStockProducts,
     checkPackingEscalations,
     remindAbandonedPayments,
     notificationScheduler,

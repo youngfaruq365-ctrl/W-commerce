@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import axios from 'axios';
+import { apiClient as axios } from '../utils/apiClient';
 import SYSTEM_STORIES, { getStory, getFeature, getStatsSnapshot } from '../config/systemStories';
 import fallbackConfig from '../config/storyConfig';
 

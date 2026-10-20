@@ -118,7 +118,9 @@ const updateDeliveryStatus = async (assignmentId, newStatus, context = {}) => {
     });
 
     // ── Phase 2: Courier earning — runs AFTER the transaction commits ──────────
-    // This way a failing earning row never rolls back the DELIVERED status.
+    // Moving this to happen upon COURIER_ACCEPTED in deliveryController.js
+    // to satisfy new requirements. 
+    /*
     if (newStatus === 'DELIVERED' && result?.courierId) {
         try {
             const existing = await prisma.courierEarning.findUnique({
@@ -154,12 +156,22 @@ const updateDeliveryStatus = async (assignmentId, newStatus, context = {}) => {
                     }
                 });
                 logger.info(`[DeliveryService] CourierEarning created for assignment ${assignmentId}, amount=${deliveryFeeAmount}`);
+
+                // Increment Courier's User Balance
+                const profile = await prisma.courierProfile.findUnique({ where: { id: result.courierId } });
+                if (profile && profile.userId) {
+                    await prisma.user.update({
+                        where: { id: profile.userId },
+                        data: { balance: { increment: deliveryFeeAmount } }
+                    });
+                }
             }
         } catch (e) {
             // Log but do NOT throw — earning failure must not un-deliver the order
             logger.error(`[DeliveryService] CourierEarning.create failed (will need manual reconciliation): ${e.message}`);
         }
     }
+    */
 
     // Phase 17: broadcast status update (non-blocking)
     gpsTracking.broadcastStatusUpdate(assignmentId, newStatus, { lat, lng, metadata })

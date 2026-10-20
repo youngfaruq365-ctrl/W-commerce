@@ -143,7 +143,7 @@ export default function PremiumPortfolio({ store = {} }) {
                       <Star size={12} className="fill-amber-400 text-amber-400" />
                       <span className="text-xs text-[var(--text-muted)]">{product.rating} ({product.reviews})</span>
                     </div>
-                    <span className="font-bold text-lg">${product.price}</span>
+                    <span className="font-bold text-lg">₦{product.price}</span>
                   </div>
                 </div>
               ))}
@@ -184,7 +184,7 @@ export default function PremiumPortfolio({ store = {} }) {
                 <div className="p-3">
                   <h3 className="font-semibold text-sm truncate mb-1">{product.name}</h3>
                   <div className="flex items-center justify-between">
-                    <span className="font-bold">${product.price}</span>
+                    <span className="font-bold">₦{product.price}</span>
                     <Star size={11} className="fill-amber-400 text-amber-400" />
                   </div>
                 </div>

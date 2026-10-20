@@ -1,3 +1,4 @@
+import { PLACEHOLDER_IMAGE } from '@/constants/placeholders';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { X, Search, Globe, Star, ArrowRight, ShieldCheck } from 'lucide-react';
@@ -67,7 +68,7 @@ const GlobalSearchModal = ({
                   ? (product.images[0].url.startsWith('http') || product.images[0].url.startsWith('/') 
                       ? product.images[0].url 
                       : `/${product.images[0].url}`) 
-                  : '/assets/splash_3d_box_1781971684931.png';
+                  : PLACEHOLDER_IMAGE;
                   
                 const storeName = product.store?.storeName || 'Verified Seller';
                 const rating = product.store?.averageRating || 5.0;
@@ -93,13 +94,13 @@ const GlobalSearchModal = ({
                          <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-widest font-black mb-2">Fulfilled By</p>
                          <div className="flex justify-between items-center mb-5">
                             <span className="font-bold text-[var(--text-main)] line-clamp-1">{storeName}</span>
-                            <div className="flex items-center gap-1 text-sm font-bold bg-white/40 px-2 py-1 rounded-lg border border-[var(--accent-gray)] shadow-[0_0_10px_var(--accent-gray-dim)] text-[var(--text-main)]">
+                            <div className="flex items-center gap-1 text-sm font-bold premium-glass/40 px-2 py-1 rounded-3xl border border-[var(--accent-gray)] shadow-[0_0_10px_var(--accent-gray-dim)] text-[var(--text-main)]">
                                <Star size={14} className="text-yellow-400 fill-yellow-400" /> {rating.toFixed ? rating.toFixed(1) : '5.0'}
                             </div>
                          </div>
                          
                          <button 
-                           onClick={() => navigate(product.store?.portfolioSlug ? `/store/${product.store.portfolioSlug}` : `/portfolio/${product.storeId}`)}
+                           onClick={() => navigate(`/store/${product.store?.portfolioSlug || product.storeId}`)}
                            className="w-full py-4 rounded-xl font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-95 shadow-lg overflow-hidden relative"
                            style={{ backgroundColor: primaryColor, color: '#fff', boxShadow: `0 10px 25px ${primaryColor}50` }}
                          >

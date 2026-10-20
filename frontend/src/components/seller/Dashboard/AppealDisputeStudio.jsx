@@ -1,14 +1,18 @@
 import React, { useState } from 'react';
 import { AlertCircle, CheckCircle, ArrowRight, ArrowLeft, Sparkles, Download, Package, Users, Settings, Star, Link, Truck, Megaphone, Zap, DollarSign } from 'lucide-react';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 import toast from 'react-hot-toast';
+import { useSellerStore } from '../../../store/sellerStore';
 
 const AppealDisputeStudio = ({ onSuccess }) => {
+  const { fetchBanningStatus, fetchDisputes } = useSellerStore();
   const [step, setStep] = useState('details');
   const [progress, setProgress] = useState(0);
   const [progressText, setProgressText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [disputeId, setDisputeId] = useState('');
   const [reason, setReason] = useState('');
+  const [evidenceFiles, setEvidenceFiles] = useState([]);
 
   const startProcess = async () => {
     setStep('processing');
@@ -20,11 +24,17 @@ const AppealDisputeStudio = ({ onSuccess }) => {
     setTimeout(() => { setProgress(75); setProgressText('Submitting evidence...'); }, 1600);
 
     try {
-      await axios.post('http://localhost:5000/api/v1/disputes/appeal', { reason }, { withCredentials: true });
+      await axios.post('/api/v1/disputes/appeal', {
+        disputeId: disputeId.trim() || undefined,
+        reason,
+        evidenceUrls: evidenceFiles.map(f => f.name)
+      }, { withCredentials: true });
       setTimeout(() => {
         setIsSubmitting(false);
         setProgress(100);
         setStep('success');
+        fetchBanningStatus?.();
+        fetchDisputes?.();
       }, 2400);
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to submit appeal');
@@ -60,10 +70,19 @@ const AppealDisputeStudio = ({ onSuccess }) => {
             <img src="/assets/images/studio/detail-ultra-store.png" alt="Studio Icon" className="w-full max-w-[200px] mx-auto mb-4 object-contain h-[150px]" onError={(e) => { e.target.style.display='none'; }} />
             
             <div className="text-left mt-6">
+              <label className="block text-sm font-semibold mb-2">Dispute ID (Optional — defaults to latest dispute)</label>
+              <input
+                type="text"
+                value={disputeId}
+                onChange={e => setDisputeId(e.target.value)}
+                className="w-full p-3 border-2 border-gray-200 rounded-xl mb-4 font-medium"
+                placeholder="Enter Dispute ID (e.g. DSP-12345)"
+              />
+
               <label className="block text-sm font-semibold mb-2">Dispute Reason</label>
               <textarea value={reason} onChange={e => setReason(e.target.value)} className="w-full p-4 border-2 border-gray-200 rounded-xl mb-6 text-lg font-bold min-h-[120px]" placeholder="Explain your reason for appealing..." />
               
-              <button onClick={() => setStep('evidence')} disabled={!reason} className="w-full bg-[#00b873] text-white font-bold py-4 rounded-xl hover:bg-[#009960] transition-colors shadow-lg hover:-translate-y-1">
+              <button onClick={() => setStep('evidence')} disabled={!reason} className="w-full bg-[#00b873] text-white font-bold py-4 rounded-xl hover:bg-[#009960] transition-colors shadow-lg hover:-translate-y-1 disabled:opacity-50">
                 Continue to Evidence
               </button>
             </div>
@@ -78,16 +97,27 @@ const AppealDisputeStudio = ({ onSuccess }) => {
             <button onClick={() => setStep('details')} className="mr-4 p-2 hover:bg-gray-100 rounded-full transition-colors"><ArrowLeft size={24} /></button>
             <div>
               <h2 className="text-2xl font-extrabold text-black">Evidence</h2>
-              <p className="text-[var(--text-muted)]">Complete the remaining details.</p>
+              <p className="text-[var(--text-muted)]">Attach supporting receipts, tracking slips, or photos.</p>
             </div>
           </div>
           <div className="space-y-6 flex-1">
             
             <div>
               <label className="block text-sm font-bold text-gray-800 mb-3">Upload Evidence</label>
-              <div className="border-2 border-dashed border-gray-300 rounded-2xl p-12 flex flex-col items-center justify-center bg-gray-50">
-                <span className="text-gray-800 font-bold mb-1">Click to upload files</span>
-              </div>
+              <label className="border-2 border-dashed border-gray-300 hover:border-[#00b873] rounded-2xl p-12 flex flex-col items-center justify-center bg-gray-50 cursor-pointer transition-colors">
+                <input
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => setEvidenceFiles(Array.from(e.target.files || []))}
+                />
+                <span className="text-gray-800 font-bold mb-1">
+                  {evidenceFiles.length > 0
+                    ? `${evidenceFiles.length} file(s) selected: ${evidenceFiles.map(f => f.name).join(', ')}`
+                    : 'Click to upload files'}
+                </span>
+                <span className="text-xs text-gray-500">PNG, JPG, PDF up to 10MB</span>
+              </label>
             </div>
           
           </div>

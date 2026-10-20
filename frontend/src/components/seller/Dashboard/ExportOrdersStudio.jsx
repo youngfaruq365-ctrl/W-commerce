@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 import { Download, CheckCircle, ArrowRight, ArrowLeft, Sparkles, Package, AlertCircle, Users, Settings, Star, Link, Truck, Megaphone, Zap, DollarSign } from 'lucide-react';
 
 const ExportOrdersStudio = ({ onSuccess }) => {
@@ -7,6 +7,9 @@ const ExportOrdersStudio = ({ onSuccess }) => {
   const [progress, setProgress] = useState(0);
   const [progressText, setProgressText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [dateRange, setDateRange] = useState('Last 30 Days');
+  const [exportFormat, setExportFormat] = useState('CSV');
+  const [csvData, setCsvData] = useState('');
 
   const startProcess = async () => {
     setStep('processing');
@@ -18,16 +21,31 @@ const ExportOrdersStudio = ({ onSuccess }) => {
       setTimeout(() => { setProgress(40); setProgressText('Verifying data...'); }, 500);
       setTimeout(() => { setProgress(75); setProgressText('Compiling your data...'); }, 1000);
 
-      await axios.post('/api/v1/seller-studio/export-orders', {});
+      const res = await axios.post('/api/v1/seller-studio/export-orders', { dateRange, format: exportFormat });
+      if (res.data?.csvContent) {
+        setCsvData(res.data.csvContent);
+      }
       
       setProgress(100);
       setIsSubmitting(false);
       setStep('success');
-      setIsSubmitting(false);
     } catch (e) {
       setIsSubmitting(false);
       setProgressText('Failed.');
+      setStep('format');
     }
+  };
+
+  const handleDownloadFile = () => {
+    const content = csvData || 'Order ID,Date,Buyer,Email,Status,Total Amount\n';
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `orders-export-${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    if (onSuccess) onSuccess();
   };
 
   return (
@@ -62,10 +80,14 @@ const ExportOrdersStudio = ({ onSuccess }) => {
             
       <div>
         <label className="block text-sm font-bold text-gray-800 mb-1">Date Range</label>
-        <select className="w-full bg-gray-50 border border-[var(--border-color)] rounded-xl p-3 text-black focus:border-[#00b873] outline-none">
-          <option>Last 7 Days</option>
-          <option>Last 30 Days</option>
-          <option>All Time</option>
+        <select
+          value={dateRange}
+          onChange={e => setDateRange(e.target.value)}
+          className="w-full bg-gray-50 border border-[var(--border-color)] rounded-xl p-3 text-black focus:border-[#00b873] outline-none"
+        >
+          <option value="Last 7 Days">Last 7 Days</option>
+          <option value="Last 30 Days">Last 30 Days</option>
+          <option value="All Time">All Time</option>
         </select>
       </div>
     
@@ -91,11 +113,17 @@ const ExportOrdersStudio = ({ onSuccess }) => {
       <div>
         <label className="block text-sm font-bold text-gray-800 mb-3">Export Format</label>
         <div className="grid grid-cols-2 gap-4">
-          <div className="cursor-pointer border-2 border-[#00b873] bg-[#00b873]/10 rounded-xl p-4 text-center">
-            <span className="font-bold text-[#00b873]">CSV (Excel)</span>
+          <div
+            onClick={() => setExportFormat('CSV')}
+            className={`cursor-pointer border-2 rounded-xl p-4 text-center transition-colors ${exportFormat === 'CSV' ? 'border-[#00b873] bg-[#00b873]/10' : 'border-gray-200'}`}
+          >
+            <span className={`font-bold ${exportFormat === 'CSV' ? 'text-[#00b873]' : 'text-gray-600'}`}>CSV (Excel)</span>
           </div>
-          <div className="cursor-pointer border-2 border-gray-200 rounded-xl p-4 text-center">
-            <span className="font-bold text-gray-600">PDF Report</span>
+          <div
+            onClick={() => setExportFormat('PDF')}
+            className={`cursor-pointer border-2 rounded-xl p-4 text-center transition-colors ${exportFormat === 'PDF' ? 'border-[#00b873] bg-[#00b873]/10' : 'border-gray-200'}`}
+          >
+            <span className={`font-bold ${exportFormat === 'PDF' ? 'text-[#00b873]' : 'text-gray-600'}`}>PDF Report</span>
           </div>
         </div>
       </div>
@@ -143,7 +171,7 @@ const ExportOrdersStudio = ({ onSuccess }) => {
           </p>
           <div className="flex gap-4 w-full max-w-[400px]">
             <button 
-              onClick={() => { if (onSuccess) onSuccess(); }} 
+              onClick={handleDownloadFile} 
               className="flex-1 bg-[#00b873] hover:bg-[#009960] text-white font-bold py-3 rounded-xl transition-all shadow-lg hover:-translate-y-1"
             >
               Download File

@@ -13,7 +13,11 @@ const MessagesView = ({ messages }) => {
                 <span className="font-bold text-black">{msg.senderName || msg.sender?.name || 'Customer'}</span>
                 <span className="text-xs text-[var(--text-muted)]">{new Date(msg.timestamp || msg.createdAt).toLocaleDateString()}</span>
               </div>
-              <p className="text-sm text-[var(--text-muted)] truncate">{msg.content || 'Message content...'}</p>
+              <p className="text-sm text-[var(--text-muted)] truncate">
+                {msg.content?.includes('[Audio:') ? '🎵 Audio Message' : 
+                 msg.content?.includes('[Image:') ? '🖼️ Image Message' : 
+                 (msg.content || 'Message content...')}
+              </p>
             </div>
           ))}
         </div>

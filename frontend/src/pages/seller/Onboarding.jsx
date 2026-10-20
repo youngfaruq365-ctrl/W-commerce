@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Store, Upload, CheckCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 import toast from 'react-hot-toast';
 
 const SellerOnboarding = () => {
@@ -29,9 +29,7 @@ const SellerOnboarding = () => {
       formDataToSend.append('country', formData.country);
       formDataToSend.append('document', document);
 
-      const res = await axios.post('/api/v1/seller/onboarding', formDataToSend, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      const res = await axios.post('/api/v1/seller/onboarding', formDataToSend);
       if (res.data.success) {
         setStep(3);
         toast.success('Application submitted successfully!');

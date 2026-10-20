@@ -46,7 +46,7 @@ exports.createPool = async (req, res) => {
 
     } catch (error) {
         logger.error(`Create Pool Error: ${error.message}`);
-        res.status(500).json({ success: false, message: error.message });
+        res.status(500).json({ success: false, message: process.env.NODE_ENV === 'production' ? 'An error occurred' : error.message });
     }
 };
 

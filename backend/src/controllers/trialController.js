@@ -337,6 +337,39 @@ exports.convertToPaid = async (req, res) => {
             }
         }
 
+        // === PAYMENT VERIFICATION REQUIRED ===
+        // Trial conversion must be backed by a real payment transaction
+        const { paymentRef } = req.body;
+        if (!paymentRef) {
+            return res.status(400).json({
+                success: false,
+                message: 'Payment reference is required to convert trial to paid subscription.',
+                requiresPayment: true
+            });
+        }
+
+        // Verify the payment is real via Paystack
+        const apiClient = require('../utils/apiClient');
+        let paymentVerified = false;
+        let paidAmount = 0;
+        try {
+            const verification = await apiClient.paystack(`/transaction/verify/${paymentRef}`, 'GET');
+            if (verification.data && verification.data.status === 'success') {
+                paymentVerified = true;
+                paidAmount = verification.data.amount / 100; // kobo to naira
+            }
+        } catch (verifyErr) {
+            logger.error(`Trial conversion payment verification failed: ${verifyErr.message}`);
+        }
+
+        if (!paymentVerified) {
+            return res.status(400).json({
+                success: false,
+                message: 'Payment verification failed. Please complete payment first.',
+                requiresPayment: true
+            });
+        }
+
         // Calculate subscription period
         const startDate = new Date();
         let endDate;
@@ -349,7 +382,7 @@ exports.convertToPaid = async (req, res) => {
             endDate.setFullYear(endDate.getFullYear() + 1);
         }
 
-        // Update user to paid subscription
+        // Update user to paid subscription (payment verified above)
         const updatedUser = await prisma.user.update({
             where: { id: userId },
             data: {

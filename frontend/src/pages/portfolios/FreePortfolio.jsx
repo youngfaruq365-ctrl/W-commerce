@@ -1,3 +1,4 @@
+import { PLACEHOLDER_IMAGE } from '@/constants/placeholders';
 import React, { useState } from 'react';
 import { ShieldCheck, Star, MapPin, Package, Users, ShoppingBag, Calendar, ExternalLink } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -74,9 +75,9 @@ const ProductCard = ({ product, onAddToCart, index = 0 }) => (
   <motion.div variants={fadeUp} custom={index} className="group border border-gray-200 rounded-xl overflow-hidden bg-white hover:shadow-lg transition-all duration-300 flex flex-col">
     <div className="aspect-square bg-gray-50 overflow-hidden relative">
       <img
-        src={product.images?.[0]?.url || '/assets/splash_3d_box_1781971684931.png'}
+        src={product.images?.[0]?.url || PLACEHOLDER_IMAGE}
         alt={product.title}
-        onError={e => { e.target.onerror = null; e.target.src = '/assets/splash_3d_box_1781971684931.png'; }}
+        onError={e => { e.target.onerror = null; e.target.src = PLACEHOLDER_IMAGE; }}
         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
       />
     </div>

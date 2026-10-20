@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Star, ShoppingBag, Heart, Search } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ShoppingBag, Search } from 'lucide-react';
 import { WImageLoader } from '../motion/WImageLoader';
+import { resolveProductImage } from '../../utils/imageHelpers';
 
 export const SmartProductCard = ({ 
   product, 
@@ -10,82 +11,83 @@ export const SmartProductCard = ({
   onQuickView
 }) => {
   const [isHovered, setIsHovered] = useState(false);
-  const [isWishlisted, setIsWishlisted] = useState(false);
+  const navigate = useNavigate();
   
   // Fallbacks if data is missing
   const name = product?.title || product?.name || 'Unnamed Product';
   const price = product?.price || 0;
   
-  const productImages = product?.images?.length > 0 
-    ? product.images.map(img => {
-        const url = img.url || img;
-        return (typeof url === 'string' && (url.startsWith('http') || url.startsWith('/'))) ? url : `/${url}`;
-      })
-    : [product?.imageUrl || '/assets/splash_3d_box_1781971684931.png'];
+  const image = resolveProductImage(product, name, product?.category);
+  const nameInitials = name.slice(0, 2).toUpperCase();
 
-  const image = productImages[0]; // Simplified for clean look
-  const rating = product?.rating || 4.5;
-  const reviewsCount = product?.reviewCount || product?.reviewsCount || 120;
-  const seller = product?.store?.storeName || product?.store?.name || 'Verified Seller';
-
-  const formatPrice = (p) => `₦${Number(p).toLocaleString()}`;
+  const formatPrice = (p) => `\u20A6${Number(p).toLocaleString()}`;
 
   return (
     <div 
-      className="premium-glass rounded-3xl overflow-hidden group relative flex flex-col transition-all duration-500 hover:-translate-y-1"
+      className="relative rounded-lg overflow-hidden shadow-2xl aspect-[2/3] flex flex-col group cursor-pointer transform transition-transform duration-500 hover:-translate-y-2 hover:shadow-3xl"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onClick={() => navigate(`/product/${product?.id}`)}
+      style={{
+        boxShadow: '0 20px 40px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(255,255,255,0.2)'
+      }}
     >
-      {/* Wishlist */}
-      <button 
-        onClick={(e) => { e.preventDefault(); setIsWishlisted(!isWishlisted); }}
-        className="absolute top-4 right-4 w-9 h-9 flex items-center justify-center rounded-full bg-white/80 backdrop-blur-md shadow-sm border border-black/5 hover:border-black/20 hover:scale-105 transition-all z-20"
-      >
-        <Heart size={16} fill={isWishlisted ? '#000' : 'none'} className={isWishlisted ? 'text-black' : 'text-gray-400'} />
-      </button>
+      {/* Spine (Left edge like a book or thick card) */}
+      <div className="absolute top-0 bottom-0 left-0 w-3 md:w-4 bg-gradient-to-r from-[#111] via-[#222] to-[#333] shadow-[inset_-2px_0_4px_rgba(0,0,0,0.8)] z-20" />
+      
+      {/* Metallic Gradient Background */}
+      <div className="absolute inset-0 bg-gradient-to-b from-[#555b61] via-[#e2e8f0] to-[#555b61] z-0 pl-3 md:pl-4 opacity-90" />
+      <div className="absolute inset-0 bg-black/10 mix-blend-multiply z-0 pointer-events-none" />
 
-      {/* Image Area */}
-      <Link to={`/product/${product?.id}`} className="relative aspect-square overflow-hidden bg-white flex items-center justify-center p-6">
-        <WImageLoader 
-          layoutId={`product-image-${product?.id}`} 
-          src={image} 
-          alt={name} 
-          objectFit="contain"
-          className="w-full h-full transition-transform duration-700 ease-out group-hover:scale-105 mix-blend-multiply" 
-        />
+      {/* Content Container */}
+      <div className="relative z-10 pl-6 pr-4 py-4 h-full flex flex-col">
         
-        {/* Quick Actions Hover */}
-        <div className={`absolute inset-0 flex items-center justify-center gap-3 transition-opacity duration-300 ${isHovered ? 'opacity-100' : 'opacity-0'} pointer-events-none`}>
-           <div className="w-12 h-12 rounded-full bg-white/90 backdrop-blur-md shadow-[0_8px_30px_rgb(0,0,0,0.12)] flex items-center justify-center pointer-events-auto cursor-pointer hover:bg-black hover:text-white transition-colors"
-                onClick={(e) => { e.preventDefault(); if(onQuickView) onQuickView(product); }}>
-             <Search size={20} />
-           </div>
-        </div>
-      </Link>
-
-      {/* Card Content */}
-      <div className="p-5 flex-1 flex flex-col bg-white/40">
-        <div className="mb-auto">
-           <p className="text-[10px] font-bold tracking-widest text-gray-500 uppercase mb-2">{seller}</p>
-           <Link to={`/product/${product?.id}`}>
-             <h3 className="font-semibold text-black line-clamp-2 text-sm leading-relaxed hover:opacity-70 transition-opacity">{name}</h3>
-           </Link>
-        </div>
-        
-        <div className="flex items-center gap-1 mt-3 mb-4">
-          <Star size={12} className="text-black" fill="currentColor" />
-          <span className="text-xs font-medium text-black">{rating.toFixed(1)}</span>
-          <span className="text-xs text-gray-400">({reviewsCount})</span>
+        {/* Center Product Image */}
+        <div className="flex-1 flex items-center justify-center relative w-full h-full">
+          <WImageLoader 
+            layoutId={`product-image-${product?.id}`} 
+            src={image} 
+            alt={name} 
+            objectFit="contain"
+            className="w-[95%] h-[95%] drop-shadow-[0_15px_15px_rgba(0,0,0,0.5)] transition-transform duration-700 ease-out group-hover:scale-110" 
+          />
+          
+          {/* Quick View Hover Action */}
+          <div className={`absolute inset-0 flex items-center justify-center transition-opacity duration-300 ${isHovered ? 'opacity-100' : 'opacity-0'} pointer-events-none`}>
+            <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-md shadow-2xl border border-white/30 flex items-center justify-center pointer-events-auto cursor-pointer hover:bg-white hover:text-black transition-colors text-white"
+                 onClick={(e) => { if(onQuickView) { e.preventDefault(); e.stopPropagation(); onQuickView(product); } }}>
+              <Search size={20} />
+            </div>
+          </div>
         </div>
 
-        <div className="flex items-center justify-between mt-auto">
-          <span className="text-lg font-bold text-black tracking-tight">{formatPrice(price)}</span>
-          <button 
-            onClick={(e) => { e.preventDefault(); onAddToCart && onAddToCart(product); }}
-            className="btn-premium rounded-full w-10 h-10 p-0 flex items-center justify-center transition-all"
-          >
-            <ShoppingBag size={16} />
-          </button>
+        {/* Footer: Avatar + Name + Price */}
+        <div className="mt-auto flex items-end justify-between pb-2">
+          
+          <div className="flex items-center gap-2">
+            {/* Initials Circle */}
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#6b7280] to-[#4b5563] border border-[#9ca3af] flex items-center justify-center shadow-[inset_0_2px_4px_rgba(0,0,0,0.3),_0_2px_4px_rgba(0,0,0,0.5)] flex-shrink-0">
+               <span className="text-[10px] text-gray-200 font-bold tracking-wider">{nameInitials}</span>
+            </div>
+            {/* Product Name */}
+            <div className="text-gray-100 font-bold text-[11px] md:text-xs tracking-widest uppercase drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] max-w-[100px] md:max-w-[120px] truncate">
+               {name}
+            </div>
+          </div>
+
+          {/* Action / Price */}
+          <div className="flex flex-col items-end gap-1 flex-shrink-0">
+             <span className="text-white font-black text-sm md:text-base tracking-tight drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">
+               {formatPrice(price)}
+             </span>
+             <button 
+               onClick={(e) => { e.preventDefault(); e.stopPropagation(); onAddToCart && onAddToCart(product); }}
+               className="text-gray-200 hover:text-white transition-colors drop-shadow-md mt-1"
+             >
+               <ShoppingBag size={18} />
+             </button>
+          </div>
+
         </div>
       </div>
     </div>

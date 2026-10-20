@@ -10,6 +10,7 @@ let socket = null;
 export const getSocket = () => {
   if (!socket) {
     const serverUrl = import.meta.env.VITE_API_URL || window.location.origin;
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
     socket = io(serverUrl, {
       withCredentials: true,
       transports: ['websocket', 'polling'],
@@ -17,7 +18,13 @@ export const getSocket = () => {
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionAttempts: 5,
+      auth: token ? { token } : {}
     });
+  } else if (socket && typeof window !== 'undefined') {
+    const token = localStorage.getItem('token');
+    if (token && (!socket.auth || !socket.auth.token)) {
+      socket.auth = { ...(socket.auth || {}), token };
+    }
   }
   return socket;
 };

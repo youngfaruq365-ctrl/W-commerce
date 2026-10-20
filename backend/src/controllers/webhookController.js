@@ -125,8 +125,22 @@ exports.handleWebhook = async (req, res) => {
 async function processSuccessfulCharge(data) {
     try {
         const reference = data.reference;
-        
-        // Find pending payment
+
+        // V2 Marketplace Order Webhook Handling
+        if (reference && (reference.startsWith('MO-') || reference.startsWith('GX-'))) {
+            logger.info(`Processing V2 MarketplaceOrder webhook for ${reference}`);
+            const { onChargeSuccess } = require('../services/paymentV2Service');
+            try {
+                await onChargeSuccess(data);
+                return { processed: true };
+            } catch (err) {
+                logger.error(`V2 webhook processing failed: ${err.message}`);
+                // Throw so it can be retried or logged properly by the caller
+                throw err;
+            }
+        }
+
+        // Find pending payment (Legacy)
         const payment = await prisma.payment.findFirst({
             where: {
                 paystackReference: reference,

@@ -1,8 +1,10 @@
+import { PLACEHOLDER_IMAGE } from '@/constants/placeholders';
+import { isVideoUrl, getImageUrl } from '../../utils/imageHelpers';
 import React, { useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence, useAnimation } from 'framer-motion';
 import { Heart, ShoppingCart, Share2, ShieldCheck, MessageCircle, MoreHorizontal } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 
 // ─── Floating Heart ───────────────────────────────────────────────────────────
 const FloatingHeart = ({ x, y, onDone }) => (
@@ -45,7 +47,7 @@ const ActionBtn = ({ icon: Icon, onClick, active = false, activeClass = '' }) =>
 
 const FeedCard = ({ post, onAddToCart, onClick }) => {
   const product = post.originalProduct;
-  const imageUrl = post.image || '/assets/splash_3d_box_1781971684931.png';
+  const imageUrl = post.image || PLACEHOLDER_IMAGE;
   const price = product?.price;
 
   const [liked, setLiked] = useState(false);
@@ -133,14 +135,31 @@ const FeedCard = ({ post, onAddToCart, onClick }) => {
       <DoubleTapHeart show={showDoubleTap} x={doubleTapPos.x} y={doubleTapPos.y} />
 
       <div className="relative w-full aspect-[4/5] bg-gray-100 overflow-hidden" onClick={handleDoubleTap}>
-        <img
-          src={imageUrl}
-          alt={post.seller}
-          loading="lazy"
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-          onError={e => { e.target.src = '/assets/splash_3d_box_1781971684931.png'; }}
-        />
+        {isVideoUrl(imageUrl) ? (
+          <video
+            src={getImageUrl(imageUrl)}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 bg-gray-100"
+            muted
+            playsInline
+            preload="metadata"
+          />
+        ) : (
+          <img
+            src={imageUrl}
+            alt={post.seller}
+            loading="lazy"
+            className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-700 border-[5px] border-white box-border bg-gray-100"
+            onError={e => { e.target.src = PLACEHOLDER_IMAGE; }}
+          />
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
+
+        {post.audioUrl && (
+          <div className="absolute top-3 left-3 bg-black/60 backdrop-blur-md text-white px-2.5 py-1 rounded-full text-[10px] font-bold flex items-center gap-1.5 z-20 border border-white/20 shadow-md pointer-events-none">
+            <span className="animate-pulse text-amber-400 text-xs">♫</span>
+            <span className="truncate max-w-[100px]">{post.audioTitle || 'Background Audio'}</span>
+          </div>
+        )}
 
         <div className="absolute right-3 bottom-4 flex flex-col gap-3 z-20 pointer-events-auto">
           <button onClick={handleLike} className="flex flex-col items-center gap-1">

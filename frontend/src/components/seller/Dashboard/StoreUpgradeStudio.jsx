@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { Sparkles, CheckCircle, Loader2, ArrowLeft, Wallet, Tag, X } from 'lucide-react';
 import { useSellerStore } from '../../../store/sellerStore';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 
 const StoreUpgradeStudio = ({ portfolio, setPortfolio, brandConfig, setBrandConfig, storeConfig, updateStoreConfig, showNotification, user }) => {
   const unlockPremiumStore = useSellerStore(state => state.unlockPremiumStore);
   const error = useSellerStore(state => state.error);
 
-  const isPro = user?.subscriptionTier?.toUpperCase() === 'PRO';
+  const premiumTiers = ['PRO', 'PREMIUM', 'ULTRA', 'PRO ULTRA', 'ULTRA1PRO', 'ULTRA2PRO'];
+  const isPro = premiumTiers.includes(user?.subscriptionTier?.toUpperCase());
   const [step, setStep] = useState(isPro ? 'customize' : 'intro');
-  const [selectedPlan, setSelectedPlan] = useState(isPro ? { name: 'Pro', price: 0 } : null);
+  const [selectedPlan, setSelectedPlan] = useState(isPro ? { name: user?.subscriptionTier || 'Pro', price: 0 } : null);
+  const isCurrentPlan = isPro && selectedPlan?.name?.toUpperCase() === user?.subscriptionTier?.toUpperCase();
   const [progress, setProgress] = useState(0);
   const [progressText, setProgressText] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('wallet');
@@ -107,7 +109,7 @@ const StoreUpgradeStudio = ({ portfolio, setPortfolio, brandConfig, setBrandConf
       <div className="bg-white border border-[var(--border-color)] p-8 rounded-xl min-h-[600px] flex flex-col relative overflow-hidden">
         
         {/* STEPPER TABS (Hidden on intro) */}
-        {step !== 'intro' && !isPro && (
+        {step !== 'intro' && !isCurrentPlan && (
           <div className="flex justify-center items-center mb-8 pb-6 border-b border-gray-100">
             <div className="flex items-center gap-2">
               <div className={`flex items-center gap-2 ${['choose-plan'].includes(step) ? 'text-[#00b873] font-bold' : step !== 'intro' ? 'text-[#00b873]' : 'text-gray-400'}`}>
@@ -165,7 +167,9 @@ const StoreUpgradeStudio = ({ portfolio, setPortfolio, brandConfig, setBrandConf
             <p className="text-[var(--text-muted)] mb-6">Select a plan that fits your business needs.</p>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {[
-                { name: 'Pro', price: 1500, desc: 'Everything you need to grow', icon: 'icon-pro.png', color: '#1976d2' }
+                { name: 'Premium', price: 1000, desc: 'Essential tools for business', icon: 'icon-premium.png', color: '#b8860b' },
+                { name: 'Pro', price: 1500, desc: 'Everything you need to grow', icon: 'icon-pro.png', color: '#1976d2' },
+                { name: 'Ultra', price: 3000, desc: 'Advanced features for scaling', icon: 'icon-ultra.png', color: '#7c3aed' }
               ].map(plan => (
                 <div key={plan.name} onClick={() => handleSelectPlan(plan.name, plan.price)} className="border border-[var(--border-color)] hover:border-[#00b873] rounded-xl p-5 cursor-pointer transition-all hover:shadow-lg flex items-center group bg-white">
                   <div className="w-16 h-16 rounded-xl bg-gray-50 flex items-center justify-center mr-4 p-2 overflow-hidden">
@@ -187,7 +191,7 @@ const StoreUpgradeStudio = ({ portfolio, setPortfolio, brandConfig, setBrandConf
         {step === 'customize' && (
           <div className="animate-in slide-in-from-right duration-300 flex-1 flex flex-col">
             <div className="flex items-center mb-6">
-              {!isPro && <button onClick={() => setStep('choose-plan')} className="mr-4 p-2 hover:bg-gray-100 rounded-full transition-colors"><ArrowLeft size={24} /></button>}
+              <button onClick={() => setStep('choose-plan')} className="mr-4 p-2 hover:bg-gray-100 rounded-full transition-colors"><ArrowLeft size={24} /></button>
               <h2 className="text-2xl font-extrabold text-black">Customize Your {selectedPlan?.name} Store</h2>
             </div>
             
@@ -271,7 +275,7 @@ const StoreUpgradeStudio = ({ portfolio, setPortfolio, brandConfig, setBrandConf
             </div>
 
             <div className="mt-8 pt-6 border-t border-gray-100 flex justify-end">
-              {isPro ? (
+              {isCurrentPlan ? (
                 <button 
                   onClick={async () => {
                     setIsSubmitting(true);

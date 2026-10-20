@@ -74,18 +74,18 @@ class FlashDealService {
                 where: {
                     isActive: true,
                     endDate: { lte: now }
+                },
+                include: {
+                    product: { select: { id: true, title: true, price: true } }
                 }
             });
 
             for (const deal of dealsToDeactivate) {
-                await prisma.flashDeal.update({
-                    where: { id: deal.id },
-                    data: { isActive: false }
-                });
-
+                // Check if another deal is still active for this product
                 const stillActiveDeal = await prisma.flashDeal.findFirst({
                     where: {
                         productId: deal.productId,
+                        id: { not: deal.id },
                         isActive: true,
                         endDate: { gt: now }
                     },
@@ -93,6 +93,7 @@ class FlashDealService {
                     include: { product: { select: { price: true } } }
                 });
 
+                // Reset product flash sale flags if no other deal is active
                 if (stillActiveDeal) {
                     await prisma.product.update({
                         where: { id: deal.productId },
@@ -112,10 +113,33 @@ class FlashDealService {
                         }
                     });
                 }
+
+                // Delete the expired deal record immediately
+                await prisma.flashDeal.delete({ where: { id: deal.id } });
+
+                // Notify the seller that their deal has expired and was removed
+                try {
+                    const dealLabel = deal.promoTitle || deal.product?.title || 'Your deal';
+                    const promoTypeLabel = deal.promoType === 'FESTIVAL_PROMO' ? 'Festival Promo'
+                        : deal.promoType === 'WEEKEND_PROMO' ? 'Weekend Promo'
+                        : 'Flash Deal';
+                    await notificationEngine.sendMultiChannelNotification({
+                        userId: deal.sellerId,
+                        title: `⏰ ${promoTypeLabel} Ended & Removed`,
+                        body: `Your ${promoTypeLabel} "${dealLabel}" has expired and been removed from the storefront. Create a new deal to keep your products featured.`,
+                        type: 'ALERT',
+                        linkUrl: '/seller-dashboard.html?tab=flash',
+                        channels: ['in_app', 'email']
+                    });
+                    logger.info(`[FlashDeal] Notified seller ${deal.sellerId} — deal "${deal.id}" expired & deleted`);
+                } catch (notifyErr) {
+                    logger.warn(`[FlashDeal] Failed to notify seller for expired deal ${deal.id}: ${notifyErr.message}`);
+                }
             }
 
             if (dealsToDeactivate.length > 0) {
                 await cacheService.invalidateActiveDealsCache();
+                logger.info(`[FlashDeal] Removed ${dealsToDeactivate.length} expired deal(s)`);
             }
 
             return dealsToDeactivate.length;

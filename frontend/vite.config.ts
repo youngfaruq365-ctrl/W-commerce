@@ -6,23 +6,35 @@ import path from 'path'
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '')
+  const envDir = path.resolve(process.cwd(), '../');
+  const env = loadEnv(mode, envDir, '');
   const isDev = mode === 'development'
 
   return {
+    envDir: '../',
     plugins: [
       react(),
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
         devOptions: {
-          enabled: isDev
+          enabled: false
         },
         workbox: {
           // Exclude API routes from service worker caching
-          navigateFallbackDenylist: [/^\/api/],
+          navigateFallbackDenylist: [/^\/api/, /^\/uploads/],
+          // Heavy, route-specific chunks are cached on demand instead of precached
+          globIgnores: [
+            '**/emoji-*.js', '**/charts-*.js', '**/maps-*.js',
+            '**/ActiveDelivery-*.js', '**/StorePreviewPage-*.js',
+          ],
           // Cache static assets aggressively
           runtimeCaching: [
+            {
+              urlPattern: ({ request, url }) => request.destination === 'script' && url.pathname.startsWith('/assets/'),
+              handler: 'StaleWhileRevalidate',
+              options: { cacheName: 'lazy-chunks', expiration: { maxEntries: 60, maxAgeSeconds: 60 * 60 * 24 * 30 } }
+            },
             {
               urlPattern: /^https:\/\/fonts\.googleapis\.com/,
               handler: 'CacheFirst',
@@ -36,9 +48,9 @@ export default defineConfig(({ mode }) => {
           ]
         },
         manifest: {
-          name: 'W-Delivery OS',
-          short_name: 'W-Delivery',
-          description: 'Delivery OS for Courier and Dispatch',
+          name: 'W-Commerce',
+          short_name: 'W-Commerce',
+          description: 'Commerce and delivery OS for sellers, buyers, and couriers',
           theme_color: '#0f172a',
           background_color: '#0f172a',
           display: 'standalone',
@@ -61,12 +73,49 @@ export default defineConfig(({ mode }) => {
     ],
     resolve: {
       alias: {
-        "@": path.resolve(__dirname, "./src"),
+        "@": path.resolve(import.meta.dirname, "./src"),
+        "react": path.resolve(import.meta.dirname, "../node_modules/react"),
+        "react-dom": path.resolve(import.meta.dirname, "../node_modules/react-dom"),
+        "react-router-dom": path.resolve(import.meta.dirname, "../node_modules/react-router-dom"),
       },
-      dedupe: ['react', 'react-dom']
+      dedupe: ['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime', 'react-router', 'react-router-dom']
     },
     optimizeDeps: {
-      include: ['react', 'react-dom', 'lucide-react']
+      include: [
+        'react',
+        'react/jsx-runtime',
+        'react/jsx-dev-runtime',
+        'react-dom',
+        'react-dom/client',
+        'react-router-dom',
+        'lucide-react',
+        'framer-motion',
+        'axios',
+        'zustand',
+        'react-hot-toast',
+        'socket.io-client',
+        'emoji-picker-react',
+        'recharts',
+        'clsx',
+        'tailwind-merge',
+        'date-fns',
+        'dompurify',
+        'uuid',
+        'canvas-confetti',
+        'swiper/react',
+        'swiper/modules',
+        '@react-google-maps/api',
+        'html5-qrcode',
+        'react-qr-code',
+        'react-signature-canvas',
+        'react-webcam',
+        '@simplewebauthn/browser',
+        'react-onesignal',
+        '@sentry/react',
+        '@capacitor/core',
+        '@capacitor-community/admob',
+        '@revenuecat/purchases-capacitor'
+      ]
     },
     build: {
       // Production build optimizations
@@ -74,14 +123,23 @@ export default defineConfig(({ mode }) => {
       target: 'es2020',
       rollupOptions: {
         output: {
-          manualChunks(id) {
+      manualChunks(id) {
             if (id.includes('node_modules')) {
-              if (id.includes('react') || id.includes('react-dom')) return 'react-vendor';
-              if (id.includes('react-router-dom')) return 'router';
-              if (id.includes('@tanstack/react-query')) return 'query';
-              if (id.includes('recharts')) return 'charts';
-              if (id.includes('framer-motion')) return 'motion';
-              if (id.includes('@stripe/stripe-js')) return 'stripe';
+              const p = id.replace(/\\/g, '/');
+              if (p.includes('/react-router') || p.includes('/@remix-run/')) return 'router';
+              if (p.includes('/@tanstack/')) return 'query';
+              if (p.includes('/recharts') || p.includes('/d3-')) return 'charts';
+              if (p.includes('/framer-motion') || p.includes('/motion-')) return 'motion';
+              if (p.includes('/@stripe/')) return 'stripe';
+              if (p.includes('/socket.io-client') || p.includes('/engine.io-client')) return 'socket';
+              if (p.includes('/emoji-picker-react')) return 'emoji';
+              if (p.includes('/lucide-react')) return 'lucide';
+              if (p.includes('/zustand')) return 'state';
+              if (p.includes('/lodash') || p.includes('/es-toolkit')) return 'utils';
+              if (p.includes('/axios')) return 'http';
+              if (p.includes('/swiper')) return 'swiper';
+              if (p.includes('/@react-google-maps') || p.includes('/@googlemaps/')) return 'maps';
+              if (/\/node_modules\/(react|react-dom|scheduler)\//.test(p)) return 'react-vendor';
             }
           }
         }
@@ -91,7 +149,7 @@ export default defineConfig(({ mode }) => {
     server: isDev ? {
       host: '::',
       port: 5175,
-      strictPort: true,
+      strictPort: false,
       proxy: {
         // Forward all /api requests to Express backend — DEV ONLY
         // This block is NOT included in production builds.
@@ -99,7 +157,10 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:5000',
           changeOrigin: true,
           secure: false,
-          cookieDomainRewrite: 'localhost',
+        },
+        '/uploads': {
+          target: 'http://127.0.0.1:5000',
+          changeOrigin: true,
         },
         '/socket.io': {
           target: 'http://127.0.0.1:5000',

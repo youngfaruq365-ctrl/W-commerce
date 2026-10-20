@@ -1,6 +1,5 @@
 const prisma = require('../utils/prismaClient');
 const walletService = require('./walletService');
-const paystackService = require('./paystackService');
 
 async function requestPayout(userId, amount, destination = 'BANK_TRANSFER', bankCode, accountNumber, accountName) {
     const value = walletService.normalizeAmount(amount);
@@ -13,27 +12,20 @@ async function requestPayout(userId, amount, destination = 'BANK_TRANSFER', bank
     }
 
     return prisma.$transaction(async (tx) => {
+        // Save bank details to store if provided, so admin can process it later
+        if (bankCode && accountNumber) {
+            await tx.store.update({
+                where: { id: user.store.id },
+                data: { bankCode, accountNumber, accountName: accountName || user.fullName }
+            });
+        }
+
         await walletService.debit(userId, 'GONG', value, {
             idempotencyKey: `PAYOUT_REQUEST:${userId}:${Date.now()}`,
             direction: 'WITHDRAWAL',
             referenceType: 'PAYOUT',
-            description: `Payout processed to ${accountNumber}`
+            description: `Payout requested to ${accountNumber || user.store.accountNumber || 'bank'}`
         }, tx);
-
-        let paystackResponse = null;
-        if (bankCode && accountNumber) {
-            try {
-                const recipient = await paystackService.createTransferRecipient({
-                    name: accountName || 'Seller',
-                    accountNumber,
-                    bankCode
-                });
-                paystackResponse = await paystackService.initiateTransfer(value, recipient.recipientCode, `Payout for user ${userId}`);
-            } catch (err) {
-                console.error("Paystack transfer failed", err);
-                throw new Error("Failed to initiate transfer to bank account.");
-            }
-        }
 
         const payout = await tx.payout.create({
             data: {
@@ -41,8 +33,7 @@ async function requestPayout(userId, amount, destination = 'BANK_TRANSFER', bank
                 amount: value,
                 currency: 'GONG',
                 method: 'BANK_TRANSFER',
-                status: 'COMPLETED',
-                // store reference if needed
+                status: 'PENDING',
             }
         });
 

@@ -7,13 +7,13 @@
 const request = require('supertest');
 const crypto  = require('crypto');
 
-process.env.NODE_ENV = 'test';
-process.env.PORT = '0';
+process.env.NODE_ENV = process.env.NODE_ENV || 'test';
+process.env.PORT = process.env.PORT || '0';
 process.env.DATABASE_URL = process.env.DATABASE_URL || 'file:./prisma/dev.db';
-process.env.JWT_SECRET = 'test_jwt_secret_that_is_long_enough_for_testing_purposes_only';
-process.env.SESSION_SECRET = 'test_session_secret_long_enough';
-process.env.STRIPE_WEBHOOK_SECRET = 'whsec_test_secret';
-process.env.PAYSTACK_SECRET_KEY = 'sk_test_paystack_key';
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test_jwt_secret_that_is_long_enough_for_testing_purposes_only';
+process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test_session_secret_long_enough';
+process.env.STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || 'whsec_test_secret';
+process.env.PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || 'sk_test_paystack_key';
 
 let app;
 

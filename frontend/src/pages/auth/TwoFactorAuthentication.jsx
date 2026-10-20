@@ -4,9 +4,9 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { WIcon } from '../../components/visual/WIcon';
 import TwoFactorIcon from '../../assets/images/auth/two_factor.png';
 import { ROUTES } from '../../constants/routes';
-import axios from 'axios';
+import { apiClient as axios } from '../../utils/apiClient';
+import { useAuthStore } from '../../store/authStore';
 
-const API_URL = import.meta.env.VITE_API_URL || window.location.origin;
 
 const TwoFactorAuthentication = () => {
   const navigate = useNavigate();
@@ -31,15 +31,30 @@ const TwoFactorAuthentication = () => {
   }, [code]);
 
   const verifyCode = async (otpCode) => {
+    if (loading) return;
     if (!email) {
       toast.error('Email not found. Please login again.');
       return;
     }
     try {
       setLoading(true);
-      await axios.post(`${API_URL}/api/v1/auth/verify-otp`, { email, code: otpCode });
+      const response = await axios.post('/api/v1/auth/verify-2fa', { email, code: otpCode });
+      
+      const { user, token } = response.data;
+      if (token) localStorage.setItem('token', token);
+      
+      // We need to set the user state in auth store before navigating
+      useAuthStore.getState().setUser(user);
+      
       toast.success('Two-factor authentication successful!', { style: { background: '#333', color: '#fff', borderRadius: '8px' }});
-      navigate(ROUTES.BUYER_DASHBOARD);
+      
+      const role = user?.role?.toUpperCase();
+      let target = ROUTES.BUYER_DASHBOARD;
+      if (!role || role === 'PENDING') target = ROUTES.ROLE_SELECTION;
+      else if (role === 'SELLER')  target = ROUTES.SELLER_DASHBOARD;
+      else if (role === 'ADMIN')   target = ROUTES.ADMIN_DASHBOARD;
+      else if (role === 'COURIER') target = ROUTES.COURIER_DASHBOARD;
+      window.location.href = target;
     } catch(err) {
       toast.error(err.response?.data?.message || 'Invalid code');
       setCode('');

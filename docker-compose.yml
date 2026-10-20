@@ -59,7 +59,7 @@ services:
     networks:
       - wcommerce_network
     volumes:
-      - uploads:/app/backend/storage/uploads
+      - uploads:/app/storage/uploads
 
   # ── Frontend (React + Nginx) ───────────────────────────────────────────────
   frontend:

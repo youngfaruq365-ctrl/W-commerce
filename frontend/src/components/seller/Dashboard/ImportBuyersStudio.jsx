@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 import { Users, CheckCircle, ArrowRight, ArrowLeft, Sparkles, Download, Package, AlertCircle, Settings, Star, Link, Truck, Megaphone, Zap, DollarSign } from 'lucide-react';
 
 const ImportBuyersStudio = ({ onSuccess }) => {
@@ -7,6 +7,25 @@ const ImportBuyersStudio = ({ onSuccess }) => {
   const [progress, setProgress] = useState(0);
   const [progressText, setProgressText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [csvFileName, setCsvFileName] = useState('');
+  const [parsedBuyers, setParsedBuyers] = useState([]);
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCsvFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const text = String(evt.target?.result || '');
+      const lines = text.split(/\r?\n/).filter(Boolean);
+      const rows = lines.slice(1).map((line) => {
+        const [name = '', email = ''] = line.split(',').map(s => s.replace(/^"|"$/g, '').trim());
+        return { name, email };
+      }).filter(r => r.name || r.email);
+      setParsedBuyers(rows);
+    };
+    reader.readAsText(file);
+  };
 
   const startProcess = async () => {
     setStep('processing');
@@ -18,15 +37,15 @@ const ImportBuyersStudio = ({ onSuccess }) => {
       setTimeout(() => { setProgress(40); setProgressText('Verifying data...'); }, 500);
       setTimeout(() => { setProgress(75); setProgressText('Importing customers...'); }, 1000);
 
-      await axios.post('/api/v1/seller-studio/import-buyers', {});
+      await axios.post('/api/v1/seller-studio/import-buyers', { buyers: parsedBuyers });
       
       setProgress(100);
       setIsSubmitting(false);
       setStep('success');
-      setIsSubmitting(false);
     } catch (e) {
       setIsSubmitting(false);
       setProgressText('Failed.');
+      setStep('mapping');
     }
   };
 
@@ -62,9 +81,13 @@ const ImportBuyersStudio = ({ onSuccess }) => {
             
       <div>
         <label className="block text-sm font-bold text-gray-800 mb-3">Upload CSV</label>
-        <div className="border-2 border-dashed border-gray-300 rounded-2xl p-12 flex flex-col items-center justify-center bg-gray-50">
-          <span className="text-gray-800 font-bold mb-1">Click to upload CSV</span>
-        </div>
+        <label className="border-2 border-dashed border-gray-300 hover:border-[#00b873] rounded-2xl p-12 flex flex-col items-center justify-center bg-gray-50 cursor-pointer transition-colors">
+          <input type="file" accept=".csv,text/csv" className="hidden" onChange={handleFileChange} />
+          <span className="text-gray-800 font-bold mb-1">
+            {csvFileName ? `${csvFileName} (${parsedBuyers.length} rows detected)` : 'Click to upload CSV'}
+          </span>
+          <span className="text-xs text-gray-500">Format: Name, Email</span>
+        </label>
       </div>
     
           </div>

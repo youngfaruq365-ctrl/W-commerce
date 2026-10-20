@@ -42,7 +42,7 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 RUN chown -R appuser:appgroup /app
 USER appuser
 
-EXPOSE 3000
+EXPOSE 5000
 
 # Migrate DB schema then start server
 CMD ["sh", "-c", "npx prisma migrate deploy --schema=database/prisma/schema.prisma && node backend/server.cjs"]

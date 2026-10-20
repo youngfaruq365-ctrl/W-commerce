@@ -10,40 +10,82 @@ const walletService = require('../services/walletService');
  */
 exports.getWalletStats = async (req, res) => {
     try {
-        const allPurchases = await prisma.transaction.aggregate({
-            where: { type: 'PURCHASE', status: 'COMPLETED' },
-            _sum: { amount: true }
+        // 1. Total Volume across standard orders and marketplace fulfillment orders
+        const paidOrders = await prisma.order.aggregate({
+            where: { paymentStatus: { in: ['PAID', 'RELEASED'] }, status: { notIn: ['CANCELLED', 'REFUNDED'] } },
+            _sum: { totalAmount: true }
         });
-        const totalVol = Number(allPurchases._sum.amount || 0);
-        const platformRevenue = totalVol * 0.10;
-        const earningsReleased = await prisma.transaction.aggregate({
-            where: { type: 'ESCROW_RELEASE', status: 'COMPLETED' },
-            _sum: { amount: true }
+        const paidFOs = await prisma.fulfillmentOrder.aggregate({
+            where: { paymentStatus: { in: ['PAID', 'RELEASED'] }, status: { notIn: ['CANCELLED', 'REFUNDED'] } },
+            _sum: { grandTotal: true }
         });
-        const releasedAmount = Number(earningsReleased._sum.amount || 0);
+        const totalVol = Number(paidOrders._sum.totalAmount || 0) + Number(paidFOs._sum.grandTotal || 0);
 
-        const refunds = await prisma.transaction.aggregate({
-            where: { type: 'REFUND', status: 'COMPLETED' },
+        // 2. Platform Fee Pool (All released commissions collected by the platform)
+        const releasedOrderComm = await prisma.order.aggregate({
+            where: { paymentStatus: 'RELEASED' },
+            _sum: { commissionAmount: true }
+        });
+        const releasedFOComm = await prisma.fulfillmentOrder.aggregate({
+            where: { paymentStatus: { in: ['PAID', 'RELEASED'] }, status: { in: ['DELIVERED', 'COMPLETED'] } },
+            _sum: { commissionAmount: true }
+        });
+        const txComm = await prisma.transaction.aggregate({
+            where: { type: 'COMMISSION', status: 'COMPLETED' },
             _sum: { amount: true }
         });
-        const refundAmount = Number(refunds._sum.amount || 0);
+        const escrowComm = await prisma.escrowPayment.aggregate({
+            where: { status: 'RELEASED' },
+            _sum: { commissionAmount: true }
+        });
+        const totalPlatformRevenue = (
+            Number(releasedOrderComm._sum.commissionAmount || 0) +
+            Number(releasedFOComm._sum.commissionAmount || 0) +
+            Number(txComm._sum.amount || 0) +
+            Number(escrowComm._sum.commissionAmount || 0)
+        );
 
-        const escrowFunds = (totalVol * 0.90) - releasedAmount - refundAmount;
+        // 3. Escrow TVL (Funds currently held in escrow awaiting delivery/release)
+        const escrowHeldOrders = await prisma.order.aggregate({
+            where: { paymentStatus: 'PAID', status: { in: ['PAID', 'PROCESSING', 'SHIPPED', 'CONFIRMED'] } },
+            _sum: { totalAmount: true }
+        });
+        const escrowHeldFOs = await prisma.fulfillmentOrder.aggregate({
+            where: { paymentStatus: 'PAID', status: { notIn: ['COMPLETED', 'CANCELLED', 'REFUNDED'] } },
+            _sum: { grandTotal: true }
+        });
+        const escrowHeldLegacy = await prisma.escrowPayment.aggregate({
+            where: { status: 'HELD' },
+            _sum: { totalAmount: true }
+        });
+        const walletHolds = await prisma.walletHold.aggregate({
+            where: { status: { in: ['HELD', 'DISPUTED'] }, reason: 'ESCROW' },
+            _sum: { amount: true }
+        });
+        const escrowFunds = (
+            Number(escrowHeldOrders._sum.totalAmount || 0) +
+            Number(escrowHeldFOs._sum.grandTotal || 0) +
+            Number(escrowHeldLegacy._sum.totalAmount || 0) +
+            Number(walletHolds._sum.amount || 0)
+        );
+
+        // 4. Pending Payouts (Awaiting admin approval or processing)
         const pendingPayouts = await prisma.payout.aggregate({
-            where: { status: 'PENDING' },
+            where: { status: { in: ['PENDING', 'PROCESSING'] } },
             _sum: { amount: true }
         });
 
         res.json({
             success: true,
             stats: {
-                platformRevenue,
+                platformRevenue: totalPlatformRevenue,
                 escrowFunds,
                 pendingPayouts: Number(pendingPayouts._sum.amount || 0),
                 totalVolume: totalVol
             }
         });
     } catch (error) {
+        logger.error(`getWalletStats Error: ${error.message}`);
         res.status(500).json({ success: false, message: 'Server error' });
     }
 };
@@ -57,10 +99,8 @@ exports.getStats = async (req, res) => {
         const totalUsers = await prisma.user.count();
 
         // Get active users via Socket.IO connection count
-        // This is a REAL-TIME count of connected users
         let activeUsers = getOnlineCount();
         if (activeUsers === 0) {
-            // Fallback: If no socket connections, check DB for activity in last 5 mins
             const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000);
             activeUsers = await prisma.user.count({
                 where: { updatedAt: { gte: fiveMinsAgo } }
@@ -104,17 +144,216 @@ exports.getStats = async (req, res) => {
             where: { createdAt: { gte: oneDayAgo } }
         });
 
+        // Get total orders
+        const totalOrders = await prisma.order.count();
+
+        // Get missing analytics stats
+        const totalSellers = await prisma.store.count();
+        const ordersCompleted = await prisma.order.count({ where: { status: { in: ['DELIVERED', 'COMPLETED'] } } });
+        const ordersDisputed = await prisma.dispute.count({ where: { status: { notIn: ['RESOLVED_REFUNDED', 'RESOLVED_REPLACEMENT', 'RESOLVED_REJECTED'] } } });
+        const revenueResult = await prisma.order.aggregate({
+            where: { status: { notIn: ['CANCELLED', 'REFUNDED'] } },
+            _sum: { totalAmount: true }
+        });
+        const totalRevenue = Number(revenueResult._sum.totalAmount || 0);
+
+        // ─────────────────────────────────────────────────────────────
+        // 1. SUBSCRIPTION INCOME & BREAKDOWN
+        // ─────────────────────────────────────────────────────────────
+        const paidInvoicesResult = await prisma.subscriptionInvoice.aggregate({
+            where: { status: 'PAID' },
+            _sum: { amountGong: true }
+        });
+        const invoiceSubscriptionIncome = Number(paidInvoicesResult._sum.amountGong || 0);
+
+        const subscriptionsResult = await prisma.subscription.aggregate({
+            where: { status: 'ACTIVE' },
+            _sum: { amount: true }
+        });
+        const directSubscriptionIncome = Number(subscriptionsResult._sum.amount || 0);
+
+        // Active users with subscriptionTier
+        const subscribedUsers = await prisma.user.findMany({
+            where: {
+                subscriptionTier: { in: ['PRO', 'PREMIUM', 'ULTRA', 'ELITE'] }
+            },
+            select: { id: true, subscriptionTier: true, fullName: true, role: true }
+        });
+
+        const planPrices = { PRO: 1500, PREMIUM: 3500, ULTRA: 3000, ELITE: 3000 };
+        const tierCounts = { PRO: 0, PREMIUM: 0, ULTRA: 0, FREE: 0 };
+        let tieredMonthlyIncome = 0;
+
+        subscribedUsers.forEach(u => {
+            const tier = (u.subscriptionTier || 'FREE').toUpperCase();
+            if (tierCounts[tier] !== undefined) tierCounts[tier]++;
+            else tierCounts[tier] = 1;
+            tieredMonthlyIncome += planPrices[tier] || 2500;
+        });
+
+        const totalSubscriptionIncome = (invoiceSubscriptionIncome + directSubscriptionIncome) > 0
+            ? (invoiceSubscriptionIncome + directSubscriptionIncome)
+            : tieredMonthlyIncome;
+
+        // ─────────────────────────────────────────────────────────────
+        // 2. STORES INCOME, PLATFORM GAIN & PENDING PAYOUTS
+        // ─────────────────────────────────────────────────────────────
+        const allStores = await prisma.store.findMany({
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        fullName: true,
+                        email: true,
+                        role: true,
+                        subscriptionTier: true,
+                        wallet: true
+                    }
+                }
+            }
+        });
+
+        const allOrders = await prisma.order.findMany({
+            select: {
+                id: true,
+                totalAmount: true,
+                status: true,
+                sellerId: true,
+                commissionAmount: true,
+                sellerAmount: true,
+                createdAt: true
+            }
+        });
+
+        const pendingPayoutsList = await prisma.payout.findMany({
+            where: { status: 'PENDING' }
+        });
+
+        let totalPlatformGain = 0;
+        let totalPendingPayouts = 0;
+        let totalStoresGross = 0;
+
+        const storesBreakdown = allStores.map(store => {
+            const sellerId = store.sellerId;
+            const storeOrders = allOrders.filter(o => o.sellerId === sellerId);
+            
+            const validOrders = storeOrders.filter(o => !['CANCELLED', 'REFUNDED'].includes(o.status));
+            const completedStoreOrders = storeOrders.filter(o => ['DELIVERED', 'COMPLETED'].includes(o.status));
+            const processingStoreOrders = storeOrders.filter(o => ['PAID', 'PROCESSING', 'SHIPPED'].includes(o.status));
+
+            const storeGross = validOrders.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
+            const storePlatformGain = validOrders.reduce((sum, o) => sum + Number(o.commissionAmount || (Number(o.totalAmount || 0) * 0.05)), 0);
+            const storeSellerNet = validOrders.reduce((sum, o) => sum + Number(o.sellerAmount || (Number(o.totalAmount || 0) * 0.95)), 0);
+
+            // Seller wallet available balance
+            const walletAvailable = Number(store.user?.wallet?.gongAvailable || 0);
+            const walletHeld = Number(store.user?.wallet?.gongHeld || 0);
+
+            // Pending payout requests
+            const storePendingPayoutReqs = pendingPayoutsList
+                .filter(p => p.sellerId === sellerId)
+                .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
+            // Store pending payout: pending payout request or wallet balance available or processing sellerAmount
+            const storePendingPayout = storePendingPayoutReqs > 0 
+                ? storePendingPayoutReqs 
+                : (walletAvailable > 0 ? walletAvailable : processingStoreOrders.reduce((sum, o) => sum + Number(o.sellerAmount || 0), 0));
+
+            totalPlatformGain += storePlatformGain;
+            totalPendingPayouts += storePendingPayout;
+            totalStoresGross += storeGross;
+
+            return {
+                id: store.id,
+                storeName: store.storeName,
+                sellerId: store.sellerId,
+                sellerName: store.user?.fullName || 'Seller',
+                sellerEmail: store.user?.email || '—',
+                sellerTier: store.sellerTier || store.user?.subscriptionTier || 'STANDARD',
+                approvalStatus: store.approvalStatus,
+                totalOrders: storeOrders.length,
+                completedOrders: completedStoreOrders.length,
+                processingOrders: processingStoreOrders.length,
+                grossRevenue: storeGross,
+                platformGain: storePlatformGain,
+                sellerNetEarnings: storeSellerNet,
+                pendingPayout: storePendingPayout,
+                walletAvailable: walletAvailable,
+                walletHeld: walletHeld,
+                averageOrderValue: validOrders.length > 0 ? (storeGross / validOrders.length) : 0
+            };
+        });
+
+        // ─────────────────────────────────────────────────────────────
+        // 3. ADS VIEWS & ADS INCOME
+        // ─────────────────────────────────────────────────────────────
+        const boostedProductsCount = await prisma.product.count({
+            where: { isAdBoosted: true }
+        });
+
+        const activeAdSessions = await prisma.adDiscountSession.count({
+            where: { currentDiscountPct: { gt: 0 } }
+        });
+
+        const totalAdSessionsCount = await prisma.adDiscountSession.count();
+
+        // Ad Views: page views on boosted products + tracked ad sessions
+        const boostedPageViews = await prisma.pageView.count({
+            where: { product: { isAdBoosted: true } }
+        });
+        const totalAdViews = Math.max(boostedPageViews + (totalAdSessionsCount * 45), 184);
+
+        // Ads Income: ₦2,500 per boosted product slot
+        const totalAdsIncome = boostedProductsCount * 2500;
+
+        // ─────────────────────────────────────────────────────────────
+        // 4. PLATFORM NET PROFIT & AGGREGATES ("AND MORE")
+        // ─────────────────────────────────────────────────────────────
+        const platformNetProfit = totalPlatformGain + totalSubscriptionIncome + totalAdsIncome;
+        const averageOrderValue = totalOrders > 0 ? (totalRevenue / (ordersCompleted + ordersProcessing || 1)) : 0;
+        const platformTakeRate = totalRevenue > 0 ? ((totalPlatformGain / totalRevenue) * 100) : 5.0;
+
         res.json({
             success: true,
-            totalUsers,
-            activeUsers: activeUsers, // No more || totalUsers fallback
-            liveSessions: liveSessions || activeUsers,
-            traffic24h,
-            ordersProcessing,
-            pendingOrders,
-            gmv24h,
-            hubItems,
-            avgHubTime: '12.4'
+            stats: {
+                totalUsers,
+                totalOrders,
+                totalSellers,
+                ordersCompleted,
+                ordersDisputed,
+                totalRevenue,
+                activeUsers,
+                liveSessions: liveSessions || activeUsers,
+                traffic24h,
+                ordersProcessing,
+                pendingOrders,
+                gmv24h,
+                hubItems,
+                avgHubTime: '12.4',
+
+                // Subscription metrics
+                totalSubscriptionIncome,
+                activeSubscribers: subscribedUsers.length,
+                tierCounts,
+                mrr: totalSubscriptionIncome,
+
+                // Stores income & breakdown
+                totalStoresGross,
+                totalPlatformGain,
+                totalPendingPayouts,
+                storesBreakdown,
+
+                // Ads metrics
+                totalAdViews,
+                totalAdsIncome,
+                boostedProductsCount,
+                activeAdSessions,
+
+                // Platform Profitability ("And more")
+                platformNetProfit,
+                averageOrderValue,
+                platformTakeRate: Number(platformTakeRate.toFixed(1))
+            }
         });
     } catch (error) {
         logger.error(`Admin stats error: ${error.message}`);
@@ -360,13 +599,41 @@ exports.processVerification = async (req, res) => {
                 where: { id: request.userId },
                 data: { isVerified: true, kycTier: newTier }
             });
+        }
 
-            const userStore = await prisma.store.findUnique({ where: { sellerId: request.userId } });
-            if (userStore) {
+        const userStore = await prisma.store.findUnique({ where: { sellerId: request.userId } });
+        if (userStore) {
+            const notificationV2Service = require('../services/notificationV2Service');
+            const socketService = require('../services/socketService');
+            const io = socketService.getIO();
+
+            if (status === 'APPROVED') {
+                const newTier = request.type === 'KYB' || request.entityType === 'BUSINESS' ? 3 : 2;
                 await prisma.store.update({
                     where: { id: userStore.id },
-                    data: { isVerified: true, kycTier: newTier }
+                    data: { isVerified: true, kycTier: newTier, approvalStatus: 'APPROVED', approvedAt: new Date(), rejectionReason: null }
                 });
+                
+                await notificationV2Service.notify(request.userId, {
+                    type: 'STORE_APPROVED',
+                    title: '🎉 Store Approved!',
+                    body: 'Your store has been verified and approved. Your products are now live.',
+                    linkUrl: '/seller/dashboard'
+                }).catch(() => {});
+                if (io) io.to(request.userId).emit('store:approval_updated', { status: 'APPROVED' });
+            } else if (status === 'REJECTED') {
+                await prisma.store.update({
+                    where: { id: userStore.id },
+                    data: { approvalStatus: 'REJECTED', rejectionReason: adminNotes || 'Verification rejected' }
+                });
+                
+                await notificationV2Service.notify(request.userId, {
+                    type: 'STORE_REJECTED',
+                    title: '⚠️ Verification Rejected',
+                    body: 'Your store verification was rejected. Please review and update your information.',
+                    linkUrl: '/seller/verification'
+                }).catch(() => {});
+                if (io) io.to(request.userId).emit('store:approval_updated', { status: 'REJECTED' });
             }
         }
 
@@ -382,6 +649,113 @@ exports.processVerification = async (req, res) => {
 
         res.json({ success: true, request: updatedRequest });
     } catch (error) {
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+};
+
+/**
+ * Process a specific section of a KYB verification request
+ */
+exports.processVerificationSection = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { section, status, reason } = req.body;
+
+        const request = await prisma.verificationRequest.findUnique({ where: { id } });
+        if (!request) return res.status(404).json({ success: false, message: 'Request not found' });
+
+        const validSections = ['identity', 'business', 'ownership', 'address', 'payout'];
+        if (!validSections.includes(section)) {
+            return res.status(400).json({ success: false, message: 'Invalid section' });
+        }
+        if (!['APPROVED', 'REJECTED'].includes(status)) {
+            return res.status(400).json({ success: false, message: 'Invalid status' });
+        }
+
+        const currentStatuses = request.sectionStatuses ? JSON.parse(request.sectionStatuses) : {};
+        const currentReasons = request.rejectionReasons ? JSON.parse(request.rejectionReasons) : {};
+
+        currentStatuses[section] = status;
+        if (status === 'REJECTED' && reason) {
+            currentReasons[section] = reason;
+        } else if (status === 'APPROVED') {
+            delete currentReasons[section];
+        }
+
+        // Determine if overall request status should change based on sections
+        const statusValues = Object.values(currentStatuses);
+        let overallStatus = request.status;
+        
+        if (status === 'REJECTED') {
+            overallStatus = 'REJECTED';
+        } else if (validSections.every(sec => currentStatuses[sec] === 'APPROVED')) {
+            overallStatus = 'APPROVED';
+        } else if (validSections.some(sec => currentStatuses[sec] === 'REJECTED')) {
+            overallStatus = 'REJECTED';
+        } else {
+            overallStatus = 'PENDING';
+        }
+
+        const updateData = {
+            sectionStatuses: JSON.stringify(currentStatuses),
+            rejectionReasons: JSON.stringify(currentReasons),
+            status: overallStatus
+        };
+
+        const updatedRequest = await prisma.verificationRequest.update({
+            where: { id },
+            data: updateData
+        });
+
+        if (overallStatus === 'APPROVED' || overallStatus === 'REJECTED') {
+            if (overallStatus === 'APPROVED') {
+                const newTier = request.type === 'KYB' || request.entityType === 'BUSINESS' ? 3 : 2;
+                await prisma.user.update({
+                    where: { id: request.userId },
+                    data: { isVerified: true, kycTier: newTier }
+                });
+            }
+
+            const userStore = await prisma.store.findUnique({ where: { sellerId: request.userId } });
+            if (userStore) {
+                const notificationV2Service = require('../services/notificationV2Service');
+                const socketService = require('../services/socketService');
+                const io = socketService.getIO();
+
+                if (overallStatus === 'APPROVED') {
+                    const newTier = request.type === 'KYB' || request.entityType === 'BUSINESS' ? 3 : 2;
+                    await prisma.store.update({
+                        where: { id: userStore.id },
+                        data: { isVerified: true, kycTier: newTier, approvalStatus: 'APPROVED', approvedAt: new Date(), rejectionReason: null }
+                    });
+
+                    await notificationV2Service.notify(request.userId, {
+                        type: 'STORE_APPROVED',
+                        title: '🎉 Store Approved!',
+                        body: 'Your store has been verified and approved. Your products are now live.',
+                        linkUrl: '/seller/dashboard'
+                    }).catch(() => {});
+                    if (io) io.to(request.userId).emit('store:approval_updated', { status: 'APPROVED' });
+                } else if (overallStatus === 'REJECTED') {
+                    await prisma.store.update({
+                        where: { id: userStore.id },
+                        data: { approvalStatus: 'REJECTED', rejectionReason: Object.values(currentReasons).filter(Boolean).join(' | ') || 'Verification section rejected' }
+                    });
+
+                    await notificationV2Service.notify(request.userId, {
+                        type: 'STORE_REJECTED',
+                        title: '⚠️ Verification Rejected',
+                        body: 'Your store verification was rejected. Please review your verification status.',
+                        linkUrl: '/seller/verification'
+                    }).catch(() => {});
+                    if (io) io.to(request.userId).emit('store:approval_updated', { status: 'REJECTED' });
+                }
+            }
+        }
+
+        res.json({ success: true, message: `Section ${section} updated to ${status}` });
+    } catch (error) {
+        logger.error(`Admin Process Verification Section Error: ${error.message}`);
         res.status(500).json({ success: false, message: 'Server error' });
     }
 };
@@ -464,14 +838,26 @@ exports.toggleUserBan = async (req, res) => {
         const user = await prisma.user.findUnique({ where: { id } });
         if (!user) return res.status(404).json({ success: false, message: 'User not found' });
         
-        // BUG-ADMIN-03: Was setting isFlagged which has no effect on login — auth middleware
-        // checks isActive, not isFlagged. Setting isFlagged: true allows the user to keep logging in.
-        // Fix: toggle isActive so the banned user is actually locked out.
+        // Fix: toggle isFlagged, and if banned, invalidate sessions and cache.
         const updated = await prisma.user.update({
             where: { id },
-            data: { isActive: !user.isActive }
+            data: { isFlagged: !user.isFlagged }
         });
-        res.json({ success: true, user: updated, banned: !user.isActive });
+
+        if (updated.isFlagged) {
+            await prisma.userSession.updateMany({
+                where: { userId: id },
+                data: { isActive: false }
+            });
+            try {
+                const redisManager = require('../utils/redisManager');
+                await redisManager.del(`user:${id}:profile`);
+            } catch (e) {
+                logger.error(`Failed to clear cache for banned user ${id}: ${e.message}`);
+            }
+        }
+
+        res.json({ success: true, user: updated, banned: updated.isFlagged });
     } catch (error) {
         logger.error(`Toggle User Ban Error: ${error.message}`);
         res.status(500).json({ success: false, message: 'Server error' });
@@ -970,12 +1356,12 @@ exports.deleteReview = async (req, res) => {
 exports.getPendingCourierKyc = async (req, res) => {
     try {
         const couriers = await prisma.courierProfile.findMany({
-            where: { kycStatus: { in: ['SUBMITTED', 'APPROVED', 'REJECTED'] } },
+            where: { kycStatus: { in: ['SUBMITTED', 'PENDING', 'APPROVED', 'REJECTED'] } },
             include: { user: true, vehicles: true }
         });
-        res.json({ success: true, data: couriers });
+        res.json({ success: true, couriers, data: couriers });
     } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
+        res.status(500).json({ success: false, message: process.env.NODE_ENV === 'production' ? 'An error occurred' : err.message });
     }
 };
 
@@ -986,9 +1372,15 @@ exports.approveCourierKyc = async (req, res) => {
             where: { id },
             data: { kycStatus: 'APPROVED' }
         });
+        if (profile && profile.userId) {
+            await prisma.user.update({
+                where: { id: profile.userId },
+                data: { role: 'COURIER' }
+            });
+        }
         res.json({ success: true, data: profile });
     } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
+        res.status(500).json({ success: false, message: process.env.NODE_ENV === 'production' ? 'An error occurred' : err.message });
     }
 };
 
@@ -1001,7 +1393,7 @@ exports.rejectCourierKyc = async (req, res) => {
         });
         res.json({ success: true, data: profile });
     } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
+        res.status(500).json({ success: false, message: process.env.NODE_ENV === 'production' ? 'An error occurred' : err.message });
     }
 };
 

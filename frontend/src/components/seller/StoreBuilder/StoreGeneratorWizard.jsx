@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 import { ExperienceRenderer } from '../../../engines/universal/ExperienceRenderer';
 import StorePreview from '../../store-marketplace/StorePreview';
 

@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { useNavigate, useLocation } from 'react-router-dom';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 import { 
   LayoutDashboard, ShoppingBag, History, Heart, Store, MessageSquare, 
   Wallet, RefreshCcw, ShieldAlert, Star, Truck, PackageCheck, 
-  CreditCard, MapPin, Bell, Lock, Settings, HelpCircle, Menu, X, ShieldCheck, Plus, Key
+  CreditCard, MapPin, Bell, Lock, Settings, HelpCircle, Menu, X, ShieldCheck, Plus, Key, Target
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useBuyerStore } from '../../store/buyerStore';
 import { useSocket } from '../../hooks/useSocket';
 import NotificationBell from '../../components/shared/NotificationBell';
+import { celebrate } from '../../components/CelebrationController';
 import TopUpModal from '../../components/buyer/TopUpModal';
 import WithdrawModal from '../../components/buyer/WithdrawModal';
 import CreateDisputeModal from '../../components/buyer/CreateDisputeModal';
@@ -22,11 +23,24 @@ import ContactSupportModal from '../../components/buyer/ContactSupportModal';
 import PrintableReceiptModal from '../../components/buyer/PrintableReceiptModal';
 import TrackingModal from '../../components/buyer/TrackingModal';
 import ProvideAddressModal from '../../components/buyer/Dashboard/ProvideAddressModal';
+import CreateSourcingRequestModal from '../../components/buyer/CreateSourcingRequestModal';
 import { subscribeToPushNotifications } from '../../utils/pushService';
 import { registerPasskey } from '../../utils/webauthnService';
 import { showNotification } from '../../utils/notifications';
 import BuyerDisputesTab from '../../components/buyer/Dashboard/BuyerDisputesTab';
 import SavedAddresses from '../../modules/buyer/SavedAddresses';
+import { MapView } from '../../maps/MapView';
+import { PLACEHOLDER_IMAGE, PLACEHOLDER_AVATAR, PLACEHOLDER_MAP } from '@/constants/placeholders';
+const formatAddress = (addr) => {
+  if (!addr) return 'N/A';
+  if (typeof addr === 'string') {
+    try {
+      const parsed = JSON.parse(addr);
+      return `${parsed.street ? parsed.street + ', ' : ''}${parsed.city || ''} ${parsed.country || ''}`.trim() || 'N/A';
+    } catch(e) { return addr; }
+  }
+  return typeof addr === 'object' ? `${addr.street ? addr.street + ', ' : ''}${addr.city || ''} ${addr.country || ''}`.trim() || 'N/A' : 'N/A';
+};
 
 const BuyerDashboard = () => {
   const { user, logout } = useAuthStore();
@@ -34,8 +48,8 @@ const BuyerDashboard = () => {
   const location = useLocation();
   const fileInputRef = React.useRef(null);
   const { 
-    orders, wishlist, wallet, walletTransactions, savedShops, messages, disputes, reviews, notifications, profile,
-    fetchOrders, fetchWishlist, fetchWallet, fetchWalletTransactions, fetchSavedShops, fetchMessages, fetchDisputes, fetchReviews, fetchNotifications, fetchProfile, confirmReceipt, interactWithNotification, removeFromWishlist, addToCartFromWishlist, uploadPaymentProof
+    orders, wishlist, wallet, walletTransactions, savedShops, messages, disputes, reviews, notifications, profile, buyerRequests,
+    fetchOrders, fetchWishlist, fetchWallet, fetchWalletTransactions, fetchSavedShops, fetchMessages, fetchDisputes, fetchReviews, fetchNotifications, fetchProfile, confirmReceipt, interactWithNotification, removeFromWishlist, addToCartFromWishlist, uploadPaymentProof, fetchBuyerRequests
   } = useBuyerStore();
 
   const handleLogout = async () => {
@@ -49,9 +63,12 @@ const BuyerDashboard = () => {
     const reference = searchParams.get('reference') || searchParams.get('trxref') || searchParams.get('tx_ref') || searchParams.get('transaction_id');
     
     if (fundingProvider && reference) {
+      // NOTE: Route paths must match backend walletRoutes.js exactly:
+      //   GET /api/v1/wallet/fund/verify-paystack/:reference
+      //   GET /api/v1/wallet/fund/verify-flutterwave/:txRef
       const verifyEndpoint = fundingProvider === 'paystack' 
-        ? `/api/v1/wallet/fund/paystack/verify/${reference}`
-        : `/api/v1/wallet/fund/flutterwave/verify/${reference}`;
+        ? `/api/v1/wallet/fund/verify-paystack/${encodeURIComponent(reference)}`
+        : `/api/v1/wallet/fund/verify-flutterwave/${encodeURIComponent(reference)}`;
         
       axios.get(verifyEndpoint)
         .then(res => {
@@ -63,15 +80,26 @@ const BuyerDashboard = () => {
         })
         .catch(err => {
           console.error('Funding verification failed:', err);
-          window.__gxAlert?.('Failed to verify wallet funding.') ?? toast.error('Failed to verify wallet funding.');
+          const msg = err.response?.data?.message || 'Failed to verify wallet funding.';
+          window.__gxAlert?.(msg) ?? toast.error(msg);
         })
         .finally(() => {
-          // Remove the query parameters
+          // Remove query params to prevent re-verification on refresh
           window.history.replaceState({}, document.title, window.location.pathname);
         });
     }
 
-    const tab = searchParams.get('tab');
+    const rawTab = searchParams.get('tab');
+    let tab = rawTab === 'orders' ? 'active_orders' : rawTab;
+    if (!tab && (location.pathname.includes('/orders') || location.pathname === '/buyer/orders')) {
+      tab = 'active_orders';
+    } else if (!tab && location.pathname.includes('/tracking')) {
+      tab = 'tracking';
+    } else if (!tab && location.pathname.includes('/history')) {
+      tab = 'history';
+    } else if (!tab && location.pathname.includes('/disputes')) {
+      tab = 'disputes';
+    }
     if (tab) {
       setActiveTab(tab);
     }
@@ -83,7 +111,20 @@ const BuyerDashboard = () => {
     }
   }, [location.search]);
 
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState(() => {
+    const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+    const raw = params.get('tab');
+    if (raw === 'orders') return 'active_orders';
+    if (raw) return raw;
+    const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+    if (pathname.includes('/orders')) return 'active_orders';
+    if (pathname.includes('/tracking')) return 'tracking';
+    if (pathname.includes('/history')) return 'history';
+    if (pathname.includes('/disputes')) return 'disputes';
+    if (pathname.includes('/wishlist')) return 'wishlist';
+    if (pathname.includes('/notifications')) return 'notifications';
+    return 'overview';
+  });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isTopUpModalOpen, setIsTopUpModalOpen] = useState(false);
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
@@ -98,9 +139,12 @@ const BuyerDashboard = () => {
   const [isTrackingModalOpen, setIsTrackingModalOpen] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [passkeySetup, setPasskeySetup] = useState(false);
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
+  const [passkeyDone, setPasskeyDone] = useState(false);
   const [orderToDispute, setOrderToDispute] = useState(null);
   const [selectedReceiptOrder, setSelectedReceiptOrder] = useState(null);
   const [provideAddressOrderId, setProvideAddressOrderId] = useState(null);
+  const [isCreateRequestModalOpen, setIsCreateRequestModalOpen] = useState(false);
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -136,6 +180,7 @@ const BuyerDashboard = () => {
     { id: 'wallet', label: 'Escrow Wallet', icon: Wallet },
     { id: 'refunds', label: 'Refund Requests', icon: RefreshCcw },
     { id: 'disputes', label: 'Dispute Center', icon: ShieldAlert },
+    { id: 'sourcing', label: 'Sourcing Requests', icon: Target },
     { id: 'reviews', label: 'Reviews Given', icon: Star },
     { id: 'tracking', label: 'Delivery Tracking', icon: Truck },
     { id: 'hub', label: 'Hub Consolidation', icon: PackageCheck },
@@ -175,9 +220,10 @@ const BuyerDashboard = () => {
         await Promise.all([
           fetchProfile(), fetchOrders(), fetchWishlist(), fetchWallet(),
           fetchWalletTransactions(), fetchSavedShops(), fetchMessages(),
-          fetchDisputes(), fetchReviews(), fetchNotifications()
+          fetchDisputes(), fetchReviews(), fetchNotifications(),
+          fetchBuyerRequests()
         ]);
-      } catch (e) {} finally {
+      } catch (e) { toast.error('Failed to load dashboard data'); } finally {
         setIsLoading(false);
       }
     };
@@ -191,7 +237,7 @@ const BuyerDashboard = () => {
     
     if (orders && orders.length > 0) {
       orders.forEach(order => {
-        if (['PENDING', 'AWAITING_DIRECT_PAYMENT', 'AWAITING_TRANSFER', 'PENDING_VERIFICATION', 'PAID', 'PACKED', 'CONFIRMED', 'SHIPPED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(order.status)) {
+        if (['PENDING', 'AWAITING_DIRECT_PAYMENT', 'AWAITING_TRANSFER', 'PENDING_VERIFICATION', 'PAYMENT_SUBMITTED', 'PROOF_SUBMITTED', 'PAID', 'PACKED', 'CONFIRMED', 'SHIPPED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(order.status)) {
           active += 1;
         }
         if (order.status === 'DELIVERED' || order.status === 'COMPLETED') {
@@ -216,41 +262,78 @@ const BuyerDashboard = () => {
       case 'overview':
         return (
           <div className="space-y-6 animate-fade-in">
-            <h2 className="text-2xl font-bold mb-6">Buyer Overview</h2>
+            <h2 className="text-3xl font-black mb-6">Buyer Overview</h2>
+            
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {[
-                { title: 'Active Escrows', value: stats.activeEscrows.toString(), color: 'text-[var(--accent-gray)]' },
-                { title: 'Total Spent', value: `NGN ${stats.totalSpent.toFixed(2)}`, color: 'text-black' },
+                { title: 'Active Escrows', value: stats.activeEscrows.toString(), color: 'text-[var(--text-main)]' },
+                { title: 'Total Spent', value: `NGN ${stats.totalSpent.toFixed(2)}`, color: 'text-blue-600' },
                 { title: 'Saved Items', value: stats.savedItems.toString(), color: 'text-yellow-500' },
                 { title: 'Hub Items', value: stats.hubItems.toString(), color: 'text-purple-500' }
               ].map((stat, i) => (
-                <div key={i} className="premium-glass p-6 rounded-xl border border-[var(--border-color)] hover-3d hover:border-[var(--accent-gray)] transition-colors">
-                  <h3 className="text-[var(--text-muted)] text-sm mb-2">{stat.title}</h3>
-                  <p className={`text-3xl font-extrabold ${stat.color}`}>{stat.value}</p>
+                <div key={i} className="neu-card p-6 flex flex-col items-center text-center justify-center">
+                  <h3 className="text-[11px] font-black tracking-widest uppercase text-[var(--text-muted)] mb-2">{stat.title}</h3>
+                  <p className={`text-3xl font-black ${stat.color}`}>{stat.value}</p>
                 </div>
               ))}
             </div>
-            
-            <div className="mt-8 premium-glass p-6 rounded-xl border border-[var(--border-color)]">
-               <h3 className="text-xl font-bold mb-4 border-b border-[var(--border-color)] pb-4">Recent Hub Activity</h3>
-               <div className="space-y-4">
-                  {orders.filter(o => o.isConsolidated).slice(0,3).map(order => (
-                     <div key={order.id} className="flex justify-between items-center p-4 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-color)]">
-                        <div className="flex items-center gap-4">
-                           <div className="w-12 h-12 bg-white rounded-lg border border-[var(--accent-gray)] flex items-center justify-center shadow-[0_0_10px_var(--accent-gray-dim)]">
-                              <PackageCheck className="text-[var(--accent-gray)]" />
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
+               {/* Delivery Tracking Widget */}
+               <div className="neu-panel p-6 flex flex-col h-[400px]">
+                  <div className="flex justify-between items-center mb-6">
+                     <h3 className="text-xl font-black">Delivery Tracking</h3>
+                     <span className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Live</span>
+                  </div>
+                  <div className="flex-1 bg-gray-100 rounded-xl overflow-hidden relative border border-[var(--border-color)]">
+                     <img src={PLACEHOLDER_MAP} alt="Map" className="w-full h-full object-cover" />
+                     {/* Map Pin */}
+                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+                        <div className="w-12 h-12 bg-[var(--bg-primary)] rounded-xl shadow-lg flex items-center justify-center border border-[var(--border-color)] animate-bounce">
+                           <Truck size={24} className="text-[var(--text-main)]" />
+                        </div>
+                     </div>
+                  </div>
+                  <div className="mt-6">
+                     <div className="flex justify-between items-end">
+                        <div>
+                           <p className="font-bold text-lg">In transit to Lagos Hub</p>
+                           <p className="text-xs text-[var(--text-muted)] mt-1">Est. delivery: Tomorrow, 2:00 PM</p>
+                        </div>
+                        <button className="neu-button px-4 py-2 text-xs" onClick={() => setActiveTab('tracking')}>Track</button>
+                     </div>
+                  </div>
+               </div>
+
+               {/* Recent Orders Table Widget */}
+               <div className="neu-panel p-6 flex flex-col h-[400px]">
+                  <div className="flex justify-between items-center mb-6">
+                     <h3 className="text-xl font-black">Recent Orders</h3>
+                     <button className="text-xs font-bold text-blue-500 uppercase tracking-wider hover:underline" onClick={() => setActiveTab('active_orders')}>View All</button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto hide-scrollbar space-y-4 pr-2">
+                     {orders.filter(o => o.status !== 'CART').slice(0, 4).map(order => (
+                        <div key={order.id} className="flex gap-4 p-3 rounded-xl hover:bg-[var(--bg-secondary)] transition-colors border border-transparent hover:border-[var(--border-color)]">
+                           <div className="w-14 h-14 bg-gray-100 rounded-lg overflow-hidden shrink-0 border border-[var(--border-color)]">
+                              <img src={order.items?.[0]?.product?.images?.[0]?.url || order.items?.[0]?.product?.images?.[0] || PLACEHOLDER_IMAGE} className="w-full h-full object-cover" alt="item" />
                            </div>
-                           <div>
-                              <p className="font-bold">{order.items?.[0]?.product?.title || 'Consolidated Item'}</p>
-                              <p className="text-sm text-[var(--text-muted)]">Order #{order.id.slice(0,8).toUpperCase()}</p>
+                           <div className="flex-1 min-w-0 flex flex-col justify-center">
+                              <p className="font-bold text-sm line-clamp-1">{order.items?.[0]?.product?.title || 'Unknown Product'}</p>
+                              <p className="text-xs text-[var(--text-muted)] mt-0.5">#{order.id.slice(0,8).toUpperCase()}</p>
+                           </div>
+                           <div className="flex flex-col justify-center items-end shrink-0">
+                              <p className="font-bold text-sm">NGN {parseFloat(order.totalAmount || 0).toFixed(0)}</p>
+                              <p className="text-[10px] font-bold mt-1 px-2 py-0.5 bg-gray-200 text-gray-700 rounded-full">{order.status}</p>
                            </div>
                         </div>
-                        <span className="text-[var(--text-muted)] text-sm">{order.status}</span>
-                     </div>
-                  ))}
-                  {orders.filter(o => o.isConsolidated).length === 0 && (
-                     <p className="text-[var(--text-muted)] text-sm">No recent hub activity.</p>
-                  )}
+                     ))}
+                     {orders.length === 0 && (
+                        <div className="flex flex-col items-center justify-center h-full text-[var(--text-muted)]">
+                           <ShoppingBag size={32} className="mb-2 opacity-20" />
+                           <p className="text-sm font-bold">No recent orders</p>
+                        </div>
+                     )}
+                  </div>
                </div>
             </div>
           </div>
@@ -260,9 +343,9 @@ const BuyerDashboard = () => {
           
           <div className="space-y-6 animate-fade-in">
             <h2 className="text-2xl font-bold mb-6">Active Orders</h2>
-            {orders && orders.filter(o => ['PENDING', 'AWAITING_DIRECT_PAYMENT', 'AWAITING_TRANSFER', 'PENDING_VERIFICATION', 'PAID', 'PACKED', 'CONFIRMED', 'SHIPPED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(o.status)).length > 0 ? (
+            {orders && orders.filter(o => ['PENDING', 'AWAITING_DIRECT_PAYMENT', 'AWAITING_TRANSFER', 'PENDING_VERIFICATION', 'PAYMENT_SUBMITTED', 'PROOF_SUBMITTED', 'PAID', 'PACKED', 'CONFIRMED', 'SHIPPED', 'HANDED_TO_COURIER', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(o.status)).length > 0 ? (
               <div className="space-y-4">
-                {orders.filter(o => ['PENDING', 'AWAITING_DIRECT_PAYMENT', 'AWAITING_TRANSFER', 'PENDING_VERIFICATION', 'PAID', 'PACKED', 'CONFIRMED', 'SHIPPED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(o.status)).map(order => (
+                {orders.filter(o => ['PENDING', 'AWAITING_DIRECT_PAYMENT', 'AWAITING_TRANSFER', 'PENDING_VERIFICATION', 'PAYMENT_SUBMITTED', 'PROOF_SUBMITTED', 'PAID', 'PACKED', 'CONFIRMED', 'SHIPPED', 'HANDED_TO_COURIER', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(o.status)).map(order => (
                   <div key={order.id} className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md p-8 rounded-2xl border border-[var(--border-color)] transition-all duration-300 hover:-translate-y-1 hover:shadow-xl group">
                     <div className="flex justify-between items-center mb-4 border-b border-[var(--border-color)] pb-4">
                       <div>
@@ -275,18 +358,18 @@ const BuyerDashboard = () => {
                        {order.items?.map(item => (
                          <div key={item.id} className="flex gap-6">
                             <div className="w-32 h-32 aspect-square bg-white rounded-xl overflow-hidden border border-[var(--border-color)] flex-shrink-0">
-                               <img src={item.product?.images?.[0]?.url || item.product?.images?.[0] || 'https://placehold.co/100x100/111/333?text=No+Image'} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="product" />
+                               <img src={item.product?.images?.[0]?.url || item.product?.images?.[0] || PLACEHOLDER_IMAGE} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="product" />
                             </div>
                             <div>
                                <p className="font-bold text-lg line-clamp-1">{item.product?.title}</p>
-                               <p className="text-[var(--text-muted)] mt-1">Qty: {item.quantity} Ã— NGN {item.priceAtTime || item.price}</p>
+                               <p className="text-[var(--text-muted)] mt-1">Qty: {item.quantity} x NGN {item.priceAtTime || item.price}</p>
                                {item.variantOptions && <p className="text-sm text-gray-700 mt-1">{item.variantOptions}</p>}
                                {(item.product?.store?.location || item.product?.store?.country) && (
-                                 <p className="text-sm text-[var(--accent-gray)] mt-2 flex items-center gap-1 font-bold">
+                                 <p className="text-sm text-[var(--accent-gray)] mt-2 flex flex-wrap items-center gap-1 font-bold">
                                     <MapPin size={14} /> 
-                                    Seller Location: {item.product.store.location || item.product.store.country} 
+                                    Seller Address: {item.product.store.location || item.product.store.country} 
                                     <span className="mx-2 text-gray-600">|</span> 
-                                    Pickup Port: {item.product.store.shipPort || 'GlobalX Hub'}
+                                    Buyer Address: {formatAddress(order.shippingAddress)}
                                  </p>
                                )}
                             </div>
@@ -297,12 +380,12 @@ const BuyerDashboard = () => {
                        <div className="flex gap-4 items-center">
                          <div className="flex flex-col">
                            <p className="text-[var(--text-muted)] text-xs">Total Amount</p>
-                           <p className="text-xl font-extrabold text-black"> NGN {parseFloat(order.totalAmount || 0).toFixed(2)}</p>
+                           <p className="text-xl font-extrabold text-[var(--text-main)]"> NGN {parseFloat(order.totalAmount || 0).toFixed(2)}</p>
                          </div>
                          {(order.paymentStatus === 'PAID' || ['PAID', 'PACKED', 'SHIPPED', 'DELIVERED', 'COMPLETED'].includes(order.status)) && (
                             <button 
                               onClick={() => setSelectedReceiptOrder(order)}
-                              className="px-6 py-3 min-h-[44px] bg-[var(--text-main)] text-black text-sm font-bold rounded shadow hover:opacity-90 flex items-center gap-2 ml-4"
+                              className="px-6 py-3 min-h-[44px] bg-white dark:bg-zinc-800 border border-[var(--border-color)] text-[var(--text-main)] text-sm font-bold rounded-xl shadow-sm hover:opacity-90 flex items-center gap-2 ml-4 cursor-pointer"
                             >
                               View Receipt
                             </button>
@@ -312,17 +395,17 @@ const BuyerDashboard = () => {
                          {order.status !== 'PENDING' && (
                             <button 
                               onClick={() => {
-                                 setTrackingOrderId(order.id); setIsTrackingModalOpen(true);
+                                 setTrackingOrderId(order.id); navigate(`/payai?tab=tracking&orderId=${order.id}`);
                               }}
-                              className="px-6 py-3 min-h-[44px] bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-black font-bold rounded-lg hover:border-[var(--accent-gray)] transition-colors text-sm"
+                              className="px-6 py-3 min-h-[44px] bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-[var(--text-main)] font-bold rounded-lg hover:border-blue-500 hover:text-blue-500 transition-colors text-sm flex items-center gap-2 cursor-pointer"
                             >
                               Track Order
                             </button>
                          )}
-                         {order.status === 'SHIPPED' && (
+                         {['SHIPPED', 'IN_TRANSIT', 'DELIVERED', 'HANDED_TO_COURIER'].includes(order.status) && (
                            <button 
                              onClick={() => confirmReceipt(order.id)}
-                             className="px-6 py-3 min-h-[44px] bg-[var(--accent-gray)] text-black font-bold rounded-lg hover:brightness-110 transition-colors text-sm"
+                             className="px-6 py-3 min-h-[44px] bg-[var(--accent-gray)] text-[var(--text-main)] font-bold rounded-lg hover:brightness-110 transition-colors text-sm cursor-pointer"
                            >
                              Confirm Receipt
                            </button>
@@ -388,7 +471,7 @@ const BuyerDashboard = () => {
                   return (
                     <div key={item.id || productId} className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md rounded-2xl border border-[var(--border-color)] overflow-hidden group hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
                       <div className="aspect-[4/3] w-full relative bg-white border-b border-[var(--border-color)] overflow-hidden">
-                        <img src={item.product?.images?.[0] || 'https://placehold.co/400x300/111/333?text=No+Image'} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="product" />
+                        <img src={item.product?.images?.[0]?.url || item.product?.images?.[0] || PLACEHOLDER_IMAGE} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="product" />
                         <button
                           onClick={() => removeFromWishlist(productId)}
                           title="Remove from wishlist"
@@ -447,7 +530,7 @@ const BuyerDashboard = () => {
                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative z-10">
                   <div>
                      <p className="text-[var(--text-muted)] mb-2 flex items-center gap-2"><ShieldAlert size={16} className="text-[var(--accent-gray)]"/> Available Balance</p>
-                     <h3 className="text-5xl font-extrabold text-black tracking-tight"> NGN {parseFloat(wallet?.balance || 0).toFixed(2)}</h3>
+                     <h3 className="text-5xl font-extrabold text-black tracking-tight"> NGN {parseFloat(wallet?.balances?.GONG?.available || 0).toFixed(2)}</h3>
                      <p className="text-sm text-gray-700 mt-2">Funds are safely held in GlobalX Escrow</p>
                   </div>
                   <div className="flex gap-4">
@@ -472,17 +555,19 @@ const BuyerDashboard = () => {
                 {walletTransactions.map(tx => (
                   <div key={tx.id} className="premium-glass p-5 rounded-xl border border-[var(--border-color)] flex justify-between items-center hover:bg-[var(--bg-tertiary)] transition-colors">
                     <div className="flex items-center gap-4">
-                      <div className={`w-12 h-12 rounded-full flex items-center justify-center ${tx.type === 'CREDIT' ? 'bg-gray-500/20 text-gray-500' : 'bg-gray-500/20 text-gray-500'}`}>
-                        {tx.type === 'CREDIT' ? <RefreshCcw size={20} /> : <Wallet size={20} />}
+                      <div className={`w-12 h-12 rounded-full flex items-center justify-center ${tx.direction === 'CREDIT' ? 'bg-gray-500/20 text-gray-500' : 'bg-gray-500/20 text-gray-500'}`}>
+                        {tx.direction === 'CREDIT' ? <RefreshCcw size={20} /> : <Wallet size={20} />}
                       </div>
                       <div>
-                        <p className="font-bold text-black capitalize">{(tx.referenceType || '').toLowerCase()} - {tx.type}</p>
+                        <p className="font-bold text-black capitalize">
+                          {tx.referenceType ? tx.referenceType.toLowerCase() : (tx.direction === 'CREDIT' ? 'Deposit' : 'Withdrawal')} - {tx.direction}
+                        </p>
                         <p className="text-sm text-[var(--text-muted)] mt-1">{new Date(tx.createdAt).toLocaleString()}</p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className={`font-extrabold text-lg ${tx.type === 'CREDIT' ? 'text-gray-500' : 'text-black'}`}>
-                        {tx.type === 'CREDIT' ? '+' : '-'}NGN {parseFloat(tx.amount).toFixed(2)}
+                      <p className={`font-extrabold text-lg ${tx.direction === 'CREDIT' ? 'text-gray-500' : 'text-black'}`}>
+                        {tx.direction === 'CREDIT' ? '+' : '-'}NGN {parseFloat(tx.amount).toFixed(2)}
                       </p>
                       <p className="text-xs text-[var(--text-muted)] mt-1">{tx.description || tx.referenceId}</p>
                     </div>
@@ -524,7 +609,7 @@ const BuyerDashboard = () => {
                     </div>
                     <div className="flex gap-4">
                        <div className="w-16 h-16 bg-white rounded-lg overflow-hidden border border-[var(--border-color)]">
-                          <img src={order.items?.[0]?.product?.images?.[0] || 'https://placehold.co/100x100/111/333?text=No+Image'} className="w-full h-full object-cover grayscale" alt="product" />
+                          <img src={order.items?.[0]?.product?.images?.[0]?.url || order.items?.[0]?.product?.images?.[0] || PLACEHOLDER_IMAGE} className="w-full h-full object-cover grayscale" alt="product" />
                        </div>
                        <div>
                          <p className="font-bold text-[var(--text-muted)] line-clamp-1">{order.items?.[0]?.product?.title || 'Unknown Product'}</p>
@@ -607,55 +692,94 @@ const BuyerDashboard = () => {
           </div>
         );
       }
-      case 'tracking':
+      case 'tracking': {
+        const activeOrdersForTracking = orders?.filter(o => ['SHIPPED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'PACKED', 'CONFIRMED', 'PENDING'].includes(o.status)) || [];
+        const lastOrder = activeOrdersForTracking.length > 0 ? activeOrdersForTracking[0] : orders?.[0]; // fallback to last order ever if no active
+        
+        // Mock route for MapView if it doesn't have one from API yet
+        const activeRoute = lastOrder ? {
+            pickupLat: 6.4281, // VI
+            pickupLng: 3.4219,
+            pickupAddress: "GlobalX Distribution Center",
+            dropoffLat: 6.5244, // Ikeja
+            dropoffLng: 3.3792,
+            dropoffAddress: lastOrder.deliveryAddress || "Buyer Address"
+        } : null;
+
         return (
-          
-          <div className="space-y-6 animate-fade-in">
-            <h2 className="text-2xl font-bold mb-6">Delivery Tracking</h2>
-            {orders && orders.filter(o => o.status === 'SHIPPED').length > 0 ? (
-              <div className="space-y-6">
-                {orders.filter(o => o.status === 'SHIPPED').map(order => (
-                  <div key={order.id} className="premium-glass p-6 rounded-xl border border-[var(--accent-gray)]/30">
-                    <div className="flex items-center gap-4 mb-6 pb-6 border-b border-[var(--border-color)]">
-                       <div className="w-16 h-16 bg-[var(--bg-tertiary)] rounded-full flex items-center justify-center border border-[var(--accent-gray)]">
-                          <Truck size={24} className="text-[var(--accent-gray)]" />
-                       </div>
-                       <div>
-                          <p className="text-[var(--text-muted)] text-sm">Tracking Number</p>
-                          <p className="font-bold text-lg text-black font-mono tracking-wider">{order.trackingNumber || 'PENDING-UPDATE'}</p>
-                       </div>
+          <div className="space-y-6 animate-fade-in flex flex-col min-h-[calc(100vh-140px)]">
+            <div className="flex justify-between items-center mb-2">
+                <h2 className="text-3xl font-black">Delivery Tracking</h2>
+                {lastOrder && <span className="font-bold text-sm bg-black text-white px-3 py-1 rounded-full">Order #{lastOrder.id?.slice(0,8).toUpperCase()}</span>}
+            </div>
+
+            {lastOrder ? (
+                <div className="flex-1 neu-panel rounded-3xl flex flex-col lg:flex-row overflow-hidden p-0 border-0">
+                    {/* Map Area */}
+                    <div className="w-full lg:w-2/3 h-72 lg:h-auto relative bg-[#e5e3df] rounded-t-3xl lg:rounded-l-3xl lg:rounded-tr-none overflow-hidden">
+                        <MapView activeRoute={activeRoute} className="w-full h-full" />
+                        
+                        {/* Overlay gradient for aesthetics */}
+                        <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-[var(--surface)] lg:from-transparent lg:bg-gradient-to-r lg:to-transparent lg:w-24 lg:right-0 lg:h-full lg:bottom-auto pointer-events-none z-10"></div>
                     </div>
                     
-                    <div className="relative pl-6 space-y-6 before:absolute before:inset-y-0 before:left-[11px] before:w-[2px] before:bg-[var(--border-color)]">
-                       {order.trackingEvents && order.trackingEvents.length > 0 ? (
-                         order.trackingEvents.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map((event, index) => (
-                           <div key={event.id || index} className={`relative ${index !== 0 ? 'opacity-50' : ''}`}>
-                              <div className={`absolute -left-[30px] top-1 w-4 h-4 rounded-full ${index === 0 ? 'bg-[var(--accent-gray)] shadow-[0_0_10px_var(--accent-gray)]' : 'bg-[var(--bg-tertiary)] border border-[var(--border-color)]'}`}></div>
-                              <p className="font-bold text-black">{event.status} {event.location ? `- ${event.location}` : ''}</p>
-                              <p className="text-sm text-[var(--text-muted)]">{event.description || 'Status updated'}</p>
-                              <p className="text-xs text-gray-500 mt-1">{new Date(event.createdAt).toLocaleString()}</p>
-                           </div>
-                         ))
-                       ) : (
-                         <div className="relative">
-                            <div className="absolute -left-[30px] top-1 w-4 h-4 rounded-full bg-[var(--bg-tertiary)] border border-[var(--border-color)]"></div>
-                            <p className="font-bold text-black">Pending Update</p>
-                            <p className="text-sm text-[var(--text-muted)]">Awaiting tracking details from carrier.</p>
-                         </div>
-                       )}
+                    {/* Tracking Info Area */}
+                    <div className="w-full lg:w-1/3 h-full overflow-y-auto p-6 bg-[var(--surface)] z-20">
+                        <div className="flex items-center justify-between mb-6 pb-6 border-b border-[var(--border-color)]">
+                            <div className="flex items-center gap-4">
+                                <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center border border-[var(--border-color)] shadow-sm">
+                                    <Truck size={24} className="text-black" />
+                                </div>
+                                <div>
+                                    <p className="text-[var(--text-muted)] text-sm font-bold uppercase tracking-wider">Tracking Number</p>
+                                    <p className="font-bold text-lg text-black font-mono">{lastOrder.trackingNumber || 'PENDING-UPDATE'}</p>
+                                </div>
+                            </div>
+                            
+                            {lastOrder.courier && (
+                                <div className="flex items-center gap-3 bg-[var(--bg-tertiary)] p-2 pr-4 rounded-full border border-[var(--border-color)]">
+                                    <div className="w-10 h-10 rounded-full overflow-hidden border border-[var(--border-color)]">
+                                        <img src={lastOrder.courier.avatarUrl || PLACEHOLDER_AVATAR} alt="Courier" className="w-full h-full object-cover" />
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-[var(--text-muted)] font-bold uppercase">Assigned Courier</p>
+                                        <p className="text-sm font-bold text-black">{lastOrder.courier.name || lastOrder.courier.fullName}</p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+
+                        <div className="relative pl-6 space-y-6 before:absolute before:inset-y-0 before:left-[11px] before:w-[2px] before:bg-gray-300">
+                            {lastOrder.trackingEvents && lastOrder.trackingEvents.length > 0 ? (
+                                lastOrder.trackingEvents.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map((event, index) => (
+                                    <div key={event.id || index} className={`relative ${index !== 0 ? 'opacity-50' : ''}`}>
+                                        <div className={`absolute -left-[30px] top-1 w-4 h-4 rounded-full ${index === 0 ? 'bg-black shadow-[0_0_10px_rgba(0,0,0,0.3)]' : 'bg-[var(--surface)] border-2 border-gray-400'}`}></div>
+                                        <p className="font-bold text-black">{event.status.replace(/_/g, ' ')} {event.location ? `- ${event.location}` : ''}</p>
+                                        <p className="text-sm text-[var(--text-muted)] mt-1">{event.description || 'Status updated'}</p>
+                                        <p className="text-xs text-gray-500 mt-1">{new Date(event.createdAt).toLocaleString()}</p>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="relative">
+                                    <div className="absolute -left-[30px] top-1 w-4 h-4 rounded-full bg-black shadow-[0_0_10px_rgba(0,0,0,0.3)]"></div>
+                                    <p className="font-bold text-black">Order Placed</p>
+                                    <p className="text-sm text-[var(--text-muted)] mt-1 font-medium">Awaiting dispatch and carrier tracking details.</p>
+                                </div>
+                            )}
+                        </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                </div>
             ) : (
-              <div className="premium-glass p-16 rounded-xl border border-[var(--border-color)] flex flex-col items-center justify-center text-center">
-                <Truck size={40} className="text-[var(--text-muted)] mb-4" />
-                <h3 className="text-xl font-bold text-black mb-2">No Tracking Updates</h3>
-                <p className="text-[var(--text-muted)]">Orders currently in transit will appear here with live tracking.</p>
+              <div className="neu-panel p-16 rounded-3xl flex flex-col items-center justify-center text-center flex-1">
+                <Truck size={48} className="text-gray-400 mb-4 drop-shadow-md" />
+                <h3 className="text-2xl font-bold text-black mb-2">No Recent Orders</h3>
+                <p className="text-[var(--text-muted)] font-medium max-w-sm">When you place an order, the live map tracking and delivery route will appear here.</p>
               </div>
             )}
           </div>
         );
+      }
       case 'hub':
         return (
           
@@ -691,7 +815,7 @@ const BuyerDashboard = () => {
                   return (
                   <div key={order.id} className="premium-glass p-5 rounded-xl border border-[var(--border-color)] flex gap-4 items-center">
                      <div className="w-16 h-16 bg-white rounded-lg overflow-hidden border border-[var(--border-color)] flex-shrink-0">
-                        <img src={order.items?.[0]?.product?.images?.[0] || 'https://placehold.co/100x100/111/333?text=Item'} className="w-full h-full object-cover" alt="product" />
+                        <img src={order.items?.[0]?.product?.images?.[0] || PLACEHOLDER_IMAGE} className="w-full h-full object-cover" alt="product" />
                      </div>
                      <div className="flex-1">
                        <p className="font-bold text-sm line-clamp-1">{order.items?.[0]?.product?.title}</p>
@@ -725,7 +849,7 @@ const BuyerDashboard = () => {
                 {savedShops.map(shop => (
                   <div key={shop.id} className="premium-glass p-6 rounded-xl border border-[var(--border-color)] hover:border-[var(--accent-gray)] transition-all flex flex-col items-center text-center group">
                     <div className="w-24 h-24 bg-white rounded-full overflow-hidden border-2 border-[var(--accent-gray)] mb-4 shadow-[0_0_15px_var(--accent-gray-dim)] group-hover:shadow-[0_0_25px_var(--accent-gray)]  transition-shadow">
-                       <img src={shop.avatar || 'https://placehold.co/100x100/111/333?text=Store'} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt="store" />
+                       <img src={shop.avatar || PLACEHOLDER_AVATAR} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt="store" />
                     </div>
                     <h3 className="font-bold text-lg text-black mb-1">{shop.name || 'Store Name'}</h3>
                     <p className="text-xs text-[var(--accent-gray)] mb-1">Category: {shop.category}</p>
@@ -761,7 +885,7 @@ const BuyerDashboard = () => {
                 {messages.map(msg => (
                   <div key={msg.conversationId || msg.id} onClick={() => navigate('/messages')} className="premium-glass p-4 rounded-xl border border-[var(--border-color)] flex gap-4 items-center hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors">
                      <div className="w-12 h-12 bg-white rounded-full overflow-hidden border border-[var(--border-color)] flex-shrink-0">
-                        <img src={msg.otherUser?.avatarUrl || 'https://placehold.co/50x50/111/333?text=User'} className="w-full h-full object-cover" alt="user" />
+                        <img src={msg.otherUser?.avatarUrl || PLACEHOLDER_AVATAR} className="w-full h-full object-cover" alt="user" />
                      </div>
                      <div className="flex-1">
                        <div className="flex justify-between items-center mb-1">
@@ -788,14 +912,46 @@ const BuyerDashboard = () => {
             <h2 className="text-2xl font-bold mb-6">Notifications</h2>
             {notifications && notifications.length > 0 ? (
               <div className="space-y-4">
-                {notifications.map(notif => (
-                   <div key={notif.id} className="premium-glass p-5 rounded-xl border border-[var(--border-color)]">
+                {notifications.map(notif => {
+                   const isFlashDeal = notif.type === 'FLASH_DEAL_ALERT';
+                   const bodyText = notif.body || notif.message || '';
+                   // Extract promo code from metadata if available
+                   let meta = null;
+                   try { meta = notif.metadata ? (typeof notif.metadata === 'string' ? JSON.parse(notif.metadata) : notif.metadata) : null; } catch(e) {}
+                   const promoCode = meta?.promoCode || null;
+
+                   return (
+                    <div key={notif.id} className={`p-5 rounded-xl border transition-all ${isFlashDeal ? 'bg-gradient-to-br from-indigo-50 to-purple-50 border-indigo-200 shadow-md' : 'premium-glass border-[var(--border-color)]'}`}>
                       <div className="flex justify-between items-start mb-2">
-                        <span className="font-bold text-black">{notif.title}</span>
-                        <span className="text-xs text-[var(--text-muted)]">{new Date(notif.createdAt).toLocaleString()}</span>
+                        <div className="flex items-center gap-2">
+                          {isFlashDeal && <span className="text-lg">🔥</span>}
+                          <span className={`font-bold ${isFlashDeal ? 'text-indigo-800' : 'text-black'}`}>{notif.title}</span>
+                        </div>
+                        <span className="text-xs text-[var(--text-muted)] shrink-0 ml-2">{new Date(notif.createdAt).toLocaleString()}</span>
                       </div>
-                      <p className="text-sm text-gray-700">{notif.message}</p>
-                      
+                      <p className={`text-sm ${isFlashDeal ? 'text-indigo-700' : 'text-gray-700'}`}>{bodyText}</p>
+
+                      {/* Flash Deal extras */}
+                      {isFlashDeal && promoCode && (
+                        <div className="mt-3 flex items-center gap-3 flex-wrap">
+                          <div className="flex items-center gap-2 bg-white border-2 border-dashed border-indigo-400 rounded-lg px-3 py-2">
+                            <span className="text-xs font-bold text-indigo-500 uppercase tracking-wide">Promo Code</span>
+                            <span className="font-mono font-extrabold text-indigo-800 tracking-widest">{promoCode}</span>
+                          </div>
+                          <a
+                            href="/shop"
+                            className="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition-colors"
+                          >
+                            🛍️ Shop Now
+                          </a>
+                        </div>
+                      )}
+                      {isFlashDeal && !promoCode && (
+                        <a href="/shop" className="mt-3 inline-block px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition-colors">
+                          🛍️ Shop Now
+                        </a>
+                      )}
+
                       {notif.interactive && (
                         <div className="mt-4 pt-4 border-t border-[var(--border-color)]">
                            <button onClick={() => setInteractingNotifId(notif.id)} className="text-sm text-[var(--accent-gray)] font-bold hover:underline">Interact</button>
@@ -825,7 +981,9 @@ const BuyerDashboard = () => {
                         </div>
                       )}
                    </div>
-                ))}
+                   );
+                })}
+
               </div>
             ) : (
               <div className="premium-glass p-16 rounded-xl border border-[var(--border-color)] flex flex-col items-center justify-center text-center">
@@ -840,6 +998,74 @@ const BuyerDashboard = () => {
         return <div className="animate-fade-in -mx-6 -mt-6"><SavedAddresses /></div>;
       case 'disputes':
         return <BuyerDisputesTab disputes={disputes} onOpenDispute={() => setIsDisputeModalOpen(true)} onSetTab={setActiveTab} />;
+      case 'sourcing':
+        return (
+          <div className="bg-white rounded-3xl p-8 border border-[var(--border-color)] animate-fade-in">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-black">Sourcing Requests</h2>
+              <button 
+                onClick={() => setIsCreateRequestModalOpen(true)}
+                className="flex items-center gap-2 bg-[var(--accent-primary)] text-white px-5 py-2.5 rounded-xl font-bold hover:shadow-[0_0_15px_var(--accent-primary-dim)] transition-all"
+              >
+                <Plus size={18} />
+                New Request
+              </button>
+            </div>
+            {buyerRequests?.length > 0 ? (
+              <div className="grid gap-4 md:grid-cols-2">
+                {buyerRequests.map(req => (
+                  <div key={req.id} className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl p-6">
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <h4 className="font-bold text-black mb-1 text-lg">{req.productName}</h4>
+                        <span className="text-xs px-2 py-1 bg-white text-gray-800 rounded border border-[var(--border-color)]">{req.category}</span>
+                      </div>
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                        req.status === 'OPEN' ? 'bg-yellow-100 text-yellow-800' :
+                        req.status === 'RESPONDED' || req.status === 'QUOTED' ? 'bg-blue-100 text-blue-800' :
+                        'bg-green-100 text-green-800'
+                      }`}>
+                        {req.status}
+                      </span>
+                    </div>
+                    <p className="text-sm text-[var(--text-muted)] mb-4">{req.description}</p>
+                    <div className="flex justify-between items-center text-sm font-semibold border-t border-[var(--border-color)] pt-4 mt-4">
+                      <div><span className="text-[var(--text-muted)] font-normal">Target:</span> ₦{req.budget?.toLocaleString()}</div>
+                      <div><span className="text-[var(--text-muted)] font-normal">Qty:</span> {req.quantity}</div>
+                    </div>
+                    {req.responses?.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-[var(--border-color)]">
+                        <h5 className="font-bold text-sm mb-2 text-[var(--accent-primary)]">{req.responses.length} Seller Quote(s)</h5>
+                        {req.responses.map(resp => (
+                          <div key={resp.id} className="bg-white p-3 rounded-lg border border-[var(--border-color)] text-sm mb-2">
+                            <div className="flex justify-between font-bold mb-1">
+                              <span>{resp.seller?.storeName || 'Store'}</span>
+                              <span>₦{resp.quotedPrice?.toLocaleString() || 'N/A'}</span>
+                            </div>
+                            <p className="text-[var(--text-muted)] text-xs">{resp.message}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl p-12 text-center">
+                <Target size={48} className="mx-auto text-[var(--text-muted)] mb-4" />
+                <h3 className="text-lg font-bold text-black mb-2">No Requests Yet</h3>
+                <p className="text-[var(--text-muted)] mb-6">Looking for a specific item? Submit a request and let sellers come to you.</p>
+                <button 
+                  onClick={() => setIsCreateRequestModalOpen(true)}
+                  className="inline-flex items-center gap-2 bg-black text-white px-6 py-3 rounded-xl font-bold hover:bg-gray-800 transition-all"
+                >
+                  <Plus size={20} />
+                  Submit a Request
+                </button>
+              </div>
+            )}
+          </div>
+        );
       case 'reviews':
         return (
           <div className="space-y-6 animate-fade-in">
@@ -896,7 +1122,11 @@ const BuyerDashboard = () => {
                   <p className="text-[var(--text-muted)] text-sm">Add an extra layer of security to your account.</p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" className="sr-only peer" checked={twoFactorEnabled} onChange={() => setTwoFactorEnabled(!twoFactorEnabled)} />
+                  <input type="checkbox" className="sr-only peer" checked={twoFactorEnabled} onChange={(e) => {
+                    setTwoFactorEnabled(!twoFactorEnabled);
+                    toast.success(!twoFactorEnabled ? '2FA Enabled Successfully' : '2FA Disabled');
+                    if (!twoFactorEnabled) celebrate('standard', e);
+                  }} />
                   <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-[var(--accent-gray)]"></div>
                 </label>
               </div>
@@ -905,7 +1135,31 @@ const BuyerDashboard = () => {
                   <h3 className="font-bold text-lg flex items-center gap-2"><Key size={18} /> Passkey Setup</h3>
                   <p className="text-[var(--text-muted)] text-sm">Use biometrics to login faster.</p>
                 </div>
-                <button onClick={() => setPasskeySetup(true)} className="px-6 py-3 min-h-[44px] border border-[var(--border-color)] rounded-lg text-sm font-bold hover:bg-[var(--bg-tertiary)]">Setup Passkey</button>
+                <button
+                  onClick={async () => {
+                    if (passkeyLoading || passkeyDone) return;
+                    setPasskeyLoading(true);
+                    const { setupFingerprint } = useAuthStore.getState();
+                    const result = await setupFingerprint();
+                    setPasskeyLoading(false);
+                    if (result.success) {
+                      setPasskeyDone(true);
+                      toast.success('✅ Passkey registered! You can now sign in with your fingerprint or face.', { duration: 6000 });
+                    } else {
+                      toast.error(result.message || 'Failed to set up passkey. Please try again.');
+                    }
+                  }}
+                  disabled={passkeyLoading || passkeyDone}
+                  className={`px-6 py-3 min-h-[44px] border rounded-lg text-sm font-bold transition-all ${
+                    passkeyDone
+                      ? 'border-green-500 text-green-600 bg-green-50 cursor-default'
+                      : passkeyLoading
+                      ? 'border-[var(--border-color)] opacity-60 cursor-wait'
+                      : 'border-[var(--border-color)] hover:bg-[var(--bg-tertiary)]'
+                  }`}
+                >
+                  {passkeyDone ? '✓ Passkey Active' : passkeyLoading ? 'Setting up...' : 'Setup Passkey'}
+                </button>
               </div>
             </div>
           </div>
@@ -921,7 +1175,11 @@ const BuyerDashboard = () => {
                   <p className="text-[var(--text-muted)] text-sm">Receive order updates via email.</p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" className="sr-only peer" checked={emailNotifEnabled} onChange={() => setEmailNotifEnabled(!emailNotifEnabled)} />
+                  <input type="checkbox" className="sr-only peer" checked={emailNotifEnabled} onChange={(e) => {
+                    setEmailNotifEnabled(!emailNotifEnabled);
+                    toast.success(!emailNotifEnabled ? 'Email Notifications Enabled' : 'Email Notifications Disabled');
+                    if (!emailNotifEnabled) celebrate('standard', e);
+                  }} />
                   <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-[var(--accent-gray)]"></div>
                 </label>
               </div>
@@ -931,7 +1189,11 @@ const BuyerDashboard = () => {
                   <p className="text-[var(--text-muted)] text-sm">Receive exclusive deals and offers.</p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" className="sr-only peer" checked={promoEnabled} onChange={() => setPromoEnabled(!promoEnabled)} />
+                  <input type="checkbox" className="sr-only peer" checked={promoEnabled} onChange={(e) => {
+                    setPromoEnabled(!promoEnabled);
+                    toast.success(!promoEnabled ? 'Promotional Emails Enabled' : 'Promotional Emails Disabled');
+                    if (!promoEnabled) celebrate('standard', e);
+                  }} />
                   <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-[var(--accent-gray)]"></div>
                 </label>
               </div>
@@ -972,10 +1234,9 @@ const BuyerDashboard = () => {
   return (
     <div className="min-h-screen bg-[var(--bg-main)] text-[var(--text-main)] font-sans relative overflow-x-hidden selection:bg-[var(--accent-gray)] selection:text-black">
       <div className="fixed inset-0 z-0 pointer-events-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-[var(--accent-gray)] opacity-5 blur-[120px]"></div>
-        <div className="absolute bottom-[-10%] right-[-10%] w-[30%] h-[30%] rounded-full bg-gray-500 opacity-5 blur-[100px]"></div>
+        {/* Glows removed */}
       </div>
-      <div className="fixed top-0 left-0 h-full w-20 bg-white/50 backdrop-blur-xl border-r border-[var(--border-color)] flex flex-col items-center py-8 z-50 hidden md:flex">
+      <div className="fixed top-0 left-0 h-full w-20 neu-panel !rounded-none border-r border-[var(--border-color)] flex flex-col items-center py-8 z-50 hidden md:flex">
         <div className="w-10 h-10 bg-black rounded-xl flex items-center justify-center mb-12 shadow-lg shadow-black/20">
           <span className="text-[var(--accent-gray)] font-black text-xl tracking-tighter">W</span>
         </div>
@@ -992,7 +1253,7 @@ const BuyerDashboard = () => {
         </button>
       </div>
       <div className="md:ml-20 min-h-screen flex flex-col relative z-10">
-        <header className="h-20 bg-white/80 backdrop-blur-md border-b border-[var(--border-color)] flex items-center justify-between px-6 sticky top-0 z-40">
+        <header className="h-20 neu-panel !rounded-none border-b border-[var(--border-color)] flex items-center justify-between px-6 sticky top-0 z-40">
           <div className="flex items-center gap-4">
             <button className="md:hidden p-2 text-black" onClick={() => setIsSidebarOpen(true)}>
               <Menu size={24} />
@@ -1061,8 +1322,8 @@ const BuyerDashboard = () => {
       </div>
 
       <TopUpModal isOpen={isTopUpModalOpen} onClose={() => setIsTopUpModalOpen(false)} />
-      <WithdrawModal isOpen={isWithdrawModalOpen} onClose={() => setIsWithdrawModalOpen(false)} />
-      <CreateDisputeModal isOpen={isDisputeModalOpen} onClose={() => setIsDisputeModalOpen(false)} order={orderToDispute} />
+      <WithdrawModal isOpen={isWithdrawModalOpen} onClose={() => setIsWithdrawModalOpen(false)} balance={wallet?.balances?.GONG?.available || 0} />
+      <CreateDisputeModal isOpen={isDisputeModalOpen} onClose={() => setIsDisputeModalOpen(false)} orders={orders} initialOrderId={orderToDispute?.id} />
       <LeaveReviewModal isOpen={isReviewModalOpen} onClose={() => setIsReviewModalOpen(false)} order={selectedReviewOrder} />
       <AddPaymentMethodModal isOpen={isAddCardModalOpen} onClose={() => setIsAddCardModalOpen(false)} />
       <AddBankDetailsModal isOpen={isAddBankDetailsModalOpen} onClose={() => setIsAddBankDetailsModalOpen(false)} />
@@ -1075,6 +1336,9 @@ const BuyerDashboard = () => {
         onClose={() => setProvideAddressOrderId(null)} 
         orderId={provideAddressOrderId} 
       />
+      {isCreateRequestModalOpen && (
+        <CreateSourcingRequestModal onClose={() => setIsCreateRequestModalOpen(false)} />
+      )}
     </div>
   );
 };

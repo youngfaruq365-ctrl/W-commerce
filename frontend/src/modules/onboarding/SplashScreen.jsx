@@ -139,14 +139,14 @@ export default function SplashScreen() {
           <div className="w-24 h-28 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] backdrop-blur-md flex flex-col items-center justify-center gap-1 p-2 shadow-lg">
             <span className="text-2xl">👟</span>
             <span className="text-[9px] text-white/60 font-medium">Sneakers</span>
-            <span className="text-[10px] text-white font-bold">$129</span>
+            <span className="text-[10px] text-white font-bold">₦129</span>
           </div>
         </div>
         <div className="float-b absolute bottom-[20%] right-[54%] hidden md:block">
           <div className="w-20 h-24 rounded-xl bg-[var(--glass-bg)] border border-[var(--glass-border)] backdrop-blur-md flex flex-col items-center justify-center gap-1 p-2 shadow-lg">
             <span className="text-2xl">⌚</span>
             <span className="text-[9px] text-white/60 font-medium">Watch</span>
-            <span className="text-[10px] text-white font-bold">$249</span>
+            <span className="text-[10px] text-white font-bold">₦249</span>
           </div>
         </div>
 

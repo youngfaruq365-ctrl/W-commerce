@@ -65,7 +65,7 @@ class CloudService {
                 logger.error("Cloudinary upload failed, falling back to local storage:", error.message);
                 if (fileData && fileData.buffer) {
                     const filename = Date.now() + '-' + (fileData.originalname || 'fallback.webp');
-                    const uploadDir = require('path').join(__dirname, '../../../public/uploads');
+                    const uploadDir = require('path').join(__dirname, '../../storage/uploads');
                     if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
                     const localPath = require('path').join(uploadDir, filename);
                     fs.writeFileSync(localPath, fileData.buffer);

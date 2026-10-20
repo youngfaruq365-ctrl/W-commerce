@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import toast from 'react-hot-toast';
 import { DollarSign, TrendingUp, Search, Megaphone, Sparkles, X, Loader2, ChevronRight, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { WButton, WModal } from '../../design/components';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 
 const TOOLS = [
   {
@@ -59,12 +59,6 @@ const TOOLS = [
   },
 ];
 
-const MOCK_OUTPUTS = {
-  price: `**Optimal Price Recommendation: $64.99**\n\n📊 Market Analysis:\n• Average competitor price: $62.30\n• Your current margin at $59.99: 59.2%\n• Recommended price margin: 63.1%\n\n💡 Insights:\n• Raising to $64.99 is supported by market demand — 78% of buyers in this segment prefer prices $60-$70\n• Your product has 4.6★ avg which justifies premium over average\n• Consider promotional pricing at $54.99 during flash sales\n\n🔮 Projected Impact:\n• Expected revenue increase: +14%\n• Expected conversion rate: 3.2% (current: 3.8% — slight dip but higher margin)`,
-  demand: `**Demand Forecast: High Growth Expected 📈**\n\n📅 30-Day Forecast:\n• Week 1: 145 units\n• Week 2: 162 units\n• Week 3: 178 units (peak)\n• Week 4: 155 units\n\n🌡️ Trend Signals:\n• Search volume up 34% YoY for this category\n• Seasonal uplift: +22% expected in coming weeks\n• Regional demand (US): Strong in Northeast & Pacific\n\n⚠️ Inventory Recommendation:\n• Stock at least 640 units to meet projected demand\n• Reorder point: 150 units\n• Lead time buffer: 7 days`,
-  competition: `**Competition Analysis Report 🔍**\n\n🏆 Top Competitors Found: 6\n\n1. AirPure Pro — $89.99 — 4.7★ (12k reviews)\n2. CleanBreeze Ultra — $74.95 — 4.5★ (8.2k reviews)\n3. FreshAir Slim — $55.00 — 4.2★ (3.4k reviews)\n\n📌 Market Gaps Identified:\n• No budget option under $60 with 4.5+ rating\n• Weak presence in portable/travel segment\n• Feature gap: Most don't offer app connectivity\n\n✅ Positioning Opportunity:\n• Compete on portability + smart features at $65-$75\n• Highlight filter lifespan — competitor avg is 90 days, yours can be 180\n• Target "desk air purifier" keyword — low competition, high intent`,
-  marketing: `**Marketing Strategy 🚀**\n\n🎯 Campaign Recommendations:\n\n**1. Instagram Reels (Budget: $150/mo)**\n"Show the before/after — murky water vs crystal clear"\nEstimated reach: 45,000 | CPC: ~$0.82\n\n**2. Google Shopping Ads (Budget: $250/mo)**\nKeywords: eco water bottle, reusable hiking bottle, BPA-free flask\nEstimated conversions: 28-35/mo\n\n**3. Influencer Micro Campaign (Budget: $100/mo)**\nTarget 3-5 outdoor/wellness micro-influencers (10k-50k followers)\nEstimated ROI: 340%\n\n📝 Ad Copy Draft:\n"Adventure awaits — your hydration shouldn't compromise the planet. Meet the bottle that does it all."\n\n🔑 Top Keywords to Target:\n#EcoBottle #HydrationGoals #SustainableLiving`,
-};
 
 function ToolModal({ tool, onClose }) {
   const [form, setForm] = useState({});

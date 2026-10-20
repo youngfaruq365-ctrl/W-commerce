@@ -5,13 +5,16 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ROUTES } from './constants/routes';
 import { useAuthStore } from './store/authStore';
 import { MapProvider } from './maps/MapProvider';
-
+import { initializeAdMob } from './services/adMobService';
+import { initializeRevenueCat } from './services/revenueCatService';
 // Guards
 import ProtectedRoute from './components/ProtectedRoute';
-import AuthGuard from './components/AuthGuard';
+import ErrorBoundary from './components/system/ErrorBoundary';
 import GuestGuard from './components/GuestGuard';
 import RootRedirect from './components/RootRedirect';
 import PromoOverlay from './components/shared/PromoOverlay';
+import CourierKycGuard from './components/CourierKycGuard';
+import { WPageTransition } from './components/motion/WPageTransition';
 
 // Shells
 const AuthShell = lazy(() => import('./layout/AuthShell'));
@@ -22,13 +25,16 @@ const SellerShell = lazy(() => import('./layout/SellerShell'));
 const AdminShell = lazy(() => import('./layout/AdminShell'));
 
 // Auth Pages
-const Login = lazy(() => import('./pages/auth/Login'));
-const Signup = lazy(() => import('./pages/auth/Signup'));
+const AuthPage = lazy(() => import('./pages/auth/AuthPage'));
 const ForgotPassword = lazy(() => import('./pages/auth/ForgotPassword'));
 const ResetPassword = lazy(() => import('./pages/auth/ResetPassword'));
 const OTPVerification = lazy(() => import('./pages/auth/OTPVerification'));
 const EmailVerification = lazy(() => import('./pages/auth/EmailVerification'));
 const RoleSelection = lazy(() => import('./pages/auth/RoleSelection'));
+const UnlockAccess = lazy(() => import('./pages/auth/UnlockAccess'));
+const FingerprintSetup = lazy(() => import('./pages/auth/FingerprintSetup'));
+const TwoFactorAuthentication = lazy(() => import('./pages/auth/TwoFactorAuthentication'));
+const SessionManagement = lazy(() => import('./pages/auth/SessionManagement'));
 
 // Dev Pages — only imported in development builds, tree-shaken in production
 const StoreVerifier = import.meta.env.DEV
@@ -45,6 +51,8 @@ const Feed = lazy(() => import('./pages/Feed'));
 const Cart = lazy(() => import('./pages/Cart'));
 const Messages = lazy(() => import('./pages/Messages'));
 const ProductDetails = lazy(() => import('./pages/ProductDetails'));
+const PayAIPage = lazy(() => import('./pages/PayAI'));
+const SystemStories = lazy(() => import('./pages/admin/SystemStories'));
 
 // Storefront Pages
 const StorefrontRouter = lazy(() => import('./components/storefront/StorefrontRouter'));
@@ -60,6 +68,9 @@ const SellerDashboard = lazy(() => import('./pages/seller/Dashboard'));
 const SellerProfile = lazy(() => import('./pages/seller/Profile'));
 const SellerOnboarding = lazy(() => import('./pages/seller/Onboarding'));
 const SubscriptionPlans = lazy(() => import('./components/seller/SubscriptionPlans'));
+const WalletPage = lazy(() => import('./modules/wallet/Wallet'));
+const WalletTransactions = lazy(() => import('./modules/wallet/WalletTransactions'));
+const TopUp = lazy(() => import('./modules/wallet/TopUp'));
 
 // Admin Pages
 const AdminDashboard = lazy(() => import('./pages/admin/Dashboard'));
@@ -69,16 +80,19 @@ const AdminReferrals = lazy(() => import('./pages/admin/Referrals'));
 
 // Error Pages
 const Unauthorized403 = lazy(() => import('./pages/errors/Unauthorized403'));
+const NotFound404 = lazy(() => import('./pages/errors/NotFound404'));
+const Offline = lazy(() => import('./pages/errors/Offline'));
 
 // Courier Pages
 const CourierShell = lazy(() => import('./layout/CourierShell'));
-import CourierKycGuard from './components/CourierKycGuard';
 const CourierDashboard = lazy(() => import('./pages/courier/CourierDashboard'));
+const CourierMapStudio = lazy(() => import('./components/courier/CourierMapStudio'));
 const DeliveryQueue = lazy(() => import('./pages/courier/DeliveryQueue'));
 const ActiveDelivery = lazy(() => import('./pages/courier/ActiveDelivery'));
 const CourierEarnings = lazy(() => import('./pages/courier/CourierEarnings'));
 const CourierProfile = lazy(() => import('./pages/courier/CourierProfile'));
 const CourierOnboarding = lazy(() => import('./pages/courier/CourierOnboarding'));
+const CourierSubscriptionPlans = lazy(() => import('./pages/courier/CourierSubscriptionPlans'));
 
 // Dispatch Pages
 const DispatchShell = lazy(() => import('./layout/DispatchShell'));
@@ -88,14 +102,13 @@ const LiveDriverMap = lazy(() => import('./pages/admin/LiveDriverMap'));
 const FleetAnalytics = lazy(() => import('./pages/admin/FleetAnalytics'));
 
 const DeliveryDetails = lazy(() => import('./pages/shared/DeliveryDetails'));
+const PaymentCallback = lazy(() => import('./pages/shared/PaymentCallback'));
 
 const LoadingFallback = () => (
   <div className="min-h-screen flex items-center justify-center bg-[var(--bg-primary)]">
     <div className="w-8 h-8 border-2 border-[var(--accent-primary)] border-t-transparent rounded-full animate-spin"></div>
   </div>
 );
-
-import { WPageTransition } from './components/motion/WPageTransition';
 
 const TemplatePurchaseVerification = () => {
   const location = useLocation();
@@ -135,18 +148,10 @@ const TemplatePurchaseVerification = () => {
 const AnimatedRoutes = () => {
   const location = useLocation();
   return (
-    <AnimatePresence mode="wait">
-      <motion.div
-        key={location.pathname}
-        initial={{ opacity: 0, y: 15 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -15 }}
-        transition={{ duration: 0.3 }}
-        className="w-full min-h-screen"
-      >
-        <Routes location={location}>
+    <Routes location={location}>
           {/* Public Routes with Smart Redirects */}
           <Route path="/" element={<RootRedirect />} />
+          <Route path="/payment-callback" element={<PaymentCallback />} />
           
           {/* Shared Layout for Public and Auth Routes */}
           <Route element={<AppShell />}>
@@ -157,16 +162,26 @@ const AnimatedRoutes = () => {
             <Route path={ROUTES.CART} element={<Cart />} />
             <Route path={ROUTES.MESSAGES} element={<Messages />} />
             <Route path={ROUTES.PRODUCT} element={<ProductDetails />} />
+            <Route path={ROUTES.PAYAI} element={<PayAIPage />} />
+            <Route path={ROUTES.SYSTEM_STORIES} element={<SystemStories />} />
             <Route path="/seller/:sellerId" element={<SellerProfile />} />
 
             {/* Auth Routes (Guarded: Only for non-logged-in users) */}
             <Route element={<GuestGuard />}>
-              <Route path={ROUTES.LOGIN} element={<Login />} />
-              <Route path={ROUTES.SIGNUP} element={<Signup />} />
+              <Route path={ROUTES.LOGIN} element={<AuthPage initialMode="login" />} />
+              <Route path={ROUTES.SIGNUP} element={<AuthPage initialMode="signup" />} />
               <Route path={ROUTES.FORGOT_PASSWORD} element={<ForgotPassword />} />
               <Route path={ROUTES.RESET_PASSWORD} element={<ResetPassword />} />
               <Route path={ROUTES.VERIFY_OTP} element={<OTPVerification />} />
               <Route path={ROUTES.VERIFY_EMAIL} element={<EmailVerification />} />
+              <Route path={ROUTES.UNLOCK_ACCESS} element={<UnlockAccess />} />
+            </Route>
+
+            {/* Security & Account Management Routes (Protected for any authenticated user) */}
+            <Route element={<ProtectedRoute roles={['BUYER', 'USER', 'SELLER', 'COURIER', 'ADMIN', 'PENDING']} />}>
+              <Route path={ROUTES.FINGERPRINT_SETUP} element={<FingerprintSetup />} />
+              <Route path={ROUTES.TWO_FACTOR_AUTH} element={<TwoFactorAuthentication />} />
+              <Route path={ROUTES.SESSION_MANAGEMENT} element={<SessionManagement />} />
             </Route>
           </Route>
 
@@ -176,10 +191,12 @@ const AnimatedRoutes = () => {
             <Route path="/courier" element={<CourierKycGuard><CourierShell /></CourierKycGuard>}>
               <Route index element={<Navigate to="/courier/dashboard" replace />} />
               <Route path="dashboard" element={<CourierDashboard />} />
+              <Route path="map" element={<CourierMapStudio />} />
               <Route path="active" element={<ActiveDelivery />} />
               <Route path="queue" element={<DeliveryQueue />} />
               <Route path="earnings" element={<CourierEarnings />} />
               <Route path="profile" element={<CourierProfile />} />
+              <Route path="subscription" element={<CourierSubscriptionPlans />} />
               <Route path="delivery/:id" element={<DeliveryDetails />} />
             </Route>
           </Route>
@@ -206,15 +223,34 @@ const AnimatedRoutes = () => {
           {/* Storefront Routes */}
           <Route element={<StoreShell />}>
             <Route path={ROUTES.STORE} element={<StorefrontRouter />} />
+            <Route path={ROUTES.STORE_FREE} element={<StorefrontRouter />} />
+            <Route path={ROUTES.STORE_PREMIUM} element={<StorefrontRouter />} />
+            <Route path={ROUTES.STORE_PRO} element={<StorefrontRouter />} />
+            <Route path={ROUTES.STORE_ULTRA} element={<StorefrontRouter />} />
           </Route>
 
           {/* Buyer Routes (Protected) */}
-          <Route element={<ProtectedRoute roles={['BUYER', 'SELLER', 'ADMIN']} />}>
+          <Route element={<ProtectedRoute roles={['BUYER', 'USER', 'SELLER', 'ADMIN']} />}>
             <Route element={<CustomerShell />}>
               <Route path={ROUTES.BUYER_DASHBOARD} element={<BuyerDashboard />} />
+              <Route path="/buyer/orders" element={<BuyerDashboard />} />
+              <Route path="/buyer/orders/:id" element={<OrderDetail />} />
+              <Route path="/buyer/active-orders" element={<BuyerDashboard />} />
+              <Route path="/buyer/history" element={<BuyerDashboard />} />
+              <Route path="/buyer/tracking" element={<BuyerDashboard />} />
+              <Route path="/buyer/disputes" element={<BuyerDashboard />} />
+              <Route path="/buyer/escrow" element={<Navigate to={ROUTES.BUYER_WALLET} replace />} />
+              <Route path="/buyer/notifications" element={<BuyerDashboard />} />
               <Route path={ROUTES.BUYER_PROFILE} element={<BuyerProfile />} />
               <Route path={ROUTES.BUYER_REFERRALS} element={<BuyerReferrals />} />
-              <Route path={ROUTES.ORDERS} element={<Navigate to={ROUTES.BUYER_DASHBOARD} replace />} />
+              <Route path={ROUTES.BUYER_WALLET}>
+                <Route index element={<WalletPage />} />
+                <Route path="transactions" element={<WalletTransactions />} />
+                <Route path="topup" element={<TopUp />} />
+                <Route path="*" element={<WalletPage />} />
+              </Route>
+              <Route path="/wallet" element={<Navigate to={ROUTES.BUYER_WALLET} replace />} />
+              <Route path={ROUTES.ORDERS} element={<BuyerDashboard />} />
               <Route path={ROUTES.ORDER_DETAIL} element={<OrderDetail />} />
             </Route>
           </Route>
@@ -225,6 +261,13 @@ const AnimatedRoutes = () => {
               <Route path={ROUTES.SELLER_DASHBOARD} element={<SellerDashboard />} />
               <Route path={ROUTES.SELLER_ONBOARDING} element={<SellerOnboarding />} />
               <Route path={ROUTES.SELLER_SUBSCRIPTION} element={<SubscriptionPlans />} />
+              <Route path={ROUTES.SELLER_WALLET}>
+                <Route index element={<WalletPage />} />
+                <Route path="transactions" element={<WalletTransactions />} />
+                <Route path="topup" element={<TopUp />} />
+                {/* Fallback to WalletPage for unimplemented sub-routes like transfer */}
+                <Route path="*" element={<WalletPage />} />
+              </Route>
             </Route>
           </Route>
 
@@ -235,6 +278,7 @@ const AnimatedRoutes = () => {
               <Route path={ROUTES.ADMIN_DISPUTES} element={<AdminDisputes />} />
               <Route path={ROUTES.ADMIN_KYB_REVIEW} element={<AdminKybReview />} />
               <Route path={ROUTES.ADMIN_REFERRALS} element={<AdminReferrals />} />
+              <Route path="/admin/system-stories" element={<SystemStories />} />
             </Route>
           </Route>
 
@@ -247,20 +291,28 @@ const AnimatedRoutes = () => {
           <Route path="/preview/:engine/:storeId" element={<StorePreviewPage />} />
 
           {/* Errors & Fallback */}
+          <Route path="/offline" element={<Offline />} />
           <Route path="/403" element={<Unauthorized403 />} />
-          <Route path="*" element={<Navigate to={ROUTES.FEED} replace />} />
+          <Route path="/404" element={<NotFound404 />} />
+          <Route path="*" element={<NotFound404 />} />
         </Routes>
-      </motion.div>
-    </AnimatePresence>
   );
 };
 
 function App() {
-  const { checkAuth } = useAuthStore();
+  const { checkAuth, user } = useAuthStore();
 
   useEffect(() => {
     checkAuth();
+    // Initialize Capacitor plugins
+    initializeAdMob();
   }, [checkAuth]);
+
+  useEffect(() => {
+    if (user?.id) {
+      initializeRevenueCat(user.id);
+    }
+  }, [user]);
 
   return (
     <BrowserRouter>
@@ -270,43 +322,46 @@ function App() {
         toastOptions={{
           className: '',
           style: {
-            background: 'rgba(255, 255, 255, 0.7)',
-            border: '1px solid rgba(255, 255, 255, 0.3)',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
-            color: '#1e293b',
+            background: 'var(--glass-bg)',
+            border: '1px solid var(--glass-border-outer)',
+            boxShadow: 'var(--glass-shadow)',
+            color: 'var(--text-main)',
             borderRadius: '16px',
             padding: '16px 24px',
             fontSize: '15px',
             fontWeight: '500',
             letterSpacing: '-0.01em',
+            backdropFilter: 'var(--glass-blur)',
+            WebkitBackdropFilter: 'var(--glass-blur)',
           },
           success: {
             iconTheme: {
               primary: '#10b981',
-              secondary: '#fff',
+              secondary: 'var(--bg-primary)',
             },
             style: {
-              background: 'rgba(255, 255, 255, 0.8)',
-              border: '1px solid rgba(16, 185, 129, 0.2)',
+              border: '1px solid rgba(16, 185, 129, 0.3)',
             }
           },
           error: {
             iconTheme: {
               primary: '#ef4444',
-              secondary: '#fff',
+              secondary: 'var(--bg-primary)',
             },
             style: {
-              background: 'rgba(255, 255, 255, 0.8)',
-              border: '1px solid rgba(239, 68, 68, 0.2)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
             }
           },
-        }} 
+        }}
       />
       <WPageTransition />
       <PromoOverlay />
       <Suspense fallback={<LoadingFallback />}>
         <MapProvider>
-          <AnimatedRoutes />
+          <ErrorBoundary>
+            <AnimatedRoutes />
+          </ErrorBoundary>
+          <Messages />
         </MapProvider>
       </Suspense>
     </BrowserRouter>

@@ -392,8 +392,17 @@ exports.resolveDispute = async (req, res) => {
             // Release funds to seller
             await releaseFundsToSeller(dispute.payment);
             paymentStatus = 'RELEASED';
+        } else if (resolution === 'PARTIAL_REFUND') {
+            // Process partial refund via Paystack
+            if (dispute.payment.paystackReference && req.body.refundAmount) {
+                await paystackService.createRefund({
+                    transactionReference: dispute.payment.paystackReference,
+                    amount: req.body.refundAmount,
+                    customerNote: 'Partial refund processed due to dispute resolution'
+                });
+            }
+            paymentStatus = 'PARTIAL_REFUND';
         }
-        // PARTIAL_REFUND would need additional amount parameter
 
         // Update dispute
         await prisma.paymentDispute.update({
@@ -651,12 +660,11 @@ async function releaseFundsToSeller(payment) {
         }
 
         if (recipientCode) {
-            const transfer = await paystackService.initiateTransfer({
-                amount: Number(payment.sellerPayout),
+            const transfer = await paystackService.initiateTransfer(
+                Number(payment.sellerPayout),
                 recipientCode,
-                reference: `GX_Payout_${payment.id}_${Date.now()}`,
-                reason: 'Sale proceeds from GlobalX Marketplace'
-            });
+                'Sale proceeds from GlobalX Marketplace'
+            );
 
             logger.info(`Funds released to seller: ${payment.id}`, {
                 amount: payment.sellerPayout,

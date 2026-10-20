@@ -15,8 +15,12 @@ exports.addToCart = async (req, res) => {
             include: { store: true, images: true }
         });
 
-        if (!product) {
-            return res.status(404).json({ success: false, message: 'Product not found' });
+        if (!product || product.isArchived) {
+            return res.status(404).json({ success: false, message: 'Product not found or no longer available' });
+        }
+
+        if (product.store && product.store.approvalStatus !== 'APPROVED') {
+            return res.status(400).json({ success: false, message: 'Seller store is currently unavailable or pending approval' });
         }
 
         // Check product stock
@@ -45,6 +49,9 @@ exports.addToCart = async (req, res) => {
         });
 
         if (existingItem) {
+            if (existingItem.quantity + quantity > product.stock) {
+                return res.status(400).json({ success: false, message: 'Total quantity in cart exceeds available stock' });
+            }
             await prisma.cartItem.update({
                 where: { id: existingItem.id },
                 data: { quantity: existingItem.quantity + quantity }
@@ -86,7 +93,17 @@ exports.addToCart = async (req, res) => {
                 items: {
                     include: {
                         product: {
-                            include: { store: true, images: true }
+                            include: { 
+                                store: true, 
+                                images: true,
+                                flashDeals: {
+                                    where: {
+                                        isActive: true,
+                                        startDate: { lte: new Date() },
+                                        endDate: { gt: new Date() }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -289,6 +306,7 @@ exports.verifyCartPrices = async (req, res) => {
             const product = await prisma.product.findUnique({
                 where: { id: String(item.productId) },
                 include: {
+                    store: { select: { approvalStatus: true } },
                     flashDeals: {
                         where: {
                             isActive: true,
@@ -299,7 +317,7 @@ exports.verifyCartPrices = async (req, res) => {
                 }
             });
 
-            if (!product) {
+            if (!product || product.isArchived || (product.store && product.store.approvalStatus !== 'APPROVED')) {
                 changes.push({
                     productId: item.productId,
                     title: item.title,

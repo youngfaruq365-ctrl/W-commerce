@@ -3,7 +3,10 @@ export const baseLayouts = [
   { id: 'luxury-bento', title: 'Luxury Bento', desc: 'Grid mixing an oversized hero with smaller cards', archetype: 'bento', params: { layoutMode: 'hero-top' } },
   { id: 'editorial-masonry', title: 'Editorial Masonry', desc: 'Variable height cards with waterfall effect', archetype: 'masonry', params: { columns: 3 } },
   { id: 'infinity-carousel', title: 'Infinity Carousel', desc: 'Continuous scrolling loop', archetype: 'carousel', params: { speed: 4000 } },
-  { id: 'center-stage', title: 'Center Stage', desc: 'One massive product takes center stage', archetype: 'hero', params: { showBgBlur: true } }
+  { id: 'center-stage', title: 'Center Stage', desc: 'One massive product takes center stage', archetype: 'hero', params: { showBgBlur: true } },
+  { id: 'floating-circles-fashion', title: 'Fashion Circles', desc: 'Floating circular products for fashion', archetype: 'scattered', params: { shape: 'circle', theme: 'light', style: 'fashion' } },
+  { id: 'floating-circles-food', title: 'Food Circles', desc: 'Floating circular products for food and beauty', archetype: 'scattered', params: { shape: 'circle', theme: 'light', style: 'food' } },
+  { id: 'floating-squares-tech', title: 'Tech Squares', desc: 'Floating square products for electronics and home', archetype: 'scattered', params: { shape: 'square', theme: 'dark', style: 'tech' } }
 ];
 
 const generatedLayouts = [];

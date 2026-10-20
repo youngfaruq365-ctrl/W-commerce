@@ -1,15 +1,16 @@
 import React, { useState, useRef } from 'react';
-import { Bot, Package, Upload, Image as ImageIcon, CheckCircle, Loader2, Palette, ArrowRight, ArrowLeft, Sparkles, X } from 'lucide-react';
-import axios from 'axios';
+import { Bot, Package, Upload, Image as ImageIcon, CheckCircle, Loader2, Palette, ArrowRight, ArrowLeft, Sparkles, X, Music2, Volume2 } from 'lucide-react';
+import { apiClient as axios } from '@/utils/apiClient';
 import { AIWritingState } from '../../states/AIStates';
 import { useSellerStore } from '../../../store/sellerStore';
 import { useOperationStore } from '../../../store/operationStore';
 import { WGenerationExperience } from '../../motion/WGenerationExperience';
 import { WReasoningAnimation } from '../../motion/WReasoningAnimation';
-
 import { useAuthStore } from '../../../store/authStore';
 import ProductLimitModal from '../ProductLimitModal';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
+import { showRewardedAd } from '../../../services/adMobService';
 
 const AddProductStudio = ({ onSuccess }) => {
   const { user } = useAuthStore();
@@ -22,6 +23,9 @@ const AddProductStudio = ({ onSuccess }) => {
   
   const navigate = useNavigate();
   const [showLimitModal, setShowLimitModal] = useState(false);
+
+  const tier = user?.subscriptionTier?.toUpperCase() || 'FREE';
+  const isPremium = tier === 'PRO' || tier === 'PREMIUM' || tier === 'PLUS';
 
   const [step, setStep] = useState('details');
   const [progress, setProgress] = useState(0);
@@ -38,6 +42,10 @@ const AddProductStudio = ({ onSuccess }) => {
     promotionalBadge: 'none'
   });
   const [images, setImages] = useState([]);
+  const [audioFile, setAudioFile] = useState(null);
+  const [audioTitle, setAudioTitle] = useState('');
+  const [audioPreviewUrl, setAudioPreviewUrl] = useState(null);
+  const audioFileInputRef = useRef(null);
   
   const [showAIPrompt, setShowAIPrompt] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
@@ -58,7 +66,7 @@ const AddProductStudio = ({ onSuccess }) => {
         setShowAIPrompt(false);
       }
     } catch(err) {
-      alert('AI Generation failed');
+      toast.error('AI Generation failed: ' + (err.response?.data?.message || err.message || 'Unknown error'));
     } finally {
       setIsGeneratingAI(false);
     }
@@ -81,9 +89,25 @@ const AddProductStudio = ({ onSuccess }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleImageChange = (e) => {
+    const MAX_FILE_SIZE = 4 * 1024 * 1024; // 4MB
+    const ACCEPTED_TYPES = ['image/jpeg','image/jpg','image/png','image/gif','image/webp','video/mp4','video/quicktime','video/webm'];
     const files = Array.from(e.target.files);
+
+    const oversized = files.filter(f => f.size > MAX_FILE_SIZE);
+    if (oversized.length > 0) {
+      toast.error(`File too large: ${oversized.map(f => f.name).join(', ')}. Max 4MB per file.`);
+      e.target.value = '';
+      return;
+    }
+    const invalid = files.filter(f => !ACCEPTED_TYPES.includes(f.type));
+    if (invalid.length > 0) {
+      toast.error('Only JPG, PNG, WebP images and MP4/MOV/WebM videos are allowed.');
+      e.target.value = '';
+      return;
+    }
     if (images.length + files.length > 5) {
-      window.__gxAlert?.('Max 5 images.') ?? alert('Max 5 images.');
+      toast.error('You can only upload up to 5 files.');
+      e.target.value = '';
       return;
     }
     setImages([...images, ...files].slice(0, 5));
@@ -93,7 +117,30 @@ const AddProductStudio = ({ onSuccess }) => {
     setImages(images.filter((_, i) => i !== index));
   };
 
+  const handleAudioChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setAudioFile(file);
+    setAudioPreviewUrl(URL.createObjectURL(file));
+    if (!audioTitle) setAudioTitle(file.name.replace(/\.[^.]+$/, ''));
+  };
+
+  const removeAudio = () => {
+    setAudioFile(null);
+    setAudioPreviewUrl(null);
+    if (audioFileInputRef.current) audioFileInputRef.current.value = '';
+  };
+
   const startUpload = async () => {
+    if (tier === 'FREE' || tier === 'BASIC') {
+      try {
+        await showRewardedAd();
+      } catch (err) {
+        toast.error('You must watch an ad to list a product on the free tier.');
+        return;
+      }
+    }
+
     const { start, update, complete, fail, reset } = useOperationStore.getState();
 
     start({
@@ -139,6 +186,20 @@ const AddProductStudio = ({ onSuccess }) => {
       checkCancelled();
 
       if (success) {
+        // Upload audio as a separate request after product creation
+        if (audioFile || audioTitle) {
+          const createdProduct = useSellerStore.getState().products?.at(-1) || useSellerStore.getState().lastCreatedProduct;
+          if (createdProduct?.id && audioFile) {
+            try {
+              const audioForm = new FormData();
+              audioForm.append('audio', audioFile);
+              if (audioTitle) audioForm.append('audioTitle', audioTitle);
+              await axios.post(`/api/v1/products/${createdProduct.id}/audio`, audioForm);
+            } catch (audioErr) {
+              console.warn('[AUDIO UPLOAD] Failed to attach audio:', audioErr.message);
+            }
+          }
+        }
         complete('Product published successfully!');
       } else {
         fail(useSellerStore.getState().error || 'Failed to create product');
@@ -274,7 +335,7 @@ const AddProductStudio = ({ onSuccess }) => {
             <button onClick={() => setStep('details')} className="mr-4 p-2 hover:bg-gray-100 rounded-full transition-colors"><ArrowLeft size={24} /></button>
             <div>
               <h2 className="text-2xl font-extrabold text-black">Upload Media</h2>
-              <p className="text-[var(--text-muted)]">Add up to 5 images for your product.</p>
+              <p className="text-[var(--text-muted)]">Add up to 5 images or videos for your product.</p>
             </div>
           </div>
           
@@ -284,22 +345,100 @@ const AddProductStudio = ({ onSuccess }) => {
               className="border-2 border-dashed border-gray-300 hover:border-[#00b873] rounded-2xl p-12 flex flex-col items-center justify-center cursor-pointer transition-colors bg-gray-50 group"
             >
               <Upload size={48} className="text-gray-400 group-hover:text-[#00b873] mb-4 transition-colors" />
-              <span className="text-gray-800 font-bold text-lg mb-1">Click to upload images</span>
-              <span className="text-[var(--text-muted)] text-sm">JPG, PNG, WEBP (Max 5MB each)</span>
-              <input type="file" multiple accept="image/*" className="hidden" ref={fileInputRef} onChange={handleImageChange} />
+              <span className="text-gray-800 font-bold text-lg mb-1">Click to upload images or videos</span>
+              <span className="text-[var(--text-muted)] text-sm">JPG, PNG, WebP, MP4, MOV, WebM · Max 4MB each</span>
+              <input type="file" multiple accept="image/jpeg,image/jpg,image/png,image/gif,image/webp,video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm" className="hidden" ref={fileInputRef} onChange={handleImageChange} />
             </div>
 
             {images.length > 0 && (
               <div className="grid grid-cols-5 gap-4 mt-6">
-                {images.map((img, index) => (
-                  <div key={index} className="relative aspect-square rounded-xl overflow-hidden border border-gray-200 group">
-                    <img src={URL.createObjectURL(img)} alt={`Upload ${index + 1}`} className="w-full h-full object-cover" />
-                    <button type="button" onClick={() => removeImage(index)} className="absolute top-1 right-1 bg-white/90 text-red-500 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white shadow-md">
-                      <X size={14} />
-                    </button>
-                  </div>
-                ))}
+                {images.map((img, index) => {
+                  const isVideo = img.type?.startsWith('video/');
+                  return (
+                    <div key={index} className="relative aspect-square rounded-xl overflow-hidden border border-gray-200 group">
+                      {isVideo ? (
+                        <video src={URL.createObjectURL(img)} className="w-full h-full object-cover" muted />
+                      ) : (
+                        <img src={URL.createObjectURL(img)} alt={`Upload ${index + 1}`} className="w-full h-full object-cover" />
+                      )}
+                      {isVideo && (
+                        <span className="absolute bottom-0 left-0 right-0 text-center text-[9px] font-bold bg-black/60 text-white py-0.5">VIDEO</span>
+                      )}
+                      <button type="button" onClick={() => removeImage(index)} className="absolute top-1 right-1 bg-white/90 text-red-500 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white shadow-md">
+                        <X size={14} />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
+            )}
+          </div>
+
+          {/* Audio Upload Section */}
+          <div className="mt-6 border border-dashed border-gray-300 hover:border-[#00b873] rounded-2xl p-6 bg-gray-50 transition-colors">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-9 h-9 rounded-full bg-[#00b873]/10 flex items-center justify-center">
+                <Music2 size={18} className="text-[#00b873]" />
+              </div>
+              <div>
+                <p className="font-bold text-gray-800 text-sm">Background Audio <span className="text-gray-400 font-normal">(Optional)</span></p>
+                <p className="text-xs text-gray-500">Plays in the feed when buyers scroll to your product</p>
+              </div>
+            </div>
+
+            {!isPremium ? (
+              <div className="border border-gray-200 rounded-xl p-6 flex flex-col items-center justify-center bg-gray-50 opacity-75">
+                <Music2 size={24} className="text-gray-400 mb-2" />
+                <span className="text-gray-600 font-bold text-sm">Background Audio is a Premium Feature</span>
+                <span className="text-gray-500 text-xs mt-1">Upgrade your store to add voice-overs or music</span>
+              </div>
+            ) : audioFile ? (
+              <div className="space-y-3">
+                {/* Audio player preview */}
+                <div className="bg-white border border-gray-200 rounded-xl p-3 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-[#00b873]/10 flex items-center justify-center flex-shrink-0">
+                    <Volume2 size={18} className="text-[#00b873]" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-sm text-gray-800 truncate">{audioFile.name}</p>
+                    <p className="text-xs text-gray-400">{(audioFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                  </div>
+                  <button type="button" onClick={removeAudio} className="p-1.5 hover:bg-red-50 rounded-full text-red-400 hover:text-red-500 transition-colors flex-shrink-0">
+                    <X size={16} />
+                  </button>
+                </div>
+                <audio controls src={audioPreviewUrl} className="w-full h-10 rounded-lg" />
+                {/* Audio title */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Track Title (shown in feed)</label>
+                  <input
+                    type="text"
+                    value={audioTitle}
+                    onChange={e => setAudioTitle(e.target.value)}
+                    placeholder="e.g. Afrobeats Summer Vibe"
+                    className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:border-[#00b873] outline-none"
+                  />
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => audioFileInputRef.current?.click()}
+                className="w-full flex flex-col items-center justify-center gap-2 py-5 text-gray-400 hover:text-[#00b873] transition-colors"
+              >
+                <Upload size={28} />
+                <span className="text-sm font-medium">Click to pick audio file</span>
+                <span className="text-xs">MP3, WAV, M4A, OGG, AAC (Max 10MB)</span>
+              </button>
+            )}
+            {isPremium && (
+              <input
+                type="file"
+                accept="audio/*,.mp3,.wav,.m4a,.ogg,.aac"
+                className="hidden"
+                ref={audioFileInputRef}
+                onChange={handleAudioChange}
+              />
             )}
           </div>
 

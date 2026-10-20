@@ -72,6 +72,7 @@ module.exports = (io) => {
                 }
 
                 if (!token) {
+                    console.log(`[SOCKET_MIDDLEWARE] Rejecting socket ${socket.id} due to missing token. Cookies:`, socket.handshake.headers.cookie);
                     return next(new Error("Authentication error: No token provided"));
                 }
 
@@ -89,12 +90,21 @@ module.exports = (io) => {
         });
 
         io.on('connection', (socket) => {
+            console.log(`[SOCKET] connection attempt: socket.id=${socket.id}, user=${socket.user?.id}`);
+            if (!socket.user || !socket.user.id) {
+                console.log(`[SOCKET] Disconnecting socket ${socket.id} due to missing user auth`);
+                socket.disconnect();
+                return;
+            }
             const currentUserId = String(socket.user.id);
+            console.log(`[SOCKET] Connected currentUserId: ${currentUserId}`);
             socket.join(currentUserId);
+            if (socket.user.role) socket.join(`role:${String(socket.user.role).toUpperCase()}`);
 
             // Handle identify (optional now that we have socket.user, but kept for status)
             socket.on('identify', (data) => {
                 const { status = 'online' } = data;
+                console.log(`[SOCKET] identify called by ${currentUserId} with status ${status}`);
 
                 if (!onlineUsers.has(currentUserId)) {
                     onlineUsers.set(currentUserId, { socketIds: new Set(), status: status });
@@ -202,6 +212,7 @@ module.exports = (io) => {
 
             socket.on('check_user_status', (targetUser, callback) => {
                 const userData = onlineUsers.get(String(targetUser));
+                console.log(`[SOCKET] check_user_status called for targetUser: ${targetUser}. Current online keys:`, Array.from(onlineUsers.keys()));
                 if (callback) {
                     callback({
                         status: userData ? userData.status : 'offline'
@@ -257,6 +268,47 @@ module.exports = (io) => {
                         callback({ success: false, message: error.message || 'Failed to send message' });
                     }
                 }
+            });
+
+            socket.on('callUser', (data) => {
+                const targetId = String(data.receiverId || data.targetId);
+                console.log(`[SOCKET] callUser from ${currentUserId} to ${targetId}`);
+                io.to(targetId).emit('incomingCall', {
+                    callerId: currentUserId,
+                    callerName: data.callerName || socket.user?.fullName || 'User',
+                    callerAvatar: data.callerAvatar,
+                    type: data.type || 'voice'
+                });
+            });
+
+            socket.on('acceptCall', (data) => {
+                const callerId = String(data.callerId);
+                io.to(callerId).emit('callAccepted', { accepterId: currentUserId });
+            });
+
+            socket.on('rejectCall', (data) => {
+                const callerId = String(data.callerId);
+                io.to(callerId).emit('callRejected', { rejecterId: currentUserId });
+            });
+
+            socket.on('endCall', (data) => {
+                const targetId = String(data.targetId);
+                io.to(targetId).emit('callEnded', { enderId: currentUserId });
+            });
+
+            socket.on('webrtc_offer', (data) => {
+                const targetId = String(data.targetId);
+                io.to(targetId).emit('webrtc_offer', { callerId: currentUserId, sdp: data.sdp });
+            });
+
+            socket.on('webrtc_answer', (data) => {
+                const targetId = String(data.targetId);
+                io.to(targetId).emit('webrtc_answer', { responderId: currentUserId, sdp: data.sdp });
+            });
+
+            socket.on('webrtc_ice_candidate', (data) => {
+                const targetId = String(data.targetId);
+                io.to(targetId).emit('webrtc_ice_candidate', { senderId: currentUserId, candidate: data.candidate });
             });
 
             // Legacy handler (optional support)
@@ -324,3 +376,4 @@ module.exports.broadcastActivity = broadcastActivity;
 module.exports.getOnlineCount = getOnlineCount;
 module.exports.getUserStatus = getUserStatus;
 module.exports.isUserOnline = isUserOnline;
+module.exports.getIO = () => ioInstance;

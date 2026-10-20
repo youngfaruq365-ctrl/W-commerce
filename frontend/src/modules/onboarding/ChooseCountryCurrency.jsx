@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Check, ArrowRight, Navigation, ChevronRight, AlertTriangle } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 
 /* ─── Data ────────────────────────────────────────────────────── */
 const COUNTRIES = [
@@ -95,9 +95,11 @@ export default function ChooseCountryCurrency() {
     setDetecting(true);
     setDetectError('');
     try {
-      // Free IP geolocation API
-      const res = await axios.get('https://ipapi.co/json/');
-      const countryCode = res.data.country; // e.g. "US"
+      // Free IP geolocation API (use native fetch without credentials/custom headers to avoid CORS block)
+      const response = await fetch('https://ipapi.co/json/');
+      if (!response.ok) throw new Error('Geo lookup failed');
+      const data = await response.json();
+      const countryCode = data.country; // e.g. "US"
       if (countryCode) {
         const found = COUNTRIES.find(c => c.code === countryCode);
         if (found) {

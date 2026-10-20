@@ -179,7 +179,7 @@ exports.deletePromoCode = async (req, res) => {
 // Validate and apply promo code (Customer checkout)
 exports.validatePromoCode = async (req, res) => {
     try {
-        const { code, productId, orderTotal } = req.body;
+        const { code, productId, productIds, orderTotal } = req.body;
 
         if (!code) {
             return res.status(400).json({ success: false, message: 'Promo code is required' });
@@ -203,8 +203,10 @@ exports.validatePromoCode = async (req, res) => {
             return res.status(400).json({ success: false, message: 'This promo code has reached its maximum usage limit' });
         }
 
-        if (promoCode.productId && productId && promoCode.productId !== productId) {
-            return res.status(400).json({ success: false, message: 'This promo code is not valid for this product' });
+        // Support single productId or array of productIds in cart
+        const cartProductIds = Array.isArray(productIds) ? productIds.map(String) : (productId ? [String(productId)] : []);
+        if (promoCode.productId && cartProductIds.length > 0 && !cartProductIds.includes(String(promoCode.productId))) {
+            return res.status(400).json({ success: false, message: 'This promo code is only valid for its specific negotiated product' });
         }
 
         if (req.user && promoCode.maxUsesPerUser) {
@@ -233,8 +235,11 @@ exports.validatePromoCode = async (req, res) => {
                 id: promoCode.id,
                 code: promoCode.code,
                 description: promoCode.description,
+                productId: promoCode.productId,
+                sellerId: promoCode.sellerId,
                 discountType: promoCode.discountType,
-                discountValue: parseFloat(promoCode.discountValue)
+                discountValue: parseFloat(promoCode.discountValue),
+                expiresAt: promoCode.expiresAt
             }
         });
     } catch (error) {

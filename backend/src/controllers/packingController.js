@@ -1,6 +1,6 @@
 const prisma = require('../utils/prismaClient');
 const logger = require('../utils/logger');
-const notificationService = require('../services/notificationService');
+const notificationService = require('../services/notificationV2Service');
 const packingWorkflowService = require('../services/packingWorkflowService');
 
 const RESPONSE_TEMPLATES = {
@@ -60,60 +60,164 @@ function sellerOwnsOrder(order, sellerId) {
 
 exports.markOrderPacked = async (req, res) => {
     try {
-        const { orderId } = req.body;
+        const orderId = req.body.orderId || req.body.id;
         const sellerId = req.user.id;
 
-        const order = await getOrderForPacking(orderId);
-        if (!order) {
-            return res.status(404).json({ success: false, message: 'Order not found' });
+        if (!orderId) {
+            return res.status(400).json({ success: false, message: 'Order ID is required' });
         }
 
-        if (!sellerOwnsOrder(order, sellerId)) {
-            return res.status(403).json({ success: false, message: 'Not authorized to pack this order' });
+        let order = await getOrderForPacking(orderId);
+
+        // Fallback: search by stripped hex order number if synthesized W-DOM-XXXX was passed
+        if (!order && typeof orderId === 'string') {
+            const cleanHex = orderId.replace(/^(?:W-(?:DOM|LOC|INT)|GIG-EXP|DHL-EXP)-?/i, '').toLowerCase();
+            if (cleanHex.length >= 6) {
+                order = await prisma.order.findFirst({
+                    where: { id: { contains: cleanHex } },
+                    include: {
+                        buyer: { select: { id: true, fullName: true, email: true } },
+                        items: { include: { product: { include: { store: true } } } },
+                        packingResponse: true,
+                        packingIssue: true,
+                        trackingEvents: { orderBy: { createdAt: 'desc' }, take: 5 }
+                    }
+                });
+            }
+        }
+        
+        if (order) {
+            // Check seller ownership or Admin permission
+            const isAuthorized = req.user.role === 'ADMIN' || 
+                                 sellerOwnsOrder(order, sellerId) || 
+                                 !order.items || order.items.length === 0 ||
+                                 order.items.some(it => it.product?.store?.sellerId === sellerId || it.product?.sellerId === sellerId);
+
+            if (!isAuthorized) {
+                return res.status(403).json({ success: false, message: 'Not authorized to pack this order' });
+            }
+
+            if (order.status === 'PACKED' || ['SHIPPED', 'IN_TRANSIT', 'DELIVERED', 'AWAITING_COURIER'].includes(order.status)) {
+                return res.json({
+                    success: true,
+                    message: 'Order is already marked as PACKED.',
+                    order
+                });
+            }
+
+            const allowedStatuses = ['PENDING', 'PAID', 'PROCESSING', 'SELLER_REVIEW', 'ACCEPTED', 'PREPARING', 'CONFIRMED', 'PAYMENT_VERIFIED', 'AWAITING_PACKING'];
+            if (!allowedStatuses.includes(order.status)) {
+                return res.status(400).json({ success: false, message: `Cannot pack order with status: ${order.status}` });
+            }
+
+            const code = Math.floor(100000 + Math.random() * 900000).toString();
+            
+            const updatedOrder = await prisma.order.update({
+                where: { id: order.id },
+                data: {
+                    status: 'PACKED',
+                    packingConfirmationCode: code,
+                    packedAt: new Date()
+                },
+                include: { items: { include: { product: true } } }
+            });
+
+            try {
+                await prisma.trackingEvent.create({
+                    data: {
+                        orderId: order.id,
+                        status: 'PACKED',
+                        location: 'Seller Facility',
+                        description: 'Order packed and awaiting courier pickup or buyer confirmation.'
+                    }
+                });
+            } catch (teErr) {
+                logger.warn(`Failed to create tracking event for order ${order.id}: ${teErr.message}`);
+            }
+
+            return res.json({
+                success: true,
+                message: 'Order marked as PACKED. Confirmation code generated.',
+                order: updatedOrder
+            });
         }
 
-        if (!['PAID', 'PROCESSING'].includes(order.status)) {
-            return res.status(400).json({ success: false, message: `Cannot pack order with status: ${order.status}` });
-        }
-
-        const identifiers = packingWorkflowService.buildPackingIdentifiers(orderId);
-
-        await prisma.order.update({
-            where: { id: orderId },
-            data: {
-                status: 'PACKED',
-                packedAt: new Date(),
-                packingSerial: identifiers.packingSerial,
-                packingConfirmationCode: identifiers.packingConfirmationCode
+        // Check if it's a V2 MarketplaceOrder ID or FulfillmentOrder ID
+        const fo = await prisma.fulfillmentOrder.findFirst({
+            where: {
+                OR: [
+                    { id: orderId },
+                    { orderId: orderId }
+                ],
+                ...(req.user.role === 'ADMIN' ? {} : { sellerId: sellerId })
             }
         });
 
-        await notificationService.createWorkflowNotifications({
-            userId: order.buyerId,
-            orderId,
-            message: `Order ${identifiers.packingSerial} is packed. Confirmation code: ${identifiers.packingConfirmationCode}. Escrow protected while you verify the package.`,
-            type: 'delivery_update',
-            channels: ['in_app', 'email']
-        });
+        if (fo) {
+            if (fo.status === 'PACKED' || ['AWAITING_COURIER', 'SHIPPED', 'IN_TRANSIT', 'DELIVERED'].includes(fo.status)) {
+                return res.json({
+                    success: true,
+                    message: 'Order is already marked as PACKED.',
+                    order: fo
+                });
+            }
 
-        await prisma.trackingEvent.create({
-            data: {
-                orderId,
-                status: 'PACKED',
-                location: 'Seller Warehouse',
-                description: `Order packed. Serial ${identifiers.packingSerial}. Awaiting buyer confirmation.`
+            const fulfillmentService = require('../services/fulfillmentService');
+            
+            // FAST-FORWARD V2 STATE MACHINE IF USING LEGACY UI
+            if (fo.status === 'PENDING') {
+                await prisma.fulfillmentOrder.update({ where: { id: fo.id }, data: { status: 'SELLER_REVIEW' } });
+                fo.status = 'SELLER_REVIEW';
+            }
+            if (fo.status === 'SELLER_REVIEW') {
+                await fulfillmentService.accept({ fulfillmentOrderId: fo.id, sellerId: fo.sellerId, estimatedPackingMinutes: 60 });
+                fo.status = 'ACCEPTED';
+            }
+            if (fo.status === 'ACCEPTED') {
+                await fulfillmentService.startPreparing({ fulfillmentOrderId: fo.id, sellerId: fo.sellerId });
+                fo.status = 'PREPARING';
+            }
+
+            const updatedFo = await fulfillmentService.markPacked({ 
+                fulfillmentOrderId: fo.id, 
+                sellerId: fo.sellerId, 
+                notes: 'Packed via seller dashboard protocol', 
+                packageDetails: {} 
+            });
+            
+            return res.json({
+                success: true,
+                message: 'Order marked as PACKED. Package barcode generated.',
+                order: updatedFo
+            });
+        }
+
+        // Check if it's a PayAI Order
+        const payaiOrder = await prisma.payAIOrder.findFirst({
+            where: {
+                OR: [
+                    { id: orderId },
+                    { orderNumber: orderId }
+                ]
             }
         });
 
-        res.json({
-            success: true,
-            message: 'Order marked as packed and buyer notified.',
-            packingSerial: identifiers.packingSerial,
-            confirmationCode: identifiers.packingConfirmationCode
-        });
+        if (payaiOrder) {
+            const updatedPayai = await prisma.payAIOrder.update({
+                where: { id: payaiOrder.id },
+                data: { status: 'PACKED' }
+            });
+            return res.json({
+                success: true,
+                message: 'PayAI order marked as PACKED.',
+                order: updatedPayai
+            });
+        }
+
+        return res.status(404).json({ success: false, message: 'Order not found' });
     } catch (error) {
         logger.error(`Mark Order Packed Error: ${error.message}`);
-        res.status(500).json({ success: false, message: 'Server error' });
+        res.status(500).json({ success: false, message: error.message || 'Server error' });
     }
 };
 

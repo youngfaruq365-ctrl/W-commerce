@@ -52,18 +52,12 @@ exports.createCheckout = async (req, res) => {
 
         let bankDetails = null;
         if (result.marketplaceOrder.paymentMethod === 'BANK_TRANSFER' || result.marketplaceOrder.paymentMethod === 'direct_bank') {
-            const firstFo = result.fulfillmentOrders[0];
-            if (firstFo && firstFo.sellerId) {
-                const store = await prisma.store.findUnique({ where: { sellerId: firstFo.sellerId } });
-                if (store) {
-                    bankDetails = {
-                        bankName: store.bankName,
-                        accountNumber: store.accountNumber,
-                        accountName: store.accountName,
-                        bankCode: store.bankCode
-                    };
-                }
-            }
+            bankDetails = {
+                bankName: 'GlobalX Escrow LLC',
+                accountNumber: '1234567890',
+                accountName: 'GlobalX Marketplace',
+                bankCode: '000'
+            };
         }
 
         return res.status(statusCode).json({
@@ -79,7 +73,7 @@ exports.createCheckout = async (req, res) => {
         logger.error(`[CheckoutV2] createCheckout error: ${err.message}`);
         return res.status(err.statusCode || 500).json({
             success: false,
-            message: err.message || 'Checkout failed. Please try again.',
+            message: process.env.NODE_ENV === 'production' ? 'Checkout failed. Please try again.' : err.message,
         });
     }
 };
@@ -446,7 +440,7 @@ exports.initiateCheckout = async (req, res) => {
         logger.error(`[CheckoutV2] initiateCheckout error: ${err.message}`);
         return res.status(err.statusCode || 500).json({
             success: false,
-            message: err.message || 'Failed to initiate checkout.',
+            message: process.env.NODE_ENV === 'production' ? 'Failed to initiate checkout.' : err.message,
         });
     }
 };
@@ -473,18 +467,12 @@ exports.confirmCheckout = async (req, res) => {
 
         let bankDetails = null;
         if (result.marketplaceOrder.paymentMethod === 'BANK_TRANSFER' || result.marketplaceOrder.paymentMethod === 'direct_bank') {
-            const firstFo = result.fulfillmentOrders[0];
-            if (firstFo && firstFo.sellerId) {
-                const store = await prisma.store.findUnique({ where: { sellerId: firstFo.sellerId } });
-                if (store) {
-                    bankDetails = {
-                        bankName: store.bankName,
-                        accountNumber: store.accountNumber,
-                        accountName: store.accountName,
-                        bankCode: store.bankCode
-                    };
-                }
-            }
+            bankDetails = {
+                bankName: 'GlobalX Escrow LLC',
+                accountNumber: '1234567890',
+                accountName: 'GlobalX Marketplace',
+                bankCode: '000'
+            };
         }
 
         return res.status(201).json({
@@ -500,7 +488,7 @@ exports.confirmCheckout = async (req, res) => {
         logger.error(`[CheckoutV2] confirmCheckout error: ${err.message}`);
         return res.status(err.statusCode || 500).json({
             success: false,
-            message: err.message || 'Failed to confirm checkout.',
+            message: process.env.NODE_ENV === 'production' ? 'Failed to confirm checkout.' : err.message,
         });
     }
 };

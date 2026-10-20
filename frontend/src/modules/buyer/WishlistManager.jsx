@@ -6,19 +6,12 @@ import {
   Copy, Link, Star
 } from 'lucide-react';
 
-const mockLists = [
-  { id: 1, name: 'Default List', itemCount: 8, isPrivate: false, isDefault: true, createdAt: '2024-01-10' },
-  { id: 2, name: 'Birthday Wishlist', itemCount: 5, isPrivate: true, isDefault: false, createdAt: '2024-03-15' },
-  { id: 3, name: 'Home Decor Ideas', itemCount: 12, isPrivate: false, isDefault: false, createdAt: '2024-05-02' },
-  { id: 4, name: 'Tech Gadgets', itemCount: 3, isPrivate: true, isDefault: false, createdAt: '2024-06-20' },
-];
+import { useBuyerStore } from '../../store/buyerStore';
+import { useCartStore } from '../../store/cartStore';
+import { PLACEHOLDER_IMAGE } from '@/constants/placeholders';
 
-const mockProducts = [
-  { id: 1, name: 'Sony WH-1000XM5 Headphones', price: 349.99, originalPrice: 399.99, image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=300&h=300&fit=crop', rating: 4.8, reviews: 2341 },
-  { id: 2, name: 'Apple AirPods Pro 2nd Gen', price: 249.00, originalPrice: 249.00, image: 'https://images.unsplash.com/photo-1600294037681-c80b4cb5b434?w=300&h=300&fit=crop', rating: 4.9, reviews: 5678 },
-  { id: 3, name: 'Logitech MX Master 3S Mouse', price: 99.99, originalPrice: 119.99, image: 'https://images.unsplash.com/photo-1527814050087-3793815479db?w=300&h=300&fit=crop', rating: 4.7, reviews: 1234 },
-  { id: 4, name: 'Samsung 27" 4K Monitor', price: 449.00, originalPrice: 549.00, image: 'https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?w=300&h=300&fit=crop', rating: 4.6, reviews: 892 },
-];
+// We map the backend wishlist to a default list for UI compatibility
+const defaultList = { id: 'default', name: 'My Wishlist', isPrivate: false, isDefault: true, createdAt: new Date().toISOString().slice(0, 10) };
 
 function CreateListModal({ onClose, onCreate }) {
   const [name, setName] = useState('');
@@ -112,13 +105,35 @@ function ShareModal({ list, onClose }) {
 }
 
 export default function WishlistManager() {
-  const [lists, setLists] = useState(mockLists);
+  const { wishlist, fetchWishlist, removeFromWishlist } = useBuyerStore();
+  const addToCart = useCartStore(state => state.addToCart);
+
+  // Initialize Lists with Default
+  const [lists, setLists] = useState([defaultList]);
   const [activeList, setActiveList] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [shareTarget, setShareTarget] = useState(null);
   const [selectedItems, setSelectedItems] = useState([]);
   const [moveDropdown, setMoveDropdown] = useState(null);
   const [addedToCart, setAddedToCart] = useState([]);
+
+  React.useEffect(() => {
+    fetchWishlist();
+  }, [fetchWishlist]);
+
+  // Extract products from wishlist
+  const products = wishlist.map(item => ({
+    id: item.product?.id || item.productId,
+    name: item.product?.title || item.product?.name || 'Product',
+    price: item.product?.price || 0,
+    originalPrice: item.product?.compareAtPrice || item.product?.originalPrice || 0,
+    image: item.product?.images?.[0]?.url || PLACEHOLDER_IMAGE,
+    rating: item.product?.averageRating ?? item.product?.rating ?? 0,
+    reviews: item.product?.reviewCount ?? item.product?._count?.reviews ?? 0
+  }));
+
+  // Update defaultList itemCount
+  lists[0].itemCount = products.length;
 
   const handleCreate = (name, isPrivate) => {
     const newList = { id: crypto.randomUUID(), name, itemCount: 0, isPrivate, isDefault: false, createdAt: new Date().toISOString().slice(0, 10) };
@@ -142,18 +157,33 @@ export default function WishlistManager() {
     }));
   };
 
-  const handleAddToCart = (productId) => {
-    setAddedToCart(prev => [...prev, productId]);
-    toast.success('Added to cart');
-    setTimeout(() => setAddedToCart(prev => prev.filter(id => id !== productId)), 2000);
+  const handleAddToCart = async (productId) => {
+    try {
+      await addToCart(productId, 1);
+      setAddedToCart(prev => [...prev, productId]);
+      toast.success('Added to cart');
+      setTimeout(() => setAddedToCart(prev => prev.filter(id => id !== productId)), 2000);
+    } catch(err) {
+      toast.error('Failed to add to cart');
+    }
   };
 
-  const handleAddAllToCart = () => {
-    mockProducts.forEach(p => {
-      setAddedToCart(prev => [...prev, p.id]);
-    });
-    toast.success('All items added to cart');
-    setTimeout(() => setAddedToCart([]), 2000);
+  const handleAddAllToCart = async () => {
+    try {
+      for (const p of products) {
+        await addToCart(p.id, 1);
+        setAddedToCart(prev => [...prev, p.id]);
+      }
+      toast.success('All items added to cart');
+      setTimeout(() => setAddedToCart([]), 2000);
+    } catch (err) {
+      toast.error('Error adding some items to cart');
+    }
+  };
+
+  const handleRemove = async (productId) => {
+    await removeFromWishlist(productId);
+    toast.success('Removed from wishlist');
   };
 
   const toggleSelect = (id) => {
@@ -173,7 +203,7 @@ export default function WishlistManager() {
           <div className="flex items-center justify-between mb-6">
             <div>
               <h1 className="text-2xl font-bold text-[var(--text-main)]">{activeList.name}</h1>
-              <p className="text-[var(--text-muted)] text-sm mt-1">{mockProducts.length} items</p>
+              <p className="text-[var(--text-muted)] text-sm mt-1">{products.length} items</p>
             </div>
             <div className="flex items-center gap-3">
               {selectedItems.length > 0 && (
@@ -196,13 +226,13 @@ export default function WishlistManager() {
 
           {/* Product Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {mockProducts.map(product => (
+            {products.map(product => (
               <div key={product.id} className="bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden group hover:border-[var(--border-hover)] transition-all hover:shadow-[var(--shadow-md)]">
                 <div className="relative">
                   <input type="checkbox" checked={selectedItems.includes(product.id)} onChange={() => toggleSelect(product.id)}
                     className="absolute top-3 left-3 z-10 w-4 h-4 accent-white cursor-pointer" />
                   <img src={product.image} alt={product.name} className="w-full h-40 object-cover" />
-                  <button onClick={() => toast('Feature coming soon', { icon: '🚀' })}  className="absolute top-3 right-3 w-8 h-8 bg-black/40 backdrop-blur-sm rounded-full flex items-center justify-center text-red-400 hover:text-red-300 transition-colors">
+                  <button onClick={() => handleRemove(product.id)} className="absolute top-3 right-3 w-8 h-8 bg-black/40 backdrop-blur-sm rounded-full flex items-center justify-center text-red-400 hover:text-red-300 transition-colors">
                     <Heart size={14} fill="currentColor" />
                   </button>
                 </div>
@@ -213,9 +243,9 @@ export default function WishlistManager() {
                     <span className="text-xs text-[var(--text-muted)]">{product.rating} ({product.reviews.toLocaleString()})</span>
                   </div>
                   <div className="flex items-center gap-2 mb-3">
-                    <span className="text-[var(--text-main)] font-bold">${product.price}</span>
+                    <span className="text-[var(--text-main)] font-bold">₦{product.price}</span>
                     {product.originalPrice > product.price && (
-                      <span className="text-[var(--text-faint)] text-xs line-through">${product.originalPrice}</span>
+                      <span className="text-[var(--text-faint)] text-xs line-through">₦{product.originalPrice}</span>
                     )}
                   </div>
                   <div className="flex gap-2">

@@ -16,8 +16,6 @@ RUN npm ci
 # Copy the rest of the source code
 COPY . .
 
-# Generate prisma client (in case it is required by some shared code or types)
-RUN npm run db:generate
 
 # Build the frontend application
 RUN npm run build:production

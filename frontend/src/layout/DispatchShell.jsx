@@ -1,6 +1,7 @@
 import React from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
 import { Radar, Users, Activity, Settings, Package } from 'lucide-react';
+import { WPageTransition } from '../components/motion/WPageTransition';
 
 const navItems = [
     { to: '/dispatch/console', icon: Radar, label: 'Mission Control' },
@@ -48,8 +49,10 @@ const DispatchShell = () => {
             </aside>
 
             {/* Main Content Area */}
-            <main className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col relative">
-                <Outlet />
+            <main className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col relative bg-slate-950">
+                <WPageTransition>
+                    <Outlet />
+                </WPageTransition>
             </main>
         </div>
     );

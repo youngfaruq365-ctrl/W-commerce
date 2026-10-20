@@ -1,8 +1,87 @@
+import { PLACEHOLDER_IMAGE } from '@/constants/placeholders';
+import { isVideoUrl, getImageUrl } from '../../utils/imageHelpers';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence, useAnimation } from 'framer-motion';
-import { Heart, MessageCircle, Share2, ShoppingCart, Bookmark, ShieldCheck, ChevronUp, ChevronDown, X, Send, Flame, ArrowRight, Check } from 'lucide-react';
+import { Heart, MessageCircle, Share2, ShoppingCart, Bookmark, ShieldCheck, ChevronUp, ChevronDown, X, Send, Flame, ArrowRight, Check, Volume2, VolumeX, Timer, PartyPopper, Sunset } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
+import toast from 'react-hot-toast';
+import { useFeedAudio } from '../../hooks/useFeedAudio';
+import confetti from 'canvas-confetti';
+
+const RotatingText = () => {
+  const words = ['HURRY UP!', 'SELLING FAST!', 'LIMITED TIME!', 'LAST CHANCE!'];
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setIndex((prev) => (prev + 1) % words.length);
+    }, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <AnimatePresence mode="wait">
+      <motion.span
+        key={index}
+        initial={{ y: 10, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: -10, opacity: 0 }}
+        transition={{ duration: 0.3 }}
+        style={{ display: 'inline-block', color: '#ffeb3b', fontWeight: '900', marginLeft: '0.5rem' }}
+      >
+        {words[index]}
+      </motion.span>
+    </AnimatePresence>
+  );
+};
+
+const FloatingBalloons = ({ count = 7 }) => {
+  return (
+    <div className="absolute inset-0 pointer-events-none overflow-hidden z-[45]">
+      {[...Array(count)].map((_, i) => {
+        const left = `${10 + Math.random() * 80}%`;
+        const delay = Math.random() * 2;
+        const duration = 5 + Math.random() * 4;
+        const colors = ['#ff1744', '#ffd700', '#00bfff', '#9c27b0', '#00e676', '#ff9800'];
+        const color = colors[i % colors.length];
+
+        return (
+          <motion.div
+            key={i}
+            initial={{ y: '110vh', x: 0, opacity: 0.95 }}
+            animate={{ 
+              y: '-20vh', 
+              x: [0, Math.random() > 0.5 ? 40 : -40, Math.random() > 0.5 ? -20 : 20, 0],
+            }}
+            transition={{ 
+              duration,
+              delay,
+              repeat: Infinity,
+              ease: "easeInOut"
+            }}
+            className="absolute bottom-0"
+            style={{ left }}
+          >
+            <div className="relative flex flex-col items-center drop-shadow-xl">
+              <div 
+                className="w-12 h-14 rounded-[50%] shadow-inner"
+                style={{ backgroundColor: color, border: '1px solid rgba(255,255,255,0.4)' }}
+              >
+                <div className="absolute top-2 left-2 w-3 h-3 bg-white/40 rounded-full blur-[1px]" />
+              </div>
+              <div 
+                className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-b-[6px]"
+                style={{ borderBottomColor: color, marginTop: '-2px' }}
+              />
+              <div className="w-[1px] h-12 bg-white/50 shadow-sm" />
+            </div>
+          </motion.div>
+        );
+      })}
+    </div>
+  );
+};
 
 // --- Immersive Utilities ---
 const FloatingHeart = ({ x, y, onDone }) => (
@@ -89,11 +168,11 @@ const LikeButton = ({ liked, count, onLike }) => {
   };
   return (
     <button onClick={handleClick} className="flex flex-col items-center gap-1.5 pointer-events-auto">
-      <motion.div animate={controls} className={`w-12 h-12 rounded-full flex items-center justify-center shadow-lg border transition-colors ${liked ? 'bg-red-500/20 border-red-500/40' : 'bg-[var(--bg-secondary)]/50 border-[var(--border-color)] backdrop-blur-md'}`}>
-        <Heart size={22} className={`transition-all ${liked ? 'fill-red-500 text-red-500' : 'text-[var(--text-main)]'}`} />
+      <motion.div animate={controls} className={`w-12 h-12 rounded-full flex items-center justify-center shadow-xl border transition-colors ${liked ? 'bg-red-500/30 border-red-500/60' : 'bg-black/60 border-white/20 backdrop-blur-xl hover:bg-black/80'}`}>
+        <Heart size={22} className={`transition-all ${liked ? 'fill-red-500 text-red-500' : 'text-white'}`} />
       </motion.div>
       <AnimatePresence mode="wait">
-        <motion.span key={count} initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} className="text-[var(--text-main)] text-xs font-bold drop-shadow">
+        <motion.span key={count} initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} className="text-white text-xs font-black drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
           {count >= 1000 ? `${(count / 1000).toFixed(1)}K` : count}
         </motion.span>
       </AnimatePresence>
@@ -103,10 +182,10 @@ const LikeButton = ({ liked, count, onLike }) => {
 
 const ActionBtn = ({ icon: Icon, label, onClick, active = false, activeClass = '' }) => (
   <motion.button whileTap={{ scale: 0.82 }} onClick={onClick} className="flex flex-col items-center gap-1.5 pointer-events-auto">
-    <div className={`w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-colors ${active ? activeClass : 'bg-[var(--bg-secondary)]/50 border border-[var(--border-color)] backdrop-blur-md'}`}>
-      <Icon size={20} className={active ? '' : 'text-[var(--text-main)]'} />
+    <div className={`w-12 h-12 rounded-full flex items-center justify-center shadow-xl transition-all ${active ? activeClass : 'bg-black/60 border border-white/20 backdrop-blur-xl hover:bg-black/80'}`}>
+      <Icon size={20} className={active ? '' : 'text-white'} />
     </div>
-    <span className="text-[var(--text-main)] text-[11px] font-bold drop-shadow-md">{label}</span>
+    <span className="text-white text-[11px] font-black drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">{label}</span>
   </motion.button>
 );
 
@@ -116,20 +195,28 @@ const FullscreenFeedCard = ({ post, isActive, onAddToCart, onClose, asMainFeed }
   const targetProductId = product?.id || post?.id;
   const optimizeImageUrl = (url) => {
     if (!url || typeof url !== 'string') return url;
+    if (isVideoUrl(url)) return getImageUrl(url);
     if (url.includes('cloudinary.com') && url.includes('/upload/')) {
       if (!url.includes('q_auto') && !url.includes('f_auto')) {
         return url.replace('/upload/', '/upload/q_auto,f_auto/');
       }
     }
-    return url;
+    return getImageUrl(url);
   };
 
   const productImages = post.isFlashSale 
     ? [post.image] 
     : (product?.images?.length 
-        ? product.images.map(img => optimizeImageUrl(img.url || img)) 
-        : [optimizeImageUrl(post.image || '/assets/splash_3d_box_1781971684931.png')]);
-  const price = product?.price;
+        ? product.images.map(img => optimizeImageUrl(img?.url || img)) 
+        : [optimizeImageUrl(post.image || PLACEHOLDER_IMAGE)]);
+  const basePrice = Number(product?.price || post?.originalPrice || post?.price || 0);
+  const discountPct = Number(post?.discount || product?.discountPercentage || 0);
+  const hasDiscount = discountPct > 0;
+  const finalPrice = post?.dealPrice
+    ? Number(post.dealPrice)
+    : (hasDiscount ? Math.round(basePrice * (1 - discountPct / 100)) : basePrice);
+  const price = basePrice;
+  const isOutOfStock = (product?.stock !== undefined && product.stock <= 0) || (post?.stock !== undefined && post.stock <= 0);
 
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [liked, setLiked] = useState(false);
@@ -147,6 +234,71 @@ const FullscreenFeedCard = ({ post, isActive, onAddToCart, onClose, asMainFeed }
   const [productComments, setProductComments] = useState([]);
   const [loadingComments, setLoadingComments] = useState(false);
   const lastTapRef = useRef(0);
+  const videoRef = useRef(null);
+  const { playAudio, pauseAudio, toggleMute, isMuted, isPlaying } = useFeedAudio();
+  const audioUrl = product?.audioUrl || post?.audioUrl;
+  const audioTitle = product?.audioTitle || post?.audioTitle;
+  const isCurrentVideo = isVideoUrl(productImages[currentImageIndex]);
+
+  // Synchronize video playback and audio mute status
+  useEffect(() => {
+    if (!isCurrentVideo) return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (isActive) {
+      video.muted = isMuted;
+      const playPromise = video.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(() => {
+          // If browser policy rejects unmuted autoplay, play muted first
+          if (!video.muted) {
+            video.muted = true;
+            video.play().catch(() => {});
+          }
+        });
+      }
+    } else {
+      video.pause();
+    }
+  }, [isActive, isMuted, isCurrentVideo, currentImageIndex]);
+
+  const handleToggleSound = useCallback((e) => {
+    e?.stopPropagation?.();
+    toggleMute();
+    if (videoRef.current) {
+      const nextMuted = !isMuted;
+      videoRef.current.muted = nextMuted;
+      if (!nextMuted) {
+        videoRef.current.play().catch(() => {});
+      }
+    }
+  }, [toggleMute, isMuted]);
+
+  // Play/pause audio when this card becomes active/inactive
+  useEffect(() => {
+    if (isActive && audioUrl) {
+      playAudio(audioUrl);
+    } else if (!isActive) {
+      pauseAudio();
+    }
+    
+    // Confetti Effect for all active promos
+    if (isActive && post.promoType) {
+      confetti({
+        particleCount: 100,
+        spread: 90,
+        origin: { y: 0.6 },
+        colors: ['#FFD700', '#FF4500', '#FF1493', '#00BFFF', '#32CD32'],
+        disableForReducedMotion: true
+      });
+    }
+    
+    return () => {
+      if (isActive) pauseAudio();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActive, audioUrl, post.promoType]);
 
   useEffect(() => {
     if (!isActive || productImages.length <= 1) return;
@@ -231,11 +383,30 @@ const FullscreenFeedCard = ({ post, isActive, onAddToCart, onClose, asMainFeed }
 
   const handleCart = async () => {
     if (!targetProductId) return;
-    onAddToCart?.(product || post);
-    setCartAdded(true);
-    setShowPacking(true);
-    setTimeout(() => setCartAdded(false), 3000);
-    axios.post(`/api/v1/products/${targetProductId}/interaction`, { type: 'CART_ADD' }).catch(() => {});
+    
+    try {
+      if (onAddToCart) {
+        // onAddToCart in Feed.jsx calls useCartStore(state => state.addToCart)(product.id)
+        // Wait, onAddToCart in Feed.jsx might just be a wrapper. Let's make sure it handles await.
+        // Actually, we can just await it directly.
+        await onAddToCart(product || post);
+      }
+      setCartAdded(true);
+      setShowPacking(true);
+      setTimeout(() => setCartAdded(false), 3000);
+      axios.post(`/api/v1/products/${targetProductId}/interaction`, { type: 'CART_ADD' }).catch(() => {});
+    } catch (error) {
+      const errMsg = error?.response?.data?.message || error?.message || 'Failed to add to cart';
+      toast.error(errMsg);
+      
+      if (errMsg.toLowerCase().includes('stock') || errMsg.toLowerCase().includes('sold out')) {
+        // Force the local state to out of stock
+        if (product) product.stock = 0;
+        if (post) post.stock = 0;
+        // Trigger a re-render by updating a local state (using setCartAdded just to trigger render)
+        setCartAdded(false);
+      }
+    }
   };
 
   const handleSave = async () => {
@@ -257,8 +428,60 @@ const FullscreenFeedCard = ({ post, isActive, onAddToCart, onClose, asMainFeed }
   ];
   const currentAnim = animations[currentImageIndex % animations.length];
 
+  let containerStyle = "relative w-full h-full bg-black select-none overflow-hidden";
+  let promoBadge = null;
+  let priceAreaStyle = "bg-black/75 border border-white/20 backdrop-blur-xl text-white shadow-2xl";
+  let buyButtonClass = "w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black text-[15px] py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-[0_4px_20px_rgba(16,185,129,0.4)] border-none transition-all";
+
+  if (post.promoType === 'FLASH_DEAL') {
+    containerStyle = "relative w-full h-full bg-[#1a1a1a] select-none overflow-hidden border-[3px] border-[#ff1744] shadow-[inset_0_0_20px_rgba(255,23,68,0.3)]";
+    promoBadge = (
+      <motion.div 
+        initial={{ y: -50, opacity: 0, rotate: -10 }} 
+        animate={{ y: 0, opacity: 1, rotate: 0 }} 
+        transition={{ type: "spring", bounce: 0.5, delay: 0.2 }}
+        className="absolute top-4 left-4 z-50 bg-[#ff1744]/10 text-[#ff1744] px-4 py-2 rounded-xl font-black flex items-center gap-2 text-sm shadow-[0_0_15px_rgba(255,23,68,0.5)] border border-[#ff1744]"
+      >
+        <Timer size={18} className="pulse-anim" /> FLASH DEAL
+        <RotatingText />
+      </motion.div>
+    );
+    priceAreaStyle = "bg-[#2a2a2a] border border-[#ff1744]/50 text-white";
+    buyButtonClass = "w-full bg-gradient-to-r from-[#ff1744] to-[#d50000] text-white font-black text-[15px] py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-[0_4px_15px_rgba(255,23,68,0.4)] border-none transition-all hover:scale-[1.02]";
+  } else if (post.promoType === 'FESTIVAL_PROMO') {
+    containerStyle = "relative w-full h-full select-none overflow-hidden bg-gradient-to-br from-[#fff9e6] to-[#fff0b3] border-2 border-[#ffd700] shadow-[inset_0_0_20px_rgba(255,215,0,0.3)]";
+    promoBadge = (
+      <motion.div 
+        initial={{ y: -50, opacity: 0, scale: 0.5 }} 
+        animate={{ y: 0, opacity: 1, scale: 1 }} 
+        transition={{ type: "spring", bounce: 0.5, delay: 0.2 }}
+        className="absolute top-4 left-4 z-50 bg-gradient-to-r from-[#ffd700] to-[#ff8c00] text-white px-4 py-2 rounded-xl font-black flex items-center gap-2 text-sm shadow-lg border border-[#ffd700]/50"
+      >
+        <PartyPopper size={18} /> FESTIVAL SPECIAL
+      </motion.div>
+    );
+    priceAreaStyle = "bg-white/80 backdrop-blur-md border border-[#ffd700]";
+    buyButtonClass = "w-full bg-gradient-to-r from-[#d32f2f] to-[#ff5252] text-white font-black text-[15px] py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-[0_4px_15px_rgba(211,47,47,0.4)] border-none transition-all hover:scale-[1.02]";
+  } else if (post.promoType === 'WEEKEND_PROMO') {
+    containerStyle = "relative w-full h-full select-none overflow-hidden bg-gradient-to-b from-[#e0c3fc] to-[#8ec5fc] shadow-[inset_0_0_20px_rgba(142,197,252,0.4)]";
+    promoBadge = (
+      <motion.div 
+        initial={{ x: -50, opacity: 0 }} 
+        animate={{ x: 0, opacity: 1 }} 
+        transition={{ type: "spring", bounce: 0.5, delay: 0.2 }}
+        className="absolute top-4 left-4 z-50 bg-white/40 backdrop-blur-md text-[#4a148c] px-4 py-2 rounded-xl font-black flex items-center gap-2 text-sm shadow-lg border border-white/50"
+      >
+        <Sunset size={18} /> WEEKEND VIBES
+      </motion.div>
+    );
+    priceAreaStyle = "bg-white/40 backdrop-blur-md border border-white/60";
+    buyButtonClass = "w-full bg-gradient-to-r from-[#4a148c] to-[#7b1fa2] text-white font-black text-[15px] py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-[0_4px_15px_rgba(74,20,140,0.4)] border-none transition-all hover:scale-[1.02]";
+  }
+
   return (
-    <div className="relative w-full h-full bg-[var(--bg-primary)] select-none overflow-hidden">
+    <div className={containerStyle}>
+      {isActive && post.promoType && <FloatingBalloons count={7} />}
+      {promoBadge}
       {floatingHearts.map(h => <FloatingHeart key={h.id} x={h.x} y={h.y} onDone={() => setFloatingHearts(p => p.filter(fh => fh.id !== h.id))} />)}
       <DoubleTapHeart show={showDoubleTap} x={doubleTapPos.x} y={doubleTapPos.y} />
       <FlyToCartAnimation show={showPacking} onDone={() => setShowPacking(false)} productImg={productImages[currentImageIndex]} />
@@ -266,19 +489,36 @@ const FullscreenFeedCard = ({ post, isActive, onAddToCart, onClose, asMainFeed }
       <Toast show={errorToast.show} message={errorToast.msg} icon={X} position="bottom" color="bg-red-500 text-white" />
 
       <div className="absolute inset-0 cursor-pointer" onClick={handleDoubleTap}>
-        <AnimatePresence mode="popLayout">
+        <AnimatePresence mode="wait">
           {productImages[currentImageIndex] ? (
-            <motion.img
-              key={currentImageIndex}
-              src={productImages[currentImageIndex]}
-              alt={post.seller}
-              className={`w-full h-full absolute inset-0 ${post.isFlashSale ? 'object-contain' : 'object-cover'}`}
-              initial={currentAnim.initial}
-              animate={currentAnim.animate}
-              exit={currentAnim.exit}
-              transition={currentAnim.transition}
-              onError={e => { e.target.src = '/assets/splash_3d_box_1781971684931.png'; }}
-            />
+            isVideoUrl(productImages[currentImageIndex]) ? (
+              <motion.video
+                ref={videoRef}
+                key={currentImageIndex}
+                src={productImages[currentImageIndex]}
+                autoPlay={isActive}
+                loop
+                muted={isMuted}
+                playsInline
+                className={`w-full h-full absolute inset-0 ${post.isFlashSale ? 'object-contain' : 'object-cover'}`}
+                initial={currentAnim.initial}
+                animate={currentAnim.animate}
+                exit={currentAnim.exit}
+                transition={currentAnim.transition}
+              />
+            ) : (
+              <motion.img
+                key={currentImageIndex}
+                src={productImages[currentImageIndex]}
+                alt={post.seller}
+                className={`w-full h-full absolute inset-0 ${post.isFlashSale ? 'object-contain' : 'object-cover'}`}
+                initial={currentAnim.initial}
+                animate={currentAnim.animate}
+                exit={currentAnim.exit}
+                transition={currentAnim.transition}
+                onError={e => { e.target.src = PLACEHOLDER_IMAGE; }}
+              />
+            )
           ) : (
             <motion.div
               key="fallback"
@@ -292,7 +532,8 @@ const FullscreenFeedCard = ({ post, isActive, onAddToCart, onClose, asMainFeed }
             </motion.div>
           )}
         </AnimatePresence>
-        {/* Gradients removed as requested by user to clear up image background */}
+        {/* Bottom gradient to ensure text readability */}
+        <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/90 via-black/40 to-transparent pointer-events-none" />
       </div>
 
       {!asMainFeed && (
@@ -301,9 +542,30 @@ const FullscreenFeedCard = ({ post, isActive, onAddToCart, onClose, asMainFeed }
         </button>
       )}
 
+      {/* Top Sound Toggle Button */}
+      {(audioUrl || isCurrentVideo) && (
+        <button
+          onClick={handleToggleSound}
+          className={`absolute top-4 ${asMainFeed ? 'right-4' : 'right-16'} z-50 px-3.5 py-1.5 backdrop-blur-xl rounded-full flex items-center gap-1.5 text-white text-xs font-bold transition-all pointer-events-auto shadow-lg border border-white/20 ${isMuted ? 'bg-red-500/80 hover:bg-red-600' : 'bg-black/60 hover:bg-black/80'}`}
+          title={isMuted ? 'Tap for sound' : 'Sound on'}
+        >
+          {isMuted ? (
+            <>
+              <VolumeX size={15} />
+              <span>Tap for sound</span>
+            </>
+          ) : (
+            <>
+              <Volume2 size={15} className="text-emerald-400" />
+              <span>Sound on</span>
+            </>
+          )}
+        </button>
+      )}
+
       {/* Right Action Bar */}
       {!post.isFlashSale && (
-        <div className="absolute right-4 bottom-48 md:bottom-32 z-20 flex flex-col items-center gap-5 pointer-events-none">
+        <div className="absolute right-12 bottom-48 md:bottom-32 z-20 flex flex-col items-center gap-5 pointer-events-none">
           <LikeButton liked={liked} count={likeCount} onLike={handleLike} />
           <ActionBtn icon={MessageCircle} label={post.comments} onClick={() => setShowComments(true)} />
           <ActionBtn icon={Share2} label="Share" onClick={handleShare} />
@@ -314,59 +576,128 @@ const FullscreenFeedCard = ({ post, isActive, onAddToCart, onClose, asMainFeed }
 
       {/* Bottom Info */}
       <motion.div initial={{ y: 24, opacity: 0 }} animate={{ y: isActive ? 0 : 24, opacity: isActive ? 1 : 0 }} transition={{ duration: 0.5, delay: 0.15 }} className="absolute pb-28 md:pb-8 bottom-0 left-0 right-20 p-5 z-20 pointer-events-none">
+
+        {/* TikTok-style music label + mute button */}
+        {(audioUrl || isCurrentVideo) && (
+          <div className="flex items-center gap-3 mb-4 pointer-events-auto">
+            {/* Spinning vinyl disc */}
+            <motion.button
+              onClick={handleToggleSound}
+              animate={{ rotate: (!isMuted && (isPlaying || isCurrentVideo)) ? 360 : 0 }}
+              transition={{ duration: 3, ease: 'linear', repeat: (!isMuted && (isPlaying || isCurrentVideo)) ? Infinity : 0 }}
+              className={`w-10 h-10 rounded-full border-2 border-white/40 backdrop-blur-md flex items-center justify-center flex-shrink-0 shadow-lg ${isMuted ? 'bg-red-500/60' : 'bg-black/60'}`}
+              title={isMuted ? 'Unmute' : 'Mute'}
+            >
+              {isMuted ? (
+                <VolumeX size={18} className="text-white" />
+              ) : (
+                <Volume2 size={18} className="text-white" />
+              )}
+            </motion.button>
+            {/* Scrolling music title */}
+            <div className="overflow-hidden flex-1 min-w-0 flex items-center gap-2">
+              <motion.p
+                animate={{ x: (audioTitle || (isCurrentVideo ? `${post.seller || 'Product'} · Video Audio` : 'Original Sound')).length > 20 ? [0, -100, 0] : 0 }}
+                transition={{ duration: 6, ease: 'linear', repeat: Infinity, repeatDelay: 1 }}
+                className="text-white text-xs font-bold whitespace-nowrap drop-shadow"
+              >
+                ♫ {audioTitle || (isCurrentVideo ? `${post.seller || 'Product'} · Video Audio` : 'Original Sound')}
+              </motion.p>
+              {isMuted && (
+                <button
+                  onClick={handleToggleSound}
+                  className="bg-white/20 hover:bg-white/30 text-white text-[10px] font-bold px-2 py-0.5 rounded-full backdrop-blur-sm transition-colors border border-white/30 whitespace-nowrap"
+                >
+                  Unmute 🔊
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Floating mute button when card has audio but label is hidden */}
+        {!audioUrl && false && (
+          <div className="mb-4" />
+        )}
+
         <div className="flex items-center gap-3 mb-2">
           {post.sellerId ? (
-            <Link to={`/seller/${post.sellerId}`} className={`pointer-events-auto w-10 h-10 rounded-full bg-[var(--text-main)]/10 border border-[var(--border-color)] flex items-center justify-center text-[var(--text-main)] font-black text-base backdrop-blur-sm flex-shrink-0 transition-colors ${post.role === 'ADMIN' ? 'avatar-admin' : 'avatar-verified-seller'}`}>
+            <Link to={`/seller/${post.sellerId}`} className={`pointer-events-auto w-10 h-10 rounded-full bg-white/20 border border-white/40 flex items-center justify-center text-white font-black text-base backdrop-blur-md flex-shrink-0 transition-colors ${post.role === 'ADMIN' ? 'avatar-admin' : 'avatar-verified-seller'}`}>
               {post.avatar}
             </Link>
           ) : (
-            <div className={`w-10 h-10 rounded-full bg-[var(--text-main)]/10 border border-[var(--border-color)] flex items-center justify-center text-[var(--text-main)] font-black text-base backdrop-blur-sm flex-shrink-0 transition-colors ${post.role === 'ADMIN' ? 'avatar-admin' : 'avatar-verified-seller'}`}>
+            <div className={`w-10 h-10 rounded-full bg-white/20 border border-white/40 flex items-center justify-center text-white font-black text-base backdrop-blur-md flex-shrink-0 transition-colors ${post.role === 'ADMIN' ? 'avatar-admin' : 'avatar-verified-seller'}`}>
               {post.avatar}
             </div>
           )}
           <div className="flex-1 min-w-0">
             {post.sellerId ? (
-              <Link to={`/seller/${post.sellerId}`} className="pointer-events-auto text-[var(--text-main)] font-black text-sm flex items-center gap-1.5 leading-none hover:underline underline-offset-2">
+              <Link to={`/seller/${post.sellerId}`} className="pointer-events-auto text-white font-black text-base flex items-center gap-1.5 leading-none hover:underline underline-offset-2 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
                 <span className="truncate">{post.seller}</span>
-                <ShieldCheck size={14} className="text-[#1da1f2] dark:text-[#73ff00] fill-blue-500 dark:fill-[#73ff00] flex-shrink-0" />
+                <ShieldCheck size={16} className="text-emerald-400 fill-emerald-400 flex-shrink-0" />
               </Link>
             ) : (
-              <div className="text-[var(--text-main)] font-black text-sm flex items-center gap-1.5 leading-none">
+              <div className="text-white font-black text-base flex items-center gap-1.5 leading-none drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
                 <span className="truncate">{post.seller}</span>
-                <ShieldCheck size={14} className="text-[#1da1f2] dark:text-[#73ff00] fill-blue-500 dark:fill-[#73ff00] flex-shrink-0" />
+                <ShieldCheck size={16} className="text-emerald-400 fill-emerald-400 flex-shrink-0" />
               </div>
             )}
-            <div className="text-[var(--text-main)]/60 text-[10px] font-bold uppercase tracking-wider mt-1.5 flex items-center gap-1">
+            <div className="text-white/80 text-[10px] font-extrabold uppercase tracking-wider mt-1.5 flex items-center gap-1 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
               {post.time.includes('🔥') ? (
-                <><Flame size={12} className="text-orange-500 fill-orange-500" /> {post.time.replace('🔥', '').trim()}</>
-              ) : post.time}
+                <span className="flex items-center gap-1">
+                  <Flame size={12} className="text-orange-500 fill-orange-500" />
+                  <span>{post.time.replace('🔥', '').trim()}</span>
+                </span>
+              ) : (
+                <span>{post.time}</span>
+              )}
             </div>
           </div>
         </div>
-        <p className="text-[var(--text-main)] text-[15px] leading-snug mb-5 pr-4 drop-shadow-md">{post.text}</p>
+        <p className="text-white text-[15px] font-medium leading-snug mb-5 pr-4 drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]">{post.text}</p>
         
-        {price && (
-          <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.35 }} className="flex items-center gap-3 pointer-events-auto mr-4">
-            <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-xl px-4 py-3 flex items-center gap-2 shadow-xl flex-shrink-0">
-              <Flame size={14} className="text-orange-500 fill-orange-500" />
-              <span className="text-[var(--text-main)] font-black text-[15px] tracking-tight">₦{Number(price).toLocaleString()}</span>
-              {post.discount ? (
-                <span className="text-[var(--text-main)]/50 text-xs line-through font-bold">₦{Math.round(Number(price) / (1 - post.discount/100)).toLocaleString()}</span>
-              ) : (
-                <span className="text-[var(--text-main)]/50 text-xs line-through font-bold">₦{Math.round(Number(price) * 1.2).toLocaleString()}</span>
+        {basePrice > 0 && (
+          <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.35 }} className="flex items-center gap-2 sm:gap-3 pointer-events-auto mr-2">
+            <div className={`${priceAreaStyle} rounded-xl px-3 sm:px-4 py-3 flex items-center gap-1.5 shadow-2xl flex-shrink-0`}>
+              <Flame size={16} className="text-orange-500 fill-orange-500 hidden sm:block animate-bounce" />
+              <span className="text-white font-black text-[14px] sm:text-[16px] tracking-tight">₦{Number(finalPrice).toLocaleString()}</span>
+              {hasDiscount && (
+                <span className="text-white/50 text-[11px] sm:text-xs line-through font-bold">₦{Number(basePrice).toLocaleString()}</span>
               )}
             </div>
             {post.isFlashSale ? (
-              <Link to={`/product/${targetProductId}`} className="flex-1">
-                <motion.button whileTap={{ scale: 0.94 }} className="w-full bg-[#00b873] text-white font-black text-[15px] py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-2xl hover:bg-[#005a38] border-none transition-all">
-                  View Deal <ArrowRight size={16} />
+              <Link to={`/product/${targetProductId}`} className="flex-1 min-w-0">
+                <motion.button whileTap={{ scale: 0.94 }} className={`${buyButtonClass} text-[13px] sm:text-[15px] whitespace-nowrap overflow-hidden text-ellipsis flex items-center justify-center gap-1 sm:gap-2`}>
+                  <span>View Deal</span>
+                  <ArrowRight size={14} className="hidden sm:inline-block" />
                 </motion.button>
               </Link>
             ) : (
-              <motion.button whileTap={{ scale: 0.94 }} onClick={handleCart} className="flex-1 bg-[var(--text-main)] text-[var(--bg-primary)] font-black text-[15px] py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-2xl hover:bg-[var(--bg-primary)] hover:text-[var(--text-main)] border hover:border-[var(--border-color)] transition-all">
-                Buy Now <ArrowRight size={16} />
+              <motion.button 
+                whileTap={{ scale: isOutOfStock ? 1 : 0.94 }} 
+                onClick={isOutOfStock ? null : handleCart} 
+                className={`flex-1 font-black text-[14px] sm:text-[15px] py-3.5 px-3 sm:px-4 rounded-xl flex items-center justify-center gap-1.5 sm:gap-2 shadow-2xl transition-all min-w-0 whitespace-nowrap overflow-hidden text-ellipsis ${
+                  isOutOfStock 
+                    ? 'bg-gray-700 text-white/50 cursor-not-allowed border border-gray-600' 
+                    : 'bg-emerald-500 hover:bg-emerald-600 text-white border border-emerald-400 shadow-[0_4px_20px_rgba(16,185,129,0.4)]'
+                }`}
+              >
+                {isOutOfStock ? (
+                  <span>Sold Out</span>
+                ) : (
+                  <>
+                    <span>Buy Now</span>
+                    <ArrowRight size={16} className="hidden sm:inline-block" />
+                  </>
+                )}
               </motion.button>
             )}
+
+            <div className={`${priceAreaStyle} flex-shrink-0 flex items-center justify-center rounded-xl px-3 sm:px-4 py-3 shadow-2xl`}>
+              <span className={`text-[12px] sm:text-[13px] font-bold whitespace-nowrap ${isOutOfStock ? 'text-red-400' : 'text-white'}`}>
+                {isOutOfStock ? 'Sold out' : `${product?.soldCount || post?.soldCount || 0} sold`}
+              </span>
+            </div>
           </motion.div>
         )}
       </motion.div>
@@ -443,9 +774,35 @@ const FeedImmersiveViewer = ({ posts, initialIndex, onClose, onAddToCart, asMain
       animate={asMainFeed ? false : { opacity: 1, y: 0, scale: 1 }}
       exit={asMainFeed ? false : { opacity: 0, y: 100, scale: 0.95 }}
       transition={asMainFeed ? {} : { type: 'spring', damping: 25, stiffness: 200 }}
-      className={asMainFeed ? "w-full h-full relative bg-[var(--bg-primary)]" : "fixed inset-0 z-[9000] bg-[var(--bg-primary)]"}
+      className={asMainFeed ? "w-full h-full relative bg-[var(--bg-primary)] flex justify-center" : "fixed inset-0 z-[9000] bg-black/90 backdrop-blur-sm flex justify-center"}
     >
-      <div ref={containerRef} className="w-full h-full relative">
+      {/* Left Sidebar on Desktop */}
+      {asMainFeed && (
+        <div className="hidden lg:flex w-[300px] h-full flex-col border-r border-[var(--border-color)] overflow-y-auto scrollbar-hide py-4 px-3 gap-3 bg-[var(--bg-primary)] z-10">
+          <h2 className="text-lg font-black text-[var(--text-main)] mb-2 px-1">Trending Drops</h2>
+          {posts.map((post, i) => (
+            <div 
+              key={post.id || i} 
+              onClick={() => setActiveIndex(i)} 
+              className={`relative w-full aspect-[4/3] rounded-xl overflow-hidden cursor-pointer border-2 transition-all flex-shrink-0 ${i === activeIndex ? 'border-blue-500 scale-[0.98] shadow-[0_0_20px_rgba(59,130,246,0.3)]' : 'border-transparent opacity-60 hover:opacity-100 hover:scale-[0.98]'}`}
+            >
+              {isVideoUrl(post.mediaUrl || post.image) ? (
+                <video src={getImageUrl(post.mediaUrl || post.image)} className="w-full h-full object-cover" muted playsInline preload="metadata" />
+              ) : (
+                <img src={post.mediaUrl || post.image} alt="thumbnail" className="w-full h-full object-cover" />
+              )}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+              <div className="absolute bottom-2 left-2 right-2 flex flex-col">
+                <span className="text-white text-xs font-bold truncate">{post.seller}</span>
+                <span className="text-white/70 text-[10px] truncate">{post.text || post.title}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Main Feed Video Container */}
+      <div ref={containerRef} className="w-full lg:max-w-[1000px] h-full relative bg-black shadow-2xl overflow-hidden">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeIndex}
@@ -483,7 +840,7 @@ const FeedImmersiveViewer = ({ posts, initialIndex, onClose, onAddToCart, asMain
         {/* Progress dots */}
         <div className="absolute right-1.5 top-1/2 -translate-y-1/2 z-30 flex flex-col gap-1 pointer-events-none">
           {posts.slice(0, 12).map((_, i) => (
-            <motion.button key={i} onClick={() => setActiveIndex(i)} animate={{ height: i === activeIndex ? 18 : 4, backgroundColor: i === activeIndex ? 'var(--text-main)' : 'var(--border-color)' }} transition={{ duration: 0.2 }} className="w-1 rounded-full pointer-events-auto" />
+            <motion.button key={i} onClick={() => setActiveIndex(i)} animate={{ height: i === activeIndex ? 18 : 4, backgroundColor: i === activeIndex ? 'var(--text-main)' : 'var(--border-color)' }} transition={{ duration: 0.2 }} className="w-1 rounded-full pointer-events-auto shadow-sm" />
           ))}
         </div>
       </div>

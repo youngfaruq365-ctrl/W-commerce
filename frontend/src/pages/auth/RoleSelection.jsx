@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { ROUTES } from '../../constants/routes';
 import { WIcon } from '../../components/visual/WIcon';
-import axios from 'axios';
+import { apiClient as axios } from '../../utils/apiClient';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const RoleSelection = () => {
@@ -34,13 +34,14 @@ const RoleSelection = () => {
     try {
       const response = await axios.post('/api/v1/auth/set-role', { role });
       if (response.data.success) {
+        if (response.data.token) localStorage.setItem('token', response.data.token);
         setUser(response.data.user);
         if (response.data.user.role === 'SELLER') {
-          navigate(ROUTES.SELLER_DASHBOARD);
+          window.location.href = ROUTES.SELLER_DASHBOARD;
         } else if (response.data.user.role === 'COURIER') {
-          navigate(ROUTES.COURIER_DASHBOARD);
+          window.location.href = ROUTES.COURIER_DASHBOARD;
         } else {
-          navigate(ROUTES.BUYER_DASHBOARD);
+          window.location.href = ROUTES.BUYER_DASHBOARD;
         }
       } else {
         setError(response.data.message || 'Failed to set role.');
@@ -109,10 +110,7 @@ const RoleSelection = () => {
 
   return (
     <div className="min-h-screen bg-[#0F172A] relative flex items-center justify-center p-4 overflow-hidden">
-      {/* Premium ambient background blobs */}
-      <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-indigo-600/20 blur-[120px]" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] rounded-full bg-purple-600/20 blur-[120px]" />
-
+      {/* Glowing background elements (Removed per request) */}
       <motion.div 
         initial={{ opacity: 0, y: 30, scale: 0.95 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}

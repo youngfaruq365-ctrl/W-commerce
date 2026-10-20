@@ -1,0 +1,975 @@
+/* =========================================================
+           RESET
+        ========================================================= */
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            width: 100%;
+            min-height: 100%;
+        }
+
+        body {
+            font-family:
+                Inter,
+                -apple-system,
+                BlinkMacSystemFont,
+                "Segoe UI",
+                sans-serif;
+
+            background: var(--bg-primary);
+
+            color: #111827;
+
+            overflow-x: hidden;
+        }
+
+
+        /* =========================================================
+           MAIN PAGE
+        ========================================================= */
+
+        .page {
+            position: relative;
+
+            min-height: 100vh;
+
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 90px 20px;
+            overflow-y: auto;
+            background: var(--bg-primary);
+        }
+
+
+        /* =========================================================
+           BACKGROUND DECORATIONS
+        ========================================================= */
+
+        .shape {
+            position: absolute;
+            border-radius: 50%;
+            background: var(--bg-primary);
+            box-shadow:
+                18px 18px 40px rgba(163, 177, 198, 0.65),
+                -18px -18px 40px rgba(255, 255, 255, 0.95);
+            pointer-events: none;
+        }
+
+        .dark .shape {
+            box-shadow:
+                18px 18px 40px rgba(0, 0, 0, 0.8),
+                -4px -4px 8px rgba(255, 255, 255, 0.05);
+        }
+
+        .shape-1 {
+            width: 190px;
+            height: 190px;
+
+            top: 7%;
+            left: 7%;
+        }
+
+        .shape-2 {
+            width: 130px;
+            height: 130px;
+
+            right: 8%;
+            bottom: 8%;
+        }
+
+        .shape-3 {
+            width: 55px;
+            height: 55px;
+
+            right: 16%;
+            top: 18%;
+        }
+
+        .shape-4 {
+            width: 75px;
+            height: 75px;
+
+            left: 18%;
+            bottom: 15%;
+        }
+
+
+        /* =========================================================
+           CARD CONTAINER
+        ========================================================= */
+
+        .auth-wrapper {
+            position: relative;
+            margin: 120px auto 60px auto;
+            width: 430px;
+
+            max-width: 100%;
+
+            perspective: 1500px;
+
+            z-index: 10;
+        }
+
+
+        /* =========================================================
+           FLIP CARD
+        ========================================================= */
+
+        .auth-card {
+            position: relative;
+            width: 100%;
+            display: grid;
+            transform-style: preserve-3d;
+            transition:
+                transform 0.8s cubic-bezier(
+                    0.4,
+                    0.2,
+                    0.2,
+                    1
+                );
+        }
+
+        .auth-card.signup-active {
+            transform: rotateY(180deg);
+        }
+
+
+        /* =========================================================
+           FRONT / BACK
+        ========================================================= */
+
+        .auth-panel {
+            grid-column: 1;
+            grid-row: 1;
+            width: 100%;
+            padding: 42px;
+            border-radius: 28px;
+            background: var(--bg-primary);
+            box-shadow:
+                20px 20px 40px rgba(163, 177, 198, 0.65),
+                -20px -20px 40px rgba(255, 255, 255, 0.95);
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+        }
+
+        .dark .auth-panel {
+            box-shadow:
+                10px 10px 20px rgba(0, 0, 0, 0.6),
+                -4px -4px 10px rgba(255, 255, 255, 0.03);
+        }
+
+        .signup-panel {
+            transform: rotateY(180deg);
+        }
+
+
+        /* =========================================================
+           LOGO
+        ========================================================= */
+
+        .logo {
+            width: 72px;
+            height: 72px;
+            margin: 0 auto 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-primary);
+            color: #0879e8;
+            box-shadow:
+                8px 8px 18px rgba(163, 177, 198, 0.65),
+                -8px -8px 18px rgba(255, 255, 255, 0.95);
+            font-size: 30px;
+            transition: 0.35s ease;
+        }
+
+        .dark .logo {
+            box-shadow:
+                8px 8px 16px rgba(0, 0, 0, 0.6),
+                -4px -4px 8px rgba(255, 255, 255, 0.05);
+        }
+
+        .logo:hover {
+            transform: translateY(-3px);
+            color: #006cff;
+        }
+
+
+        /* =========================================================
+           TEXT
+        ========================================================= */
+
+        .title {
+
+            text-align: center;
+
+            font-size: 32px;
+
+            font-weight: 800;
+
+            letter-spacing: -0.7px;
+
+            color: #101827;
+
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+
+            text-align: center;
+
+            color: #7b8491;
+
+            font-size: 14px;
+
+            margin-bottom: 30px;
+        }
+
+
+        /* =========================================================
+           FORM
+        ========================================================= */
+
+        .form-group {
+
+            position: relative;
+
+            margin-bottom: 20px;
+        }
+
+
+        /* =========================================================
+           INPUT
+        ========================================================= */
+
+        .input {
+
+            width: 100%;
+
+            height: 56px;
+
+            border: none;
+
+            outline: none;
+
+            border-radius: 17px;
+
+            padding: 0 18px;
+
+            font-size: 14px;
+
+            color: #172033;
+
+            background: var(--bg-primary);
+
+            box-shadow:
+                inset 6px 6px 12px rgba(163, 177, 198, 0.55),
+                inset -6px -6px 12px rgba(255, 255, 255, 0.95);
+
+            transition: 0.3s ease;
+        }
+
+        .input::placeholder {
+            color: #8a929d;
+        }
+
+        .input:focus {
+
+            box-shadow:
+                inset 4px 4px 9px rgba(163, 177, 198, 0.55),
+                inset -4px -4px 9px rgba(255, 255, 255, 0.95),
+                0 0 0 2px rgba(0, 114, 255, 0.12);
+        }
+
+
+        /* =========================================================
+           PASSWORD
+        ========================================================= */
+
+        .password-wrapper {
+            position: relative;
+        }
+
+        .password-wrapper .input {
+            padding-right: 55px;
+        }
+
+        .password-toggle {
+
+            position: absolute;
+
+            top: 50%;
+
+            right: 18px;
+
+            transform: translateY(-50%);
+
+            border: none;
+
+            background: transparent;
+
+            color: #7b8491;
+
+            cursor: pointer;
+
+            font-size: 18px;
+
+            transition: 0.25s ease;
+        }
+
+        .password-toggle:hover {
+            color: #0072ff;
+        }
+
+
+        /* =========================================================
+           REMEMBER / FORGOT
+        ========================================================= */
+
+        .options {
+
+            display: flex;
+
+            justify-content: space-between;
+
+            align-items: center;
+
+            margin: -3px 2px 22px;
+
+            font-size: 13px;
+        }
+
+        .remember {
+
+            display: flex;
+
+            align-items: center;
+
+            gap: 7px;
+
+            color: #737d89;
+
+            cursor: pointer;
+        }
+
+        .remember input {
+
+            width: 15px;
+
+            height: 15px;
+
+            accent-color: #0072ff;
+
+            cursor: pointer;
+        }
+
+        .forgot {
+
+            color: #006cff;
+
+            text-decoration: none;
+
+            font-weight: 600;
+        }
+
+        .forgot:hover {
+            text-decoration: underline;
+        }
+
+
+        /* =========================================================
+           MAIN BUTTON
+        ========================================================= */
+
+        .main-btn {
+
+            position: relative;
+
+            isolation: isolate;
+
+            width: 100%;
+
+            height: 55px;
+
+            border: none;
+
+            border-radius: 17px;
+
+            background: #0072ff;
+
+            color: white;
+
+            font-size: 14px;
+
+            font-weight: 700;
+
+            letter-spacing: 0.3px;
+
+            cursor: pointer;
+
+            overflow: hidden;
+
+            transition:
+                transform 0.25s ease,
+                box-shadow 0.3s ease;
+
+            box-shadow:
+                8px 8px 16px rgba(163, 177, 198, 0.65),
+                -8px -8px 16px rgba(255, 255, 255, 0.9),
+                0 8px 20px rgba(0, 114, 255, 0.18);
+        }
+
+        .main-btn::before {
+
+            content: "";
+
+            position: absolute;
+
+            inset: 0;
+
+            background:
+                linear-gradient(
+                    110deg,
+                    transparent 20%,
+                    rgba(255,255,255,0.35),
+                    transparent 80%
+                );
+
+            transform: translateX(-100%);
+
+            transition: 0.7s ease;
+
+            z-index: -1;
+        }
+
+        .main-btn:hover::before {
+            transform: translateX(100%);
+        }
+
+        .main-btn:hover {
+
+            transform: translateY(-2px);
+
+            box-shadow:
+                8px 12px 22px rgba(163, 177, 198, 0.6),
+                -8px -8px 18px rgba(255,255,255,0.9),
+                0 12px 28px rgba(0, 114, 255, 0.3);
+        }
+
+        .main-btn:active {
+            transform: scale(0.98);
+        }
+
+
+        /* =========================================================
+           SWITCH AREA
+        ========================================================= */
+
+        .switch-area {
+
+            display: flex;
+
+            justify-content: center;
+
+            align-items: center;
+
+            gap: 13px;
+
+            margin-top: 25px;
+
+            color: #737d89;
+
+            font-size: 13px;
+        }
+
+
+        /* =========================================================
+           SWITCH CIRCLE
+        ========================================================= */
+
+        .switch-circle {
+
+            width: 48px;
+
+            height: 48px;
+
+            border: none;
+
+            border-radius: 50%;
+
+            display: flex;
+
+            align-items: center;
+
+            justify-content: center;
+
+            background: var(--bg-primary);
+
+            color: #0072ff;
+
+            font-size: 23px;
+
+            cursor: pointer;
+
+            box-shadow:
+                7px 7px 14px rgba(163, 177, 198, 0.65),
+                -7px -7px 14px rgba(255, 255, 255, 0.95);
+
+            transition:
+                0.35s ease;
+        }
+
+        .switch-circle:hover {
+
+            color: white;
+
+            background: #0072ff;
+
+            transform:
+                rotate(180deg)
+                scale(1.08);
+
+            box-shadow:
+                0 8px 25px rgba(0, 114, 255, 0.35);
+        }
+
+
+        /* =========================================================
+           FOOTER
+        ========================================================= */
+
+        .secure-text {
+
+            text-align: center;
+
+            margin-top: 24px;
+
+            font-size: 11px;
+
+            color: #99a1ac;
+        }
+
+
+        /* =========================================================
+           SIGNUP PANEL
+        ========================================================= */
+
+        .signup-panel .title {
+            font-size: 29px;
+        }
+
+        .signup-panel .subtitle {
+            margin-bottom: 25px;
+        }
+
+        .signup-panel .form-group {
+            margin-bottom: 15px;
+        }
+
+        .signup-panel .input {
+            height: 52px;
+        }
+
+
+        /* =========================================================
+           FORM ROW (side-by-side fields)
+        ========================================================= */
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+
+        /* =========================================================
+           SOCIAL DIVIDER
+        ========================================================= */
+
+        .social-divider {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin: 20px 0 14px;
+            color: #99a1ac;
+            font-size: 12px;
+        }
+
+        .social-divider::before,
+        .social-divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: rgba(163, 177, 198, 0.5);
+        }
+
+
+        /* =========================================================
+           SOCIAL BUTTONS
+        ========================================================= */
+
+        .social-buttons {
+            display: flex;
+            gap: 12px;
+        }
+
+        .social-btn {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            height: 48px;
+            border: none;
+            border-radius: 14px;
+            background: var(--bg-primary);
+            color: #374151;
+            font-size: 13px;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            text-decoration: none;
+            transition: 0.25s ease;
+            box-shadow:
+                5px 5px 12px rgba(163, 177, 198, 0.6),
+                -5px -5px 12px rgba(255, 255, 255, 0.9);
+        }
+
+        .social-btn:hover {
+            transform: translateY(-2px);
+            box-shadow:
+                7px 10px 18px rgba(163, 177, 198, 0.55),
+                -7px -7px 16px rgba(255,255,255,0.9);
+        }
+
+        .social-btn:active {
+            transform: scale(0.97);
+        }
+
+
+        /* =========================================================
+           SUCCESS MESSAGE
+        ========================================================= */
+
+        .message {
+
+            position: fixed;
+
+            top: 25px;
+
+            right: 25px;
+
+            z-index: 100;
+
+            padding: 14px 20px;
+
+            border-radius: 14px;
+
+            background: var(--bg-primary);
+
+            color: #0072ff;
+
+            font-size: 13px;
+
+            font-weight: 700;
+
+            box-shadow:
+                8px 8px 20px rgba(163,177,198,0.65),
+                -8px -8px 20px rgba(255,255,255,0.95);
+
+            transform:
+                translateX(140%);
+
+            transition: 0.45s ease;
+        }
+
+        .message.show {
+            transform: translateX(0);
+        }
+
+
+        /* =========================================================
+           LOADING
+        ========================================================= */
+
+        .spinner {
+
+            display: inline-block;
+
+            width: 16px;
+
+            height: 16px;
+
+            border: 2px solid rgba(255,255,255,0.45);
+
+            border-top-color: white;
+
+            border-radius: 50%;
+
+            animation: spin 0.7s linear infinite;
+
+            vertical-align: middle;
+
+            margin-right: 7px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+
+        /* =========================================================
+           MOBILE
+        ========================================================= */
+
+        @media (max-width: 600px) {
+
+            .page {
+                padding: 20px;
+            }
+
+            .auth-panel {
+                padding: 30px 24px;
+                border-radius: 24px;
+            }
+
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+
+            .title {
+                font-size: 28px;
+            }
+
+            .logo {
+                width: 64px;
+                height: 64px;
+                font-size: 26px;
+            }
+
+            .shape-1 {
+                width: 130px;
+                height: 130px;
+            }
+
+            .shape-2 {
+                width: 90px;
+                height: 90px;
+            }
+        }
+
+
+        @media (max-width: 380px) {
+            .auth-panel {
+                padding: 25px 18px;
+            }
+            .options {
+                font-size: 12px;
+            }
+            .switch-area {
+                font-size: 12px;
+            }
+        }
+
+        /* Dark Mode Neumorphic Overrides */
+        .dark .title {
+            color: #f8fafc;
+        }
+        .dark .subtitle {
+            color: #94a3b8;
+        }
+        .dark .logo {
+            color: #0072ff;
+        }
+        .dark .input, .dark .otp-digit {
+            box-shadow: inset 4px 4px 8px rgba(0, 0, 0, 0.6), inset -4px -4px 8px rgba(255, 255, 255, 0.05);
+            background: var(--bg-primary);
+        }
+        .dark .main-btn, .dark .social-btn, .dark .switch-circle, .dark .numpad-btn {
+            box-shadow: inset 4px 4px 8px rgba(0, 0, 0, 0.6), inset -4px -4px 8px rgba(255, 255, 255, 0.05);
+            background: var(--bg-primary);
+        }
+        
+        .otp-digit {
+            box-shadow: inset 6px 6px 12px rgba(163, 177, 198, 0.55), inset -6px -6px 12px rgba(255, 255, 255, 0.95);
+            background: var(--bg-primary);
+        }
+        .otp-digit.active {
+            box-shadow: inset 4px 4px 9px rgba(163, 177, 198, 0.55), inset -4px -4px 9px rgba(255, 255, 255, 0.95), 0 0 0 2px rgba(0, 114, 255, 0.12);
+        }
+        .dark .otp-digit.active {
+            box-shadow: inset 4px 4px 8px rgba(0, 0, 0, 0.6), inset -4px -4px 8px rgba(255, 255, 255, 0.05), 0 0 0 2px rgba(0, 114, 255, 0.12);
+        }
+        
+        .numpad-btn {
+            box-shadow: 7px 7px 14px rgba(163, 177, 198, 0.65), -7px -7px 14px rgba(255, 255, 255, 0.95);
+            background: var(--bg-primary);
+            transition: transform 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
+        }
+        .numpad-btn:active {
+            transform: scale(0.95);
+        }
+        .numpad-btn:hover {
+            box-shadow: 0 8px 25px rgba(0, 114, 255, 0.35);
+            color: #0072ff;
+        }
+        .dark .numpad-btn {
+            box-shadow: 6px 6px 12px rgba(0, 0, 0, 0.6), -4px -4px 10px rgba(255, 255, 255, 0.03);
+        }
+        .dark .numpad-btn:hover {
+            box-shadow: 0 8px 25px rgba(0, 114, 255, 0.25);
+        }
+
+/* =========================================================
+   ROLE SELECTOR GEMINI GLASSMORPHISM
+========================================================= */
+
+.role-selector-container {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 28px;
+    margin: 22px 0 24px 0;
+    padding: 6px 0;
+}
+
+.role-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.role-item.buyer,
+.role-item.courier {
+    margin-top: 18px;
+}
+
+.role-item.seller {
+    margin-top: 0px;
+}
+
+.role-circle-btn {
+    border-radius: 50%;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 3px;
+    outline: none;
+    border: none;
+    transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.28s ease;
+}
+
+.role-circle-btn.size-seller {
+    width: 72px;
+    height: 72px;
+}
+
+.role-circle-btn.size-default {
+    width: 56px;
+    height: 56px;
+}
+
+/* Light Mode Glassmorphism (Inactive) */
+.role-circle-btn.inactive {
+    background: linear-gradient(135deg, rgba(66, 133, 244, 0.35) 0%, rgba(155, 114, 207, 0.3) 50%, rgba(217, 101, 112, 0.35) 100%);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+.role-circle-btn.inactive .role-inner-disc {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.85);
+    box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.95), inset 0 -2px 6px rgba(0, 0, 0, 0.04);
+}
+
+/* Active State (Gemini Tricolor Glow) */
+.role-circle-btn.active {
+    background: linear-gradient(135deg, #4285F4 0%, #9B72CF 50%, #D96570 100%);
+    box-shadow: 0 0 24px rgba(155, 114, 207, 0.55), 0 8px 22px rgba(66, 133, 244, 0.35);
+    transform: scale(1.08);
+}
+
+.role-circle-btn.active .role-inner-disc {
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.95);
+    box-shadow: inset 0 2px 6px rgba(255, 255, 255, 0.98), inset 0 -2px 6px rgba(155, 114, 207, 0.2);
+}
+
+/* Dark Mode Overrides (Black Mode Glassmorphism) */
+.dark .role-circle-btn.inactive {
+    background: linear-gradient(135deg, rgba(66, 133, 244, 0.3) 0%, rgba(155, 114, 207, 0.25) 50%, rgba(217, 101, 112, 0.3) 100%);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6);
+}
+
+.dark .role-circle-btn.inactive .role-inner-disc {
+    background: rgba(15, 23, 42, 0.72);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.1), inset 0 -3px 8px rgba(0, 0, 0, 0.75);
+}
+
+.dark .role-circle-btn.active {
+    background: linear-gradient(135deg, #4285F4 0%, #9B72CF 50%, #D96570 100%);
+    box-shadow: 0 0 28px rgba(155, 114, 207, 0.65), 0 8px 24px rgba(66, 133, 244, 0.45);
+    transform: scale(1.08);
+}
+
+.dark .role-circle-btn.active .role-inner-disc {
+    background: rgba(10, 15, 30, 0.85);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow: inset 0 2px 6px rgba(255, 255, 255, 0.2), inset 0 -4px 10px rgba(0, 0, 0, 0.85);
+}
+
+.role-inner-disc {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.25s ease;
+}
+
+.role-label-text {
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    letter-spacing: 0.02em;
+    transition: color 0.2s ease, font-weight 0.2s ease;
+}
+
+.role-label-text.size-seller {
+    font-size: 12px;
+}
+
+.role-label-text.active {
+    font-weight: 800;
+    color: #0f172a;
+}
+
+.dark .role-label-text {
+    color: #94a3b8;
+}
+
+.dark .role-label-text.active {
+    color: #f1f5f9;
+}

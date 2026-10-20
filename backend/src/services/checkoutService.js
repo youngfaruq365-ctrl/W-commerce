@@ -14,14 +14,18 @@ exports.processCheckout = async ({
     paymentMethod,
     initialStatus = 'PENDING',
     idempotencyKey,
-    dryRun = false
+    dryRun = false,
+    gamificationReward
 }) => {
     if (!items || items.length === 0) {
         throw new Error('Cart is empty.');
     }
 
     if (idempotencyKey) {
-        const existingOrder = await prisma.order.findUnique({ where: { idempotencyKey } });
+        const existingOrder = await prisma.order.findUnique({ 
+            where: { idempotencyKey },
+            include: { items: true }
+        });
         if (existingOrder) {
             return { parentOrder: existingOrder, totalAmountUSD: Number(existingOrder.totalAmount), isExistingOrder: true };
         }
@@ -29,20 +33,48 @@ exports.processCheckout = async ({
 
     // 1. Backend Price & Stock Validation
     let subtotal = 0;
+    let directShippingCost = 0;
     const orderItemsData = [];
     const productsToUpdate = [];
     const sellerIds = new Set();
     const sellerSubtotals = {};
     const sellerItems = {};
+    const productIds = items.map(i => String(i.productId || i.id));
+    let adDiscountSessions = [];
+    if (userId) {
+        adDiscountSessions = await prisma.adDiscountSession.findMany({
+            where: {
+                buyerId: userId,
+                productId: { in: productIds },
+                currentDiscountPct: { gt: 0 }
+            }
+        });
+    }
 
     for (const item of items) {
         const product = await prisma.product.findUnique({
             where: { id: String(item.productId || item.id) },
-            include: { store: true }
+            include: { 
+                store: true,
+                flashDeals: {
+                    where: {
+                        isActive: true,
+                        startDate: { lte: new Date() },
+                        endDate: { gt: new Date() }
+                    }
+                }
+            }
         });
 
         if (!product) {
             throw new Error(`Product ${item.productId || item.id} not found.`);
+        }
+
+        // Products from stores that have not been approved by an admin are not purchasable
+        if (product.isArchived || !product.store || product.store.approvalStatus !== 'APPROVED') {
+            const err = new Error(`"${product.title}" is not currently available for purchase.`);
+            err.statusCode = 409;
+            throw err;
         }
 
         const qty = Math.max(1, Math.floor(Number(item.quantity || item.qty || 1)));
@@ -56,8 +88,16 @@ exports.processCheckout = async ({
         }
 
         let finalPrice = Number(product.price);
-        if (product.isFlashSale && product.flashPrice) {
+        if (product.isFlashSale && product.flashPrice && new Date() < new Date(product.flashEndsAt)) {
             finalPrice = Number(product.flashPrice);
+        } else if (product.flashDeals && product.flashDeals.length > 0) {
+            const activeDeal = product.flashDeals[0];
+            finalPrice = Number((finalPrice * (1 - (Number(activeDeal.discount || 0) / 100))).toFixed(2));
+        }
+
+        const adSession = adDiscountSessions.find(s => s.productId === product.id);
+        if (adSession) {
+            finalPrice = Number((finalPrice * (1 - (adSession.currentDiscountPct / 100))).toFixed(2));
         }
 
         const itemTotal = finalPrice * qty;
@@ -82,6 +122,11 @@ exports.processCheckout = async ({
         sellerItems[sellerId].push(orderItem);
         
         productsToUpdate.push({ id: product.id, quantity: qty });
+
+        // Direct shipping uses the product's own shippingFee — identical to the cart UI
+        // (cartStore: directShippingRate = parseFloat(product.shippingFee) || 0).
+        const directRate = parseFloat(product.shippingFee) || 0;
+        directShippingCost += directRate * qty;
     }
 
     // 2. Promo Code Logic
@@ -113,22 +158,28 @@ exports.processCheckout = async ({
         }
     }
     
-    // Fallback to platform discount if no promo code applied (legacy behavior)
-    if (discount === 0) {
-        discount = (subtotal > 150) ? 10.00 : ((subtotal > 80) ? 5.00 : 0);
-    }
+    // NOTE: The hidden legacy platform discount ($10 over 150 / $5 over 80) was removed —
+    // it was never shown in the cart UI and caused total/receipt mismatches.
     
+    // Gamification Reward Logic
+    if (gamificationReward === '5_off') {
+        discount += 5.00;
+    } else if (gamificationReward === '10_off') {
+        discount += 10.00;
+    } else if (gamificationReward === 'free_shipping') {
+        discount += isConsolidated ? 25.00 : directShippingCost;
+    }
+
     // Prevent negative subtotal
-    discount = Math.min(discount, subtotal);
+    discount = Math.min(discount, subtotal + (isConsolidated ? 25.00 : directShippingCost));
 
     // 3. Logistics & Tax
     const sellerCount = sellerIds.size;
-    let shippingCost = items.length > 0 ? (sellerCount * 15) : 0;
-    if (isConsolidated) shippingCost = Math.max(15, shippingCost * 0.6);
+    let shippingCost = isConsolidated ? 25.00 : directShippingCost;
 
-    const rate = getTaxRate(region);
+    const rate = 0; // Removed tax to match frontend UI
     const taxableAmount = Math.max(0, subtotal + shippingCost - discount);
-    const taxAmount = taxableAmount * rate;
+    const taxAmount = 0;
     const totalAmountUSD = subtotal + shippingCost - discount + taxAmount;
     
     const COMMISSION_RATE = parseFloat(process.env.PLATFORM_COMMISSION_RATE || '0.10');
@@ -140,7 +191,7 @@ exports.processCheckout = async ({
 
     if (dryRun) {
         const sId = Array.from(sellerIds)[0];
-        return { totalAmountUSD, parentOrder: { id: 'dry-run', sellerId: sId === 'default' ? null : sId } };
+        return { totalAmountUSD, parentOrder: { id: 'dry-run', sellerId: sId === 'default' ? null : sId, items: orderItemsData }, sellerCount };
     }
 
     // 4. Atomic Transaction for Orders and Stock
@@ -162,14 +213,14 @@ exports.processCheckout = async ({
         }
 
         // A. Create Parent Order
-        const parentOrder = await tx.order.create({
+        let parentOrder = await tx.order.create({
             data: {
                 buyerId: userId,
                 totalAmount: totalAmountUSD,
                 shippingCost,
                 taxAmount,
                 status: initialStatus,
-                paymentStatus: initialStatus === 'PAID' ? 'HELD' : 'PENDING',
+                paymentStatus: initialStatus === 'PAID' ? 'HELD' : initialStatus === 'AWAITING_TRANSFER' ? 'AWAITING_PROOF' : 'PENDING',
                 paymentMethod,
                 commissionRate: COMMISSION_RATE,
                 commissionAmount,
@@ -181,7 +232,8 @@ exports.processCheckout = async ({
                 hubLocation: hubLocationName,
                 consolidatedPackageId: consolidatedPackageId,
                 items: { create: orderItemsData } // Parent has all items for easy querying
-            }
+            },
+            include: { items: true }
         });
         
         // B. Create Child Orders if Multi-Seller
@@ -204,7 +256,7 @@ exports.processCheckout = async ({
                         shippingCost: sShipping,
                         taxAmount: sTax,
                         status: initialStatus,
-                        paymentStatus: initialStatus === 'PAID' ? 'HELD' : 'PENDING',
+                        paymentStatus: initialStatus === 'PAID' ? 'HELD' : initialStatus === 'AWAITING_TRANSFER' ? 'AWAITING_PROOF' : 'PENDING',
                         paymentMethod,
                         commissionRate: COMMISSION_RATE,
                         commissionAmount: sTotal * COMMISSION_RATE,
@@ -222,9 +274,10 @@ exports.processCheckout = async ({
         } else {
             // Single seller, just set the sellerId on the parent order to keep it simple
             const sId = Array.from(sellerIds)[0];
-            await tx.order.update({
+            parentOrder = await tx.order.update({
                 where: { id: parentOrder.id },
-                data: { sellerId: sId === 'default' ? null : sId }
+                data: { sellerId: sId === 'default' ? null : sId },
+                include: { items: true }
             });
         }
         
@@ -281,7 +334,7 @@ exports.processCheckout = async ({
             });
         }
 
-        return { parentOrder, childOrders, totalAmountUSD, updatedUser };
+        return { parentOrder, childOrders, totalAmountUSD, updatedUser, sellerCount };
     });
 
     return result;
@@ -301,3 +354,114 @@ function getTaxRate(region) {
         default: return 0.08;
     }
 }
+
+/**
+ * Atomically cancel a pending order and restore product stock.
+ * Handles both parent order and any child orders.
+ * Prevents double-incrementing stock if already cancelled or paid.
+ * 
+ * @param {Object} params
+ * @param {string} [params.orderId]
+ * @param {string} [params.reference]
+ * @param {string} [params.userId]
+ * @returns {Promise<{ success: boolean, message: string, orderId?: string, alreadyCancelled?: boolean }>}
+ */
+exports.cancelAndRestoreOrder = async ({ orderId, reference, userId }) => {
+    try {
+        const orConditions = [];
+        if (orderId && orderId !== 'dry-run') {
+            orConditions.push({ id: orderId });
+        }
+        if (reference) {
+            orConditions.push({ stripePaymentId: reference });
+            if (reference.startsWith('GX-')) {
+                const stripped = reference.replace('GX-', '');
+                if (!stripped.startsWith('TEMP-')) {
+                    orConditions.push({ id: stripped });
+                }
+            }
+        }
+
+        if (orConditions.length === 0) {
+            return { success: false, message: 'No valid order identifier provided.' };
+        }
+
+        const whereClause = { OR: orConditions };
+        if (userId) {
+            whereClause.buyerId = userId;
+        }
+
+        const order = await prisma.order.findFirst({
+            where: whereClause,
+            include: {
+                items: true,
+                subOrders: { include: { items: true } }
+            }
+        });
+
+        if (!order) {
+            return { success: false, message: 'Order not found.' };
+        }
+
+        // Safety check: Never cancel paid, processing, or fulfilled orders
+        if (order.paymentStatus === 'PAID' || ['PROCESSING', 'PACKED', 'CONFIRMED', 'SHIPPED', 'DELIVERED', 'COMPLETED'].includes(order.status)) {
+            return { success: false, message: 'Cannot cancel an order that is already paid or processing.' };
+        }
+
+        // Already cancelled check to prevent double inventory restoration
+        if (order.status === 'CANCELLED' || order.paymentStatus === 'FAILED') {
+            return { success: true, message: 'Order is already cancelled.', alreadyCancelled: true, orderId: order.id };
+        }
+
+        await prisma.$transaction(async (tx) => {
+            // 1. Mark parent order CANCELLED and paymentStatus FAILED
+            await tx.order.update({
+                where: { id: order.id },
+                data: {
+                    status: 'CANCELLED',
+                    paymentStatus: 'FAILED'
+                }
+            });
+
+            // 2. Cascade cancellation to any child orders
+            await tx.order.updateMany({
+                where: { parentOrderId: order.id },
+                data: {
+                    status: 'CANCELLED',
+                    paymentStatus: 'FAILED'
+                }
+            });
+
+            // 3. Restore product stock for all items
+            // Note: Parent order holds all items across all stores in the checkout
+            for (const item of order.items) {
+                if (item.productId && item.quantity > 0) {
+                    await tx.product.update({
+                        where: { id: item.productId },
+                        data: { stock: { increment: item.quantity } }
+                    });
+                }
+            }
+
+            // 4. Revert promo code usage if applied
+            const promoUsage = await tx.promoCodeUsage.findFirst({
+                where: { orderId: order.id }
+            });
+            if (promoUsage) {
+                await tx.promoCode.update({
+                    where: { id: promoUsage.promoCodeId },
+                    data: { usedCount: { decrement: 1 } }
+                }).catch(() => {});
+                await tx.promoCodeUsage.delete({
+                    where: { id: promoUsage.id }
+                }).catch(() => {});
+            }
+        });
+
+        logger.info(`[CHECKOUT] Order ${order.id} cancelled and stock restored successfully.`);
+        return { success: true, message: 'Order cancelled and stock restored.', orderId: order.id };
+    } catch (err) {
+        logger.error(`[CHECKOUT] cancelAndRestoreOrder error: ${err.message}`);
+        throw err;
+    }
+};

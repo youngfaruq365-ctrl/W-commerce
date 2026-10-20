@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 
 const PreviewContext = createContext(null);
 

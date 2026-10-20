@@ -1,31 +1,48 @@
-const webpush = require('web-push');
+const axios = require('axios');
 const logger = require('../utils/logger');
 
-const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY;
-const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY;
-const VAPID_EMAIL = process.env.VAPID_EMAIL || 'mailto:support@globalx.com';
+const ONESIGNAL_APP_ID = process.env.ONESIGNAL_APP_ID;
+const ONESIGNAL_REST_API_KEY = process.env.ONESIGNAL_REST_API_KEY;
 
-const PUSH_ENABLED = VAPID_PUBLIC && VAPID_PRIVATE &&
-  !VAPID_PUBLIC.includes('YOUR_VAPID') && !VAPID_PRIVATE.includes('YOUR_VAPID');
+const PUSH_ENABLED = Boolean(ONESIGNAL_APP_ID && ONESIGNAL_REST_API_KEY);
 
 if (PUSH_ENABLED) {
-  webpush.setVapidDetails(VAPID_EMAIL, VAPID_PUBLIC, VAPID_PRIVATE);
-  logger.info('[PUSH] Web Push configured with VAPID keys.');
+  logger.info('[PUSH] OneSignal configured for push notifications.');
 } else {
-  logger.warn('[PUSH] VAPID keys not configured. Push notifications are disabled. Set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY in .env.');
+  logger.warn('OneSignal keys not configured — push notifications disabled');
 }
 
-const sendPushNotification = async (subscription, payload) => {
+/**
+ * Send push notification via OneSignal REST API
+ * @param {string} userId - The user's W-Commerce User ID
+ * @param {object} payload - Title, message, and JSON data
+ */
+const sendPushNotification = async (userId, payload) => {
   if (!PUSH_ENABLED) {
-    logger.warn('[PUSH] Push notification skipped — VAPID keys not set.');
+    logger.warn('OneSignal keys not configured — push notifications disabled');
     return { skipped: true };
   }
   try {
-    await webpush.sendNotification(subscription, JSON.stringify(payload));
-    logger.info('[PUSH] Push notification sent successfully.');
-    return { success: true };
+    const response = await axios.post(
+      'https://onesignal.com/api/v1/notifications',
+      {
+        app_id: ONESIGNAL_APP_ID,
+        include_external_user_ids: [userId],
+        headings: { en: payload.title },
+        contents: { en: payload.body || payload.message },
+        data: payload.data || {}
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Authorization': `Basic ${ONESIGNAL_REST_API_KEY}`
+        }
+      }
+    );
+    logger.info(`[PUSH] OneSignal push sent to user ${userId}:`, response.data);
+    return { success: true, data: response.data };
   } catch (error) {
-    logger.error('[PUSH] Error sending push notification:', error.message);
+    logger.error(`[PUSH] Error sending OneSignal push to ${userId}:`, error.response?.data || error.message);
     throw error;
   }
 };

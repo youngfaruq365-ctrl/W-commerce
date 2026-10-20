@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import axios from 'axios';
+import { apiClient as axios } from '../utils/apiClient';
 
 export const useOfferStore = create((set, get) => ({
     currentOffer: null,
@@ -43,7 +43,7 @@ export const useOfferStore = create((set, get) => ({
 
     acceptOffer: async (offerId) => {
         try {
-            const res = await axios.post(`/api/v1/delivery/offers/${offerId}/accept`);
+            const res = await axios.post(`/api/v1/courier/offers/${offerId}/accept`);
             get().clearOffer();
             return res.data;
         } catch (error) {
@@ -54,7 +54,7 @@ export const useOfferStore = create((set, get) => ({
 
     rejectOffer: async (offerId) => {
         try {
-            await axios.post(`/api/v1/delivery/offers/${offerId}/reject`);
+            await axios.post(`/api/v1/courier/offers/${offerId}/decline`);
             get().clearOffer();
             return true;
         } catch (error) {

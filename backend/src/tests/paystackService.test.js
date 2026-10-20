@@ -1,4 +1,4 @@
-process.env.PAYSTACK_SECRET_KEY = 'test_secret';
+process.env.PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || 'test_secret';
 
 const https = require('https');
 const paystackService = require('../services/paystackService');

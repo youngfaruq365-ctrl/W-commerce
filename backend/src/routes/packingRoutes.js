@@ -7,10 +7,10 @@ const { protect, authorize } = require('../middleware/authMiddleware');
 router.use(protect);
 
 // Seller routes
-router.post('/pack', authorize('SELLER'), packingController.markOrderPacked);
-router.post('/respond', authorize('SELLER'), packingController.sendPackingResponse);
-router.get('/to-pack', authorize('SELLER'), packingController.getOrdersToPack);
-router.get('/packed', authorize('SELLER'), packingController.getPackedOrders);
+router.post('/pack', authorize('SELLER', 'ADMIN'), packingController.markOrderPacked);
+router.post('/respond', authorize('SELLER', 'ADMIN'), packingController.sendPackingResponse);
+router.get('/to-pack', authorize('SELLER', 'ADMIN'), packingController.getOrdersToPack);
+router.get('/packed', authorize('SELLER', 'ADMIN'), packingController.getPackedOrders);
 
 // Buyer routes
 router.post('/confirm', authorize('BUYER'), packingController.confirmPackage);

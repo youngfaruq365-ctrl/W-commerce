@@ -3,7 +3,7 @@
  * ─────────────────────────────────────────────────────────────────────────
  * Safely fetches analytics data for the dashboard.
  */
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 
 // Ensure cookies are sent with requests
 axios.defaults.withCredentials = true;

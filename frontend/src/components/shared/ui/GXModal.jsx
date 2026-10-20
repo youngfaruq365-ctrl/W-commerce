@@ -25,7 +25,7 @@ const GXModal = ({ isOpen, onClose, title, children, maxWidth = "max-w-md", clas
       
       {/* Modal Content */}
       <div 
-        className={`relative w-full ${maxWidth} bg-white/70 dark:bg-[#0a0a0a]/80 backdrop-blur-2xl border border-white/20 dark:border-white/10 rounded-3xl shadow-[0_8px_32px_rgba(0,0,0,0.1)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col max-h-[90vh] transform transition-all duration-300 ${isOpen ? 'scale-100 translate-y-0' : 'scale-95 translate-y-4'} ${className}`}
+        className={`relative modal-panel w-full ${maxWidth} bg-white/70 dark:bg-[#0a0a0a]/80 backdrop-blur-2xl border border-white/20 dark:border-white/10 rounded-3xl shadow-[0_8px_32px_rgba(0,0,0,0.1)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col max-h-[90vh] transform transition-all duration-300 ${isOpen ? 'scale-100 translate-y-0' : 'scale-95 translate-y-4'} ${className}`}
       >
         <div className="flex justify-between items-center p-6 border-b border-gray-200/50 dark:border-white/10 bg-white/40 dark:bg-black/20">
           <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-white">{title}</h2>

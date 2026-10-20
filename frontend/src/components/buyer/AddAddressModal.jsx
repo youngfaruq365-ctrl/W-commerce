@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, MapPin, Loader2, CheckCircle } from 'lucide-react';
 import { useBuyerStore } from '../../store/buyerStore';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 
 const AddAddressModal = ({ isOpen, onClose }) => {
   const { fetchProfile } = useBuyerStore();
@@ -50,7 +50,7 @@ const AddAddressModal = ({ isOpen, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-white/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-fade-in">
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-fade-in">
       <div className="modal-3d-glass rounded-2xl w-full max-w-lg overflow-hidden relative shadow-2xl">
         <div className="p-6 border-b border-gray-200 flex justify-between items-center">
           <h2 className="text-xl font-bold flex items-center gap-2 text-black">

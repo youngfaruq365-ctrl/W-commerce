@@ -22,7 +22,7 @@
  * }
  */
 
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 
 axios.defaults.withCredentials = true;
 

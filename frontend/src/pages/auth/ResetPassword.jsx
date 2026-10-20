@@ -1,143 +1,191 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
-import { Loader2 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
-import { WIcon } from '../../components/visual/WIcon';
+import { ROUTES } from '../../constants/routes';
+import './AuthPage.css';
+
+const EyeIcon = ({ open }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '18px', height: '18px' }}>
+    {open ? (
+      <>
+        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+        <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+        <line x1="1" y1="1" x2="23" y2="23"/>
+      </>
+    ) : (
+      <>
+        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+        <circle cx="12" cy="12" r="3"/>
+      </>
+    )}
+  </svg>
+);
 
 const ResetPassword = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
+  const navigate       = useNavigate();
+  const location       = useLocation();
   const [searchParams] = useSearchParams();
 
-  const emailFromState = location.state?.email || '';
-  const tokenFromUrl = searchParams.get('token') || '';
+  const emailFromState = location.state?.email || searchParams.get('email') || '';
 
-  const [email, setEmail] = useState(emailFromState);
-  const [code, setCode] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail]                   = useState(emailFromState);
+  const [code, setCode]                     = useState(searchParams.get('code') || '');
+  const [password, setPassword]             = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword]     = useState(false);
+  const [showConfirm, setShowConfirm]       = useState(false);
+  const [isSubmitting, setIsSubmitting]     = useState(false);
   const { resetPassword } = useAuthStore();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!code.trim()) return toast.error('Please enter the 6-digit reset code', { style: { background: '#333', color: '#fff', borderRadius: '8px' }});
-    if (!password) return toast.error('Please enter a new password', { style: { background: '#333', color: '#fff', borderRadius: '8px' }});
-    if (password.length < 6) return toast.error('Password must be at least 6 characters', { style: { background: '#333', color: '#fff', borderRadius: '8px' }});
-    if (password !== confirmPassword) return toast.error('Passwords do not match', { style: { background: '#333', color: '#fff', borderRadius: '8px' }});
+    if (!email?.trim())            return toast.error('Please enter your email address');
+    if (!code.trim())              return toast.error('Please enter the 6-digit reset code');
+    if (!password)                 return toast.error('Please enter a new password');
+    if (password.length < 6)       return toast.error('Password must be at least 6 characters');
+    if (password !== confirmPassword) return toast.error('Passwords do not match');
 
     setIsSubmitting(true);
-    const result = await resetPassword(email, code.trim(), password);
+    const result = await resetPassword(email.trim(), code.trim(), password);
     setIsSubmitting(false);
 
     if (result.success) {
-      toast.success('Password reset successfully! Please log in.', { style: { background: '#333', color: '#fff', borderRadius: '8px' }});
-      navigate('/auth/login', { replace: true });
+      toast.success('Password reset successfully! Please log in.');
+      navigate(ROUTES.LOGIN, { replace: true });
     } else {
-      toast.error(result.message || 'Failed to reset password. Check your code and try again.', { style: { background: '#333', color: '#fff', borderRadius: '8px' }});
+      toast.error(result.message || 'Failed to reset password. Check your code and try again.');
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 relative overflow-hidden font-sans">
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-100 to-slate-200"></div>
+    <main className="page">
 
-      <div className="w-full max-w-md bg-white/80 backdrop-blur-xl p-10 rounded-[2rem] shadow-2xl relative z-10 border border-white/40">
-        <button onClick={() => navigate(-1)} className="absolute top-8 left-8 p-2 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-full transition-all">
-          <WIcon name="chevron-left" size={24} />
-        </button>
+      {/* Decorative shapes */}
+      <div className="shape shape-1" />
+      <div className="shape shape-2" />
+      <div className="shape shape-3" />
+      <div className="shape shape-4" />
 
-        <div className="flex flex-col items-center text-center mb-10 mt-6">
-          <div className="w-20 h-20 bg-slate-900 rounded-2xl flex items-center justify-center mb-6 text-white shadow-xl shadow-slate-900/20 relative transform hover:scale-105 transition-transform duration-300">
-            <WIcon name="lock" size={32} />
-            <div className="absolute -bottom-2 -right-2 bg-white rounded-xl p-1.5 shadow-md border border-slate-100">
-               <WIcon name="check" size={14} className="text-slate-900 font-bold" />
-            </div>
-          </div>
-          <h1 className="text-3xl font-bold text-slate-900 mb-3 tracking-tight">Reset Password</h1>
-          <p className="text-slate-500 text-base leading-relaxed">
+      <div className="auth-wrapper" style={{ maxWidth: '430px' }}>
+        <div
+          className="auth-panel"
+          style={{ position: 'relative', transform: 'none', backfaceVisibility: 'unset', WebkitBackfaceVisibility: 'unset', minHeight: 'unset', padding: '42px' }}
+        >
+
+          {/* Back button */}
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="switch-circle"
+            style={{ position: 'absolute', top: '24px', left: '24px', fontSize: '18px', width: '40px', height: '40px' }}
+            aria-label="Go back"
+          >
+            ←
+          </button>
+
+          {/* Icon */}
+          <div className="logo" style={{ marginTop: '16px' }}>🔒</div>
+
+          <h1 className="title">Reset Password</h1>
+          <p className="subtitle">
             Enter the 6-digit code sent to your email and choose a new password.
           </p>
-        </div>
 
-        <form className="space-y-5" onSubmit={handleSubmit}>
-          {!emailFromState && (
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
-                <WIcon name="mail" size={18} />
+          <form onSubmit={handleSubmit} style={{ marginTop: '28px' }}>
+
+            {/* Show email field only if not pre-filled */}
+            {!emailFromState && (
+              <div className="form-group">
+                <input
+                  className="input"
+                  type="email"
+                  id="resetEmail"
+                  placeholder="Your Email Address"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
               </div>
+            )}
+
+            {/* 6-digit code */}
+            <div className="form-group">
               <input
-                type="email"
-                placeholder="Your Email Address"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                className="w-full bg-white/50 border border-slate-200 text-slate-900 rounded-xl pl-11 pr-4 py-3.5 focus:outline-none focus:border-slate-400 focus:ring-4 focus:ring-slate-100 transition-all placeholder:text-slate-400 font-medium"
+                className="input"
+                type="text"
+                id="resetCode"
+                placeholder="6-Digit Reset Code"
+                maxLength={6}
+                required
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+                style={{ textAlign: 'center', letterSpacing: '0.3em', fontWeight: 700, fontFamily: 'monospace' }}
               />
             </div>
-          )}
 
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
-              <WIcon name="key-round" size={18} />
+            {/* New password */}
+            <div className="form-group password-wrapper">
+              <input
+                className="input"
+                type={showPassword ? 'text' : 'password'}
+                id="newPassword"
+                placeholder="New Password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() => setShowPassword(p => !p)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                <EyeIcon open={showPassword} />
+              </button>
             </div>
-            <input
-              type="text"
-              placeholder="6-Digit Reset Code"
-              maxLength={6}
-              value={code}
-              onChange={e => setCode(e.target.value.replace(/\D/g, ''))}
-              className="w-full bg-white/50 border border-slate-200 text-slate-900 rounded-xl pl-11 pr-4 py-3.5 focus:outline-none focus:border-slate-400 focus:ring-4 focus:ring-slate-100 transition-all placeholder:text-slate-400 tracking-[0.2em] font-mono text-center font-bold"
-            />
-          </div>
 
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
-              <WIcon name="lock" size={18} />
+            {/* Confirm password */}
+            <div className="form-group password-wrapper">
+              <input
+                className="input"
+                type={showConfirm ? 'text' : 'password'}
+                id="confirmNewPassword"
+                placeholder="Confirm New Password"
+                required
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+              />
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() => setShowConfirm(p => !p)}
+                aria-label={showConfirm ? 'Hide password' : 'Show password'}
+              >
+                <EyeIcon open={showConfirm} />
+              </button>
             </div>
-            <input
-              type={showPassword ? 'text' : 'password'}
-              placeholder="New Password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              className="w-full bg-white/50 border border-slate-200 text-slate-900 rounded-xl pl-11 pr-11 py-3.5 focus:outline-none focus:border-slate-400 focus:ring-4 focus:ring-slate-100 transition-all placeholder:text-slate-400 font-medium"
-            />
-            <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 pr-4 flex items-center cursor-pointer text-slate-400 hover:text-slate-600 transition-colors">
-              <WIcon name={showPassword ? 'eye-off' : 'eye'} size={18} />
-            </button>
-          </div>
 
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
-              <WIcon name="lock" size={18} />
-            </div>
-            <input
-              type={showConfirm ? 'text' : 'password'}
-              placeholder="Confirm New Password"
-              value={confirmPassword}
-              onChange={e => setConfirmPassword(e.target.value)}
-              className="w-full bg-white/50 border border-slate-200 text-slate-900 rounded-xl pl-11 pr-11 py-3.5 focus:outline-none focus:border-slate-400 focus:ring-4 focus:ring-slate-100 transition-all placeholder:text-slate-400 font-medium"
-            />
-            <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="absolute inset-y-0 right-0 pr-4 flex items-center cursor-pointer text-slate-400 hover:text-slate-600 transition-colors">
-              <WIcon name={showConfirm ? 'eye-off' : 'eye'} size={18} />
-            </button>
-          </div>
-
-          <div className="pt-4">
             <button
               type="submit"
+              className="main-btn"
+              id="resetSubmitBtn"
               disabled={isSubmitting}
-              className="w-full bg-slate-900 text-white font-semibold py-4 rounded-xl hover:bg-slate-800 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-none flex items-center justify-center gap-2"
+              style={{ marginTop: '8px' }}
             >
-              {isSubmitting && <Loader2 className="w-5 h-5 animate-spin" />}
-              {isSubmitting ? 'Resetting...' : 'Reset Password'}
+              {isSubmitting ? 'Resetting…' : 'Reset Password'}
             </button>
+          </form>
+
+          <div className="secure-text" style={{ marginTop: '28px' }}>
+            🔐 Your information is securely protected
           </div>
-        </form>
+
+        </div>
       </div>
-    </div>
+
+    </main>
   );
 };
+
 export default ResetPassword;

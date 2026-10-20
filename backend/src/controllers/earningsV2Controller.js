@@ -61,7 +61,7 @@ exports.buyerConfirmReceipt = async (req, res) => {
         logger.error(`[EarningsV2] buyerConfirmReceipt error: ${err.message}`);
         return res.status(err.statusCode || 500).json({
             success: false,
-            message: err.message || 'Failed to confirm receipt.',
+            message: process.env.NODE_ENV === 'production' ? 'Failed to confirm receipt.' : err.message,
         });
     }
 };
@@ -91,7 +91,7 @@ exports.adminRelease = async (req, res) => {
         logger.error(`[EarningsV2] adminRelease error: ${err.message}`);
         return res.status(err.statusCode || 500).json({
             success: false,
-            message: err.message || 'Failed to release escrow.',
+            message: process.env.NODE_ENV === 'production' ? 'Failed to release escrow.' : err.message,
         });
     }
 };

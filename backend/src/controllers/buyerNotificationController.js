@@ -1,4 +1,4 @@
-const notificationService = require('../services/notificationService');
+const notificationService = require('../services/notificationV2Service');
 const logger = require('../utils/logger');
 
 /**
@@ -17,12 +17,12 @@ exports.createNotification = async (req, res) => {
             });
         }
 
-        const notification = await notificationService.createNotification({
-            userId,
-            orderId,
-            message,
+        const notification = await notificationService.notify(userId, {
             type,
-            channel
+            title: 'Update from W-Commerce',
+            body: message,
+            channel,
+            orderId
         });
 
         res.json({
@@ -30,7 +30,7 @@ exports.createNotification = async (req, res) => {
             notification: {
                 id: notification.id,
                 userId: notification.userId,
-                message: notification.message,
+                message: notification.body,
                 type: notification.type,
                 channel: notification.channel,
                 createdAt: notification.createdAt
@@ -74,7 +74,7 @@ exports.markAsRead = async (req, res) => {
             });
         }
 
-        await notificationService.markAsRead(notificationId, notification.userId);
+        await notificationService.markRead(notificationId, notification.userId);
 
         res.json({ success: true });
 
@@ -107,7 +107,7 @@ exports.markAllAsRead = async (req, res) => {
             });
         }
 
-        await notificationService.markAllAsRead(buyerId);
+        await notificationService.markAllRead(buyerId);
 
         res.json({ success: true });
 
@@ -142,12 +142,37 @@ exports.getNotificationStream = async (req, res) => {
 exports.getSellerNotificationStats = async (req, res) => {
     try {
         const sellerId = req.user.id;
+        const prisma = require('../utils/prismaClient');
 
-        const stats = await notificationService.getSellerNotificationStats(sellerId);
+        const buyerIds = await prisma.order.findMany({
+            where: { sellerId },
+            select: { buyerId: true },
+            distinct: ['buyerId']
+        }).then(orders => orders.map(o => o.buyerId));
+
+        if (buyerIds.length === 0) {
+            return res.json({
+                success: true,
+                stats: { totalNotifications: 0, unreadCount: 0, buyersWithNotifications: 0 }
+            });
+        }
+
+        const [totalNotifications, unreadCount] = await Promise.all([
+            prisma.notification.count({
+                where: { userId: { in: buyerIds } }
+            }),
+            prisma.notification.count({
+                where: { userId: { in: buyerIds }, isRead: false }
+            })
+        ]);
 
         res.json({
             success: true,
-            stats
+            stats: {
+                totalNotifications,
+                unreadCount,
+                buyersWithNotifications: buyerIds.length
+            }
         });
 
     } catch (error) {

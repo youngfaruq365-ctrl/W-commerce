@@ -1,23 +1,50 @@
-@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 @import "./styles/animations.css";
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *, .dark, .dark *));
 
 
 :root {
-  --bg-primary: #f8fafc;
-  --bg-secondary: #ffffff;
-  --bg-tertiary: #f1f5f9;
-  --border-color: #e2e8f0;
-  --text-main: #0f172a;
-  --text-muted: #64748b;
-  --accent-gray: #4a5568;
-  --accent-gray-dim: rgba(74, 85, 104, 0.2);
-  --glass-bg: rgba(255, 255, 255, 0.65);
-  --glass-border: rgba(0, 0, 0, 0.1);
-  --glass-shadow: 0 12px 40px -12px rgba(71, 85, 105, 0.25), 0 4px 12px -4px rgba(71, 85, 105, 0.15);
-  --glass-hover-shadow: 0 20px 60px -15px rgba(71, 85, 105, 0.35), 0 8px 24px -8px rgba(71, 85, 105, 0.2);
-  --glass-blur: blur(20px);
-  --glass-text: var(--text-main);
+  --bg-primary: #f1f2f4;
+  --bg-secondary: #f4f5f7;
+  --bg-tertiary: #eceef1;
+  --bg-main: var(--bg-primary);
+  --bg-card: var(--bg-secondary);
+  --border-color: rgba(0,0,0,0.035);
+  --text-main: #171717;
+  --text-muted: #777b82;
+  --accent-gray: #111111;
+  --accent-gray-dim: rgba(0, 0, 0, 0.05);
+
+  --neu-shadow: 12px 12px 26px rgba(0,0,0,.11), -12px -12px 25px rgba(255,255,255,.95);
+  --neu-shadow-sm: 7px 7px 16px rgba(0,0,0,.10), -7px -7px 15px rgba(255,255,255,.95);
+  --neu-pressed: inset 7px 7px 14px rgba(0,0,0,.10), inset -7px -7px 14px rgba(255,255,255,.95);
+  
+  --glass-bg: rgba(231, 235, 240, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.4);
+  --glass-border-outer: rgba(163, 177, 198, 0.2);
+  --glass-shadow: var(--neu-shadow-sm);
+  --glass-hover-shadow: var(--neu-pressed);
+  --glass-blur: blur(16px);
+  --glass-text: #171717;
 }
+
+.dark {
+  --bg-primary: #1c1c1e;
+  --bg-secondary: #2c2c2e;
+  --bg-tertiary: #3a3a3c;
+  --text-main: #ffffff;
+  --text-muted: #a1a1a6;
+  --border-color: rgba(255,255,255,0.05);
+  --accent-gray: #ffffff;
+  
+  --neu-shadow: 12px 12px 26px rgba(0,0,0,.35), -12px -12px 25px rgba(255,255,255,.03);
+  --neu-shadow-sm: 7px 7px 16px rgba(0,0,0,.3), -7px -7px 15px rgba(255,255,255,.03);
+  --neu-pressed: inset 7px 7px 14px rgba(0,0,0,.35), inset -7px -7px 14px rgba(255,255,255,.03);
+}
+
+
 
 
 
@@ -29,82 +56,168 @@
 
 .card,
 .bento-item,
-.modal-3d-glass,
-.gray-glass-modal,
-.glass-panel,
-.premium-glass {
-  border: 1px solid var(--glass-border);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
+.glass-panel {
+  background: var(--bg-primary) !important;
+  box-shadow: 10px 10px 20px rgba(0, 0, 0, 0.05), -10px -10px 20px rgba(255, 255, 255, 0.5) !important;
+  border-radius: 1.5rem !important;
+  border: none !important;
+  color: var(--text-main) !important;
 }
+
+.dark .card,
+.dark .bento-item,
+.dark .glass-panel {
+  background: var(--bg-primary) !important;
+  box-shadow: 10px 10px 20px rgba(0, 0, 0, 0.8), -10px -10px 20px rgba(255, 255, 255, 0.03) !important;
+  border: none !important;
+  color: var(--text-main) !important;
+}
+
+/* =========================================================
+   LIGHT MODE MODAL PANELS — Soft Light Gray #d6d6d6 Border-Shadow
+========================================================= */
+html:not(.dark) .modal-3d-glass,
+html:not(.dark) .gray-glass-modal,
+html:not(.dark) .modal-panel,
+html:not(.dark) [role="dialog"],
+html:not(.dark) [aria-modal="true"],
+html:not(.dark) .fixed.inset-0 > div:not([class*="bg-black"]):not([class*="backdrop"]):not([class*="pointer-events-none"]):not([class*="slideInRight"]),
+html:not(.dark) .fixed.inset-0 > [class*="max-w-"]:not([class*="bg-black"]):not([class*="backdrop"]),
+html:not(.dark) .fixed.inset-0 > div > [class*="max-w-"]:not([class*="bg-black"]):not([class*="backdrop"]),
+html:not(.dark) .fixed.inset-0 .modal-3d-glass,
+html:not(.dark) .fixed.inset-0 .gray-glass-modal,
+html:not(.dark) .fixed.inset-0 .modal-panel,
+html:not(.dark) .fixed.inset-0 .premium-glass[class*="max-w-"],
+html:not(.dark) .fixed.inset-0 .neu-panel[class*="max-w-"],
+html:not(.dark) .fixed.inset-0 [class*="rounded-"][class*="max-w-"]:not([class*="bg-black"]):not([class*="backdrop"]):not([class*="pointer-events-none"]),
+html.light .modal-3d-glass,
+html.light .gray-glass-modal,
+html.light .modal-panel,
+html.light [role="dialog"],
+html.light [aria-modal="true"],
+html.light .fixed.inset-0 > div:not([class*="bg-black"]):not([class*="backdrop"]):not([class*="pointer-events-none"]):not([class*="slideInRight"]),
+html.light .fixed.inset-0 > [class*="max-w-"]:not([class*="bg-black"]):not([class*="backdrop"]),
+html.light .fixed.inset-0 > div > [class*="max-w-"]:not([class*="bg-black"]):not([class*="backdrop"]),
+html.light .fixed.inset-0 .modal-3d-glass,
+html.light .fixed.inset-0 .gray-glass-modal,
+html.light .fixed.inset-0 .modal-panel,
+html.light .fixed.inset-0 .premium-glass[class*="max-w-"],
+html.light .fixed.inset-0 .neu-panel[class*="max-w-"],
+html.light .fixed.inset-0 [class*="rounded-"][class*="max-w-"]:not([class*="bg-black"]):not([class*="backdrop"]):not([class*="pointer-events-none"]) {
+  border: 1px solid #d6d6d6 !important;
+  box-shadow: 0 0 0 1px #d6d6d6, 0 12px 32px -4px rgba(214, 214, 214, 0.75), 0 20px 48px -10px rgba(0, 0, 0, 0.07) !important;
+  background: var(--bg-primary) !important;
+  color: var(--text-main) !important;
+}
+
+/* Dark mode modal panels retain dark glass / dark styles */
+.dark .modal-3d-glass,
+.dark .gray-glass-modal,
+.dark .modal-panel,
+.dark [role="dialog"],
+.dark .fixed.inset-0 > div:not([class*="bg-black"]):not([class*="backdrop"]):not([class*="pointer-events-none"]):not([class*="slideInRight"]),
+.dark .fixed.inset-0 > [class*="max-w-"]:not([class*="bg-black"]):not([class*="backdrop"]),
+.dark .fixed.inset-0 .modal-3d-glass,
+.dark .fixed.inset-0 .gray-glass-modal,
+.dark .fixed.inset-0 .modal-panel,
+.dark .fixed.inset-0 .premium-glass[class*="max-w-"],
+.dark .fixed.inset-0 .neu-panel[class*="max-w-"] {
+  background: var(--bg-primary) !important;
+  box-shadow: 10px 10px 20px rgba(0, 0, 0, 0.8), -10px -10px 20px rgba(255, 255, 255, 0.03) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: var(--text-main) !important;
+}
+
 
 /* Basic reset and typography for modern feel */
 body {
   margin: 0;
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  background-color: #f8fafc;
+  padding: 0;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background-color: var(--bg-primary);
   color: var(--text-main);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
 }
 
 /* Hide scrollbar */
-.hide-scrollbar::-webkit-scrollbar {
-  display: none;
+.hide-scrollbar::-webkit-scrollbar,
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
-.hide-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+.hide-scrollbar,
+.no-scrollbar {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
 }
 
 /* Premium Glassmorphism Utility Classes */
-.glass-panel {
-  background: var(--glass-bg);
-  box-shadow: var(--glass-shadow);
-  color: var(--glass-text);
+/* Legacy glass classes now mapped to Neumorphism */
+
+/* Neumorphic Utility Classes */
+.neu-panel {
+  background: var(--bg-primary);
+  box-shadow: var(--neu-shadow);
+  border-radius: 1.5rem;
 }
 
-.glass-nav {
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border-bottom: 1px solid var(--glass-border);
-  box-shadow: var(--glass-shadow);
-  color: var(--glass-text);
+.neu-card {
+  background: var(--bg-secondary);
+  box-shadow: var(--neu-shadow-sm);
+  border-radius: 1.5rem;
 }
 
-.modal-3d-glass {
-  background: var(--glass-bg);
-  box-shadow: var(--glass-shadow);
-  color: var(--glass-text);
+.neu-card-pressed {
+  background: var(--bg-secondary);
+  box-shadow: var(--neu-pressed);
+  border-radius: 1rem;
 }
 
-.icon-3d-glass-box {
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-shadow);
+.neu-button {
+  background: var(--bg-secondary);
+  box-shadow: var(--neu-shadow-sm);
+  transition: all 0.2s ease;
+  border-radius: 1rem;
+  color: var(--text-main);
+  font-weight: 700;
+  padding: 0.75rem 1.2rem;
+}
+
+.neu-button:active {
+  box-shadow: var(--neu-pressed);
+}
+
+.neu-button-primary {
+  background: #006cff;
+  color: #ffffff !important;
+  box-shadow: 6px 6px 12px rgba(163, 177, 198, 0.5), -6px -6px 12px rgba(255, 255, 255, 0.9);
+  transition: all 0.3s ease;
   border-radius: 0.75rem;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  color: var(--glass-text);
+  border: none !important;
+  font-weight: 600;
 }
 
-.icon-3d-glass-box:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--glass-hover-shadow);
+.neu-button-primary:hover, .neu-button-primary:active {
+  background: #0056cc;
+  box-shadow: inset 4px 4px 8px rgba(0, 0, 0, 0.2), inset -4px -4px 8px rgba(255, 255, 255, 0.2);
 }
 
-.premium-glass {
-  background: var(--glass-bg);
-  box-shadow: var(--glass-shadow);
-  color: var(--glass-text);
+.neu-input {
+  background: var(--bg-primary);
+  box-shadow: inset 4px 4px 8px rgba(163, 177, 198, 0.4), inset -4px -4px 8px rgba(255, 255, 255, 0.9);
+  border: none !important;
+  border-radius: 0.75rem;
+  padding: 0.75rem 1rem;
+  color: var(--text-main);
+  transition: all 0.3s ease;
 }
 
-.gray-glass-modal {
-  background: var(--glass-bg);
-  box-shadow: var(--glass-shadow);
-  color: var(--glass-text);
+.neu-input:focus {
+  outline: none;
+  box-shadow: inset 6px 6px 10px rgba(163, 177, 198, 0.5), inset -6px -6px 10px rgba(255, 255, 255, 0.95);
 }
 
 
@@ -313,28 +426,26 @@ body {
 
 /* ── Dark Mode Black Glowing System ───────────────────────────────────────── */
 :root.dark {
-  --bg-primary: #050505;
+  --bg-primary: #0a0a0a;
   --bg-secondary: #111111;
-  --bg-tertiary: #1a1a1a;
-  --border-color: rgba(255, 255, 255, 0.1);
+  --bg-tertiary: #171717;
+  --border-color: rgba(255, 255, 255, 0.08);
   --text-main: #f8fafc;
   --text-muted: #94a3b8;
   --accent-gray: #cbd5e1;
-  --accent-gray-dim: rgba(255, 255, 255, 0.1);
+  --accent-gray-dim: rgba(255, 255, 255, 0.05);
   
-  --glass-bg: rgba(10, 10, 10, 0.7);
-  --glass-border: rgba(255, 255, 255, 0.15);
-  --glass-shadow: 0 0 40px 0 rgba(255, 255, 255, 0.05);
-  --glass-hover-shadow: 0 0 50px 0 rgba(255, 255, 255, 0.1);
-  --glass-text: #ffffff;
+  --glass-bg: rgba(20, 20, 20, 0.65);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-border-outer: rgba(255, 255, 255, 0.03);
+  --glass-shadow: 0 8px 32px -8px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --glass-hover-shadow: 0 12px 48px -12px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  --glass-blur: blur(16px);
+  --glass-text: #f8fafc;
 }
 
 .dark body {
-  background-color: #000000 !important;
-  background-image: 
-    radial-gradient(circle at 15% 50%, rgba(255, 255, 255, 0.06) 0px, transparent 50%),
-    radial-gradient(circle at 85% 30%, rgba(255, 255, 255, 0.06) 0px, transparent 50%),
-    radial-gradient(circle at 50% 80%, rgba(255, 255, 255, 0.04) 0px, transparent 50%) !important;
+  background-color: var(--bg-primary) !important;
   color: var(--text-main) !important;
 }
 
@@ -356,3 +467,283 @@ body {
   background: rgba(255, 255, 255, 0.1) !important;
   border-color: rgba(255, 255, 255, 0.4) !important;
 }
+
+/* Dark Mode Neumorphic Overrides */
+.dark .neu-panel, .dark .neu-card, .dark .neu-button, .dark .neu-button-primary {
+  box-shadow: 6px 6px 12px rgba(0, 0, 0, 0.8), -6px -6px 12px rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  background: var(--bg-primary);
+}
+
+.dark .neu-card-pressed, .dark .neu-button:hover, .dark .neu-button:active, .dark .neu-button-primary:hover, .dark .neu-button-primary:active {
+  box-shadow: inset 4px 4px 8px rgba(0, 0, 0, 0.8) !important;
+  border: 1px solid rgba(255, 255, 255, 0.02) !important;
+  background: var(--bg-secondary);
+}
+
+
+/* ── Accessibility & Focus Rings ─────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid #3b82f6 !important;
+  outline-offset: 2px !important;
+  border-radius: 4px;
+}
+
+/* ── Dark Map Tiles ─────────────────────────────────────────── */
+.map-tiles-dark {
+  filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
+}
+
+
+/* =========================================================
+   FOODIE PREVIEW (Floating Circles)
+========================================================= */
+
+.foodie-section {
+    background:#f4eee8;
+    position:relative;
+    width:100%;
+    height:500px;
+}
+
+.food-stage {
+    width:100%;
+    height:100%;
+    position:relative;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}
+
+.food-main {
+    width:300px;
+    height:300px;
+    border-radius:50%;
+    overflow:hidden;
+    position:relative;
+    z-index:5;
+    border:10px solid #fff;
+    box-shadow: 0 30px 80px rgba(0,0,0,.18);
+    transition:.5s;
+}
+
+.food-main img {
+    width:100%;
+    height:100%;
+    object-fit:cover;
+    transition:.5s;
+}
+
+.food-main-info {
+    position:absolute;
+    left:15px;
+    right:15px;
+    bottom:15px;
+    padding:12px 16px;
+    background:rgba(255,255,255,.92);
+    backdrop-filter:blur(12px);
+    border-radius:100px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+}
+
+.food-main-info strong { font-size:12px; }
+.food-main-info span { font-size:11px; color:#555; }
+
+.food-thumb {
+    width:100px;
+    height:100px;
+    position:absolute;
+    overflow:hidden;
+    border-radius:50%;
+    border:5px solid #fff;
+    background:#ddd;
+    box-shadow: 0 15px 35px rgba(0,0,0,.14);
+    z-index:6;
+}
+
+.food-thumb img {
+    width:100%;
+    height:100%;
+    object-fit:cover;
+}
+
+.food-one { left:5%; top:20px; }
+.food-two { right:5%; top:40px; }
+.food-three { left:0%; bottom:60px; }
+.food-four { right:2%; bottom:30px; }
+.food-five { left:20%; bottom:0; width:80px; height:80px; }
+.food-six { right:20%; top:0; width:80px; height:80px; }
+
+/* =========================================================
+   FASHION PREVIEW (Half Rounds)
+========================================================= */
+
+.fashion-section {
+    background:#dedede;
+    position:relative;
+    width:100%;
+    height:500px;
+}
+
+.fashion-stage {
+    width:100%;
+    height:100%;
+    position:relative;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}
+
+.fashion-main {
+    width:320px;
+    height:320px;
+    position:relative;
+    overflow:hidden;
+    z-index:5;
+    border-radius: 50% 50% 20px 20px;
+    background:#ccc;
+    box-shadow: 0 30px 80px rgba(0,0,0,.2);
+}
+
+.fashion-main img {
+    width:100%;
+    height:100%;
+    object-fit:cover;
+}
+
+.fashion-main-info {
+    position:absolute;
+    left:15px;
+    right:15px;
+    bottom:15px;
+    padding:12px 16px;
+    background:rgba(255,255,255,.93);
+    border-radius:15px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+}
+.fashion-main-info strong { font-size:12px; }
+.fashion-main-info span { font-size:11px; color:#555; }
+
+.fashion-item {
+    position:absolute;
+    width:140px;
+    height:200px;
+    overflow:hidden;
+    z-index:6;
+    background:#ccc;
+    box-shadow: 0 20px 40px rgba(0,0,0,.17);
+}
+
+.fashion-item img {
+    width:100%;
+    height:100%;
+    object-fit:cover;
+}
+
+.fashion-left {
+    left:2%;
+    border-radius: 150px 0 0 150px;
+}
+
+.fashion-right {
+    right:2%;
+    border-radius: 0 150px 150px 0;
+}
+
+.fashion-top {
+    top:0;
+    left:50%;
+    transform:translateX(-50%);
+    width:120px;
+    height:90px;
+    border-radius: 150px 150px 0 0;
+}
+
+.fashion-bottom {
+    bottom:0;
+    left:50%;
+    transform:translateX(-50%);
+    width:120px;
+    height:90px;
+    border-radius: 0 0 150px 150px;
+}
+
+/* =========================================================
+   ELECTRONICS PREVIEW (Squares)
+========================================================= */
+
+.electronics-section {
+    background:#111;
+    color:#fff;
+    position:relative;
+    width:100%;
+    height:500px;
+}
+
+.electronics-stage {
+    width:100%;
+    height:100%;
+    position:relative;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}
+
+.electronics-main {
+    width:320px;
+    height:320px;
+    position:relative;
+    overflow:hidden;
+    z-index:5;
+    background:#222;
+    box-shadow: 0 30px 80px rgba(0,0,0,.6);
+}
+
+.electronics-main img {
+    width:100%;
+    height:100%;
+    object-fit:cover;
+}
+
+.electronics-main-info {
+    position:absolute;
+    left:15px;
+    right:15px;
+    bottom:15px;
+    padding:12px 16px;
+    background:rgba(255,255,255,.94);
+    color:#111;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+}
+.electronics-main-info strong { font-size:12px; }
+.electronics-main-info span { font-size:11px; color:#555; }
+
+.electronics-item {
+    width:130px;
+    height:130px;
+    position:absolute;
+    overflow:hidden;
+    background:#222;
+    z-index:6;
+    box-shadow: 0 20px 40px rgba(0,0,0,.5);
+}
+
+.electronics-item img {
+    width:100%;
+    height:100%;
+    object-fit:cover;
+}
+
+.electronics-one { left:5%; top:20px; }
+.electronics-two { right:5%; top:50px; }
+.electronics-three { left:8%; bottom:35px; }
+.electronics-four { right:8%; bottom:15px; }
+
+

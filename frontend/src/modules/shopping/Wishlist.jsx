@@ -8,6 +8,7 @@ import {
 import { apiClient } from '../../utils/apiClient';
 import { WSkeleton } from '../../design/components';
 import { useCartStore } from '../../store/cartStore';
+import { PLACEHOLDER_IMAGE } from '@/constants/placeholders';
 
 const COLLECTIONS = ['All Items', 'Gift Ideas', 'Tech Picks', 'Fashion'];
 
@@ -53,7 +54,7 @@ export default function Wishlist() {
             price: p.price || 0,
             originalPrice: p.compareAtPrice || p.price || 0,
             discount: p.compareAtPrice ? Math.round(((p.compareAtPrice - p.price) / p.compareAtPrice) * 100) : 0,
-            image: p.images?.[0]?.url || 'https://placehold.co/280x280/1a1a2e/4a9eff?text=📦',
+            image: p.images?.[0]?.url || PLACEHOLDER_IMAGE,
             inStock: item.inStock ?? (p.stock > 0),
             rating: p.averageRating || 5.0,
             reviews: p.reviewCount || 0,
@@ -345,9 +346,9 @@ export default function Wishlist() {
                     <span className="text-xs text-[var(--text-muted)]">{item.rating} ({item.reviews.toLocaleString()})</span>
                   </div>
                   <div className="flex items-baseline gap-2 mb-3">
-                    <span className="font-bold text-sm">${item.price.toFixed(2)}</span>
+                    <span className="font-bold text-sm">₦{item.price.toFixed(2)}</span>
                     {item.originalPrice > item.price && (
-                      <span className="text-xs text-[var(--text-faint)] line-through">${item.originalPrice.toFixed(2)}</span>
+                      <span className="text-xs text-[var(--text-faint)] line-through">₦{item.originalPrice.toFixed(2)}</span>
                     )}
                   </div>
                   <button
@@ -393,9 +394,9 @@ export default function Wishlist() {
                     <span className="text-xs text-[var(--text-muted)]">{item.rating} ({item.reviews.toLocaleString()} reviews)</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="font-bold">${item.price.toFixed(2)}</span>
+                    <span className="font-bold">₦{item.price.toFixed(2)}</span>
                     {item.originalPrice > item.price && (
-                      <span className="text-sm text-[var(--text-faint)] line-through">${item.originalPrice.toFixed(2)}</span>
+                      <span className="text-sm text-[var(--text-faint)] line-through">₦{item.originalPrice.toFixed(2)}</span>
                     )}
                     {!item.inStock && <span className="text-xs text-red-400 font-medium">Out of Stock</span>}
                   </div>

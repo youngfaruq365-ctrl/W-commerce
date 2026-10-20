@@ -1,7 +1,7 @@
 import React from 'react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { MapPin, PackageCheck, Truck, CheckCircle2, Clock } from 'lucide-react';
+import { MapPin, PackageCheck, Truck, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
 
 const steps = [
     { id: 'ASSIGNED', label: 'Assigned', icon: Clock },

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShoppingBag, PackageCheck, MapPin } from 'lucide-react';
-import { useBuyerStore } from '../../../../store/buyerStore';
+import { useBuyerStore } from '../../../store/buyerStore';
 
 /**
  * BuyerOverviewTab
@@ -25,7 +25,7 @@ const BuyerOverviewTab = () => {
 
   const statCards = [
     { title: 'Active Escrows', value: stats.activeEscrows.toString(), color: 'text-[var(--accent-gray)]' },
-    { title: 'Total Spent', value: `NGN ${stats.totalSpent.toFixed(2)}`, color: 'text-black' },
+    { title: 'Total Spent', value: `USD ${stats.totalSpent.toFixed(2)}`, color: 'text-black' },
     { title: 'Saved Items', value: stats.savedItems.toString(), color: 'text-yellow-500' },
     { title: 'Hub Items', value: stats.hubItems.toString(), color: 'text-purple-500' },
   ];

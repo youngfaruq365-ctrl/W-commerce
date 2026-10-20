@@ -21,6 +21,7 @@ export default function EditProfile({ onCancel }) {
   const { user, setUser } = useAuthStore();
   const fileRef = useRef();
   const [avatarPreview, setAvatarPreview] = useState(null);
+  const [avatarFile, setAvatarFile] = useState(null);
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
@@ -60,20 +61,29 @@ export default function EditProfile({ onCancel }) {
             shippingState: u.shippingState || '',
             shippingZip: u.shippingZip || '',
             shippingCountry: u.shippingCountry || '',
+            username: u.username || '',
+            dob: u.dob || '',
+            gender: u.gender || 'Prefer not to say',
+            bio: u.bio || '',
+            instagram: u.instagram || '',
+            twitter: u.twitter || '',
+            website: u.website || '',
           }));
           if (u.avatarUrl) setAvatarPreview(u.avatarUrl);
         }
       } catch (error) {
-        setServerError(error.message || 'Failed to fetch profile');
-        toast.error(error.message || 'Failed to fetch profile');
+        const msg = error.response?.data?.message || error.message || 'Failed to fetch profile';
+        setServerError(msg);
+        toast.error(msg);
       }
     };
     fetchProfile();
   }, []);
 
   const handleAvatar = (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (file) {
+      setAvatarFile(file);
       const reader = new FileReader();
       reader.onload = (ev) => setAvatarPreview(ev.target.result);
       reader.readAsDataURL(file);
@@ -95,6 +105,18 @@ export default function EditProfile({ onCancel }) {
     setLoading(true);
     
     try {
+      if (avatarFile) {
+        try {
+          const formData = new FormData();
+          formData.append('avatar', avatarFile);
+          await apiClient.post('/api/v1/user/avatar', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+        } catch (avatarErr) {
+          console.warn('Avatar upload failed, continuing with profile update:', avatarErr);
+        }
+      }
+
       const response = await apiClient.put('/api/v1/user/profile', {
         fullName: form.fullName,
         email: form.email,
@@ -106,12 +128,23 @@ export default function EditProfile({ onCancel }) {
         shippingCity: form.shippingCity,
         shippingState: form.shippingState,
         shippingZip: form.shippingZip,
-        shippingCountry: form.shippingCountry
+        shippingCountry: form.shippingCountry,
+        username: form.username,
+        instagram: form.instagram,
+        twitter: form.twitter,
+        website: form.website
       });
       
       if (response.data.success) {
         // update local user state
-        setUser({ ...user, name: response.data.user.fullName, phone: response.data.user.phone });
+        setUser({ 
+          ...user, 
+          name: response.data.user.fullName, 
+          fullName: response.data.user.fullName,
+          phone: response.data.user.phone,
+          username: response.data.user.username,
+          avatarUrl: avatarPreview || user?.avatarUrl
+        });
         setSaved(true);
         toast.success('Profile updated successfully');
         setTimeout(() => setSaved(false), 2500);
@@ -121,7 +154,7 @@ export default function EditProfile({ onCancel }) {
         toast.error(msg);
       }
     } catch (error) {
-      const msg = error.message || 'Failed to connect to server';
+      const msg = error.response?.data?.message || error.message || 'Failed to connect to server';
       setServerError(msg);
       toast.error(msg);
     } finally {
@@ -181,7 +214,7 @@ export default function EditProfile({ onCancel }) {
             <FormField label="Username" error={errors.username}>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] text-sm">@</span>
-                <input value={form.username} onChange={set('username')}
+                <input value={form.username} onChange={(e) => setForm(f => ({ ...f, username: e.target.value.replace(/^@/, '').trimStart() }))}
                   className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-xl pl-7 pr-4 py-2.5 text-sm focus:outline-none focus:border-[var(--border-hover)] transition-colors" />
               </div>
             </FormField>

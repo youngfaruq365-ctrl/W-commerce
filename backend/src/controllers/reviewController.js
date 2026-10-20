@@ -16,7 +16,9 @@ exports.createReview = async (req, res) => {
         const order = await prisma.order.findFirst({
             where: {
                 buyerId: userId,
-                status: 'DELIVERED',
+                status: {
+                    in: ['DELIVERED', 'COMPLETED']
+                },
                 items: {
                     some: {
                         productId: productId
@@ -414,7 +416,7 @@ exports.toggleHelpful = async (req, res) => {
         res.json({ success: true, ...result });
     } catch (error) {
         logger.error(`Toggle Helpful Error: ${error.message}`);
-        res.status(500).json({ success: false, message: error.message });
+        res.status(500).json({ success: false, message: process.env.NODE_ENV === 'production' ? 'An error occurred' : error.message });
     }
 };
 
@@ -431,7 +433,7 @@ exports.reportReview = async (req, res) => {
         res.status(201).json({ success: true, report });
     } catch (error) {
         logger.error(`Report Review Error: ${error.message}`);
-        res.status(500).json({ success: false, message: error.message });
+        res.status(500).json({ success: false, message: process.env.NODE_ENV === 'production' ? 'An error occurred' : error.message });
     }
 };
 

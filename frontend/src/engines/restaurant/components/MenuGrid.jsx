@@ -25,7 +25,7 @@ export const MenuGrid = ({ store, motionVariants }) => {
               <h3 className="font-bold text-xl mb-2 text-gray-900">{product.title}</h3>
               <p className="text-gray-500 mb-4">{product.description}</p>
               <div className="flex justify-between items-center">
-                <span className="font-black text-xl" style={{ color: 'var(--store-primary)' }}>${product.price.toFixed(2)}</span>
+                <span className="font-black text-xl" style={{ color: 'var(--store-primary)' }}>₦{product.price.toFixed(2)}</span>
                 <button onClick={() => toast('Feature coming soon', { icon: '🚀' })}  className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white shadow-md" style={{ backgroundColor: 'var(--store-primary)' }}>+</button>
               </div>
             </div>

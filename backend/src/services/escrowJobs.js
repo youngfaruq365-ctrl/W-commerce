@@ -107,7 +107,17 @@ async function processAutomaticReleases() {
                     }
                 });
 
-                if (dispute) {
+                let orderDispute = null;
+                if (payment.orderId) {
+                    orderDispute = await prisma.dispute.findFirst({
+                        where: {
+                            orderId: payment.orderId,
+                            status: { in: ['OPEN', 'SELLER_RESPONSE', 'MEDIATION'] }
+                        }
+                    });
+                }
+
+                if (dispute || orderDispute) {
                     logger.info(`Skipping release - dispute active for payment: ${payment.id}`);
                     continue;
                 }
@@ -323,7 +333,17 @@ async function processStalePayments() {
                 }
             });
 
-            if (dispute) {
+            let orderDispute = null;
+            if (payment.orderId) {
+                orderDispute = await prisma.dispute.findFirst({
+                    where: {
+                        orderId: payment.orderId,
+                        status: { in: ['OPEN', 'SELLER_RESPONSE', 'MEDIATION'] }
+                    }
+                });
+            }
+
+            if (dispute || orderDispute) {
                 logger.info(`Skipping stale payment ${payment.id} - dispute active`);
                 continue;
             }

@@ -1,5 +1,4 @@
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const prisma = require('../utils/prismaClient');
 const redisManager = require('../utils/redisManager');
 const logger = require('../utils/logger');
 const trackingCompressionService = require('../services/delivery/trackingCompressionService');

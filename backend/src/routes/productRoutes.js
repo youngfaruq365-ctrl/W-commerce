@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const productController = require('../controllers/productController');
-const { protect, authorize } = require('../middleware/authMiddleware');
+const { protect, optionalProtect, authorize } = require('../middleware/authMiddleware');
 const { validate } = require('../middleware/inputValidation');
 const cache = require('../middleware/cacheMiddleware');
 
@@ -21,11 +21,13 @@ router.get('/landed-cost', productController.calculateLandedCost);
 router.get('/categories', cache(300), productController.getCategories);
 router.get('/menu', cache(300), productController.getMenuData);
 
-const { upload } = require('../middleware/uploadMiddleware');
+const { upload, uploadAudio } = require('../middleware/uploadMiddleware');
 
 // Protected routes - with input validation
 router.post('/', protect, authorize('SELLER', 'ADMIN'), upload.array('images', 5), validate('createProduct', 'body'), productController.createProduct);
 router.put('/:id', protect, authorize('SELLER', 'ADMIN'), validate('uuidParam', 'params'), upload.array('images', 5), productController.updateProduct);
+router.post('/:id/audio', protect, authorize('SELLER', 'ADMIN'), uploadAudio.single('audio'), productController.uploadProductAudio);
+
 router.get('/my-products', protect, authorize('SELLER', 'ADMIN'), productController.getMyProducts);
 router.get('/my-products/low-stock', protect, authorize('SELLER', 'ADMIN'), productController.getLowStockProducts);
 router.post('/:productId/interaction', protect, productController.trackProductInteraction);
@@ -33,11 +35,16 @@ router.post('/waitlist', protect, productController.addToWaitlist);
 router.post('/restock-notify', protect, productController.subscribeToRestock);
 router.delete('/restock-notify/:productId', protect, productController.unsubscribeFromRestock);
 router.post('/restock/:productId', protect, authorize('SELLER', 'ADMIN'), productController.restockProduct);
+router.post('/:productId/ad-boost', protect, authorize('SELLER', 'ADMIN'), productController.toggleAdBoost);
 
 router.delete('/:id', protect, authorize('SELLER', 'ADMIN'), validate('uuidParam', 'params'), productController.deleteProduct);
 
 // NOTE: Keep dynamic `/:id` route after all specific routes to avoid route collisions
+router.post('/:id/report', productController.reportProduct);
 router.get('/:id', cache(60), productController.getProduct); // Detailed View with Analytics
+
+router.put('/:id/config', protect, authorize('SELLER', 'ADMIN'), (req, res) => res.json({ success: true, message: 'Configuration saved' }));
+router.get('/:id/ai-insights', optionalProtect, productController.getProductAiInsights);
 
 
 

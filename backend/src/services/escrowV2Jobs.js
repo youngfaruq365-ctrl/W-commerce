@@ -35,6 +35,7 @@
 const prisma               = require('../utils/prismaClient');
 const logger               = require('../utils/logger');
 const earningsLedger       = require('./earningsLedgerService');
+const escrowLedger         = require('./escrowLedgerService');
 
 const RELEASE_DELAY_HOURS  = parseInt(process.env.ESCROW_RELEASE_DELAY_HOURS || '48', 10);
 const STALE_RELEASE_DAYS   = parseInt(process.env.ESCROW_STALE_RELEASE_DAYS  || '14', 10);
@@ -49,7 +50,9 @@ async function processAutoReleases() {
     const due = await prisma.fulfillmentOrder.findMany({
         where: {
             paymentStatus:   'HELD',
-            escrowReleaseAt: { lte: now },
+            escrowPayment: {
+                releaseScheduledAt: { lte: now }
+            }
         },
         select: {
             id:                true,
@@ -98,7 +101,7 @@ async function processAutoReleases() {
             // Create an admin alert for manual review
             await prisma.notification.create({
                 data: {
-                    userId:  'PLATFORM',
+                    userId:  fo.sellerId,
                     type:    'ESCROW_RELEASE_FAILED',
                     title:   'Escrow Auto-Release Failed',
                     body:    `FO ${fo.id} (seller ${fo.sellerId}) — ₦${Number(fo.sellerAmount).toLocaleString()} could not be released automatically. Error: ${err.message}`,
@@ -126,8 +129,11 @@ async function processStaleReleases() {
     const stale = await prisma.fulfillmentOrder.findMany({
         where: {
             paymentStatus: 'HELD',
-            deliveredAt:   { lte: staleDate },
-            escrowReleaseAt: null,       // missed by Phase 5
+            status: { in: ['DELIVERED', 'COMPLETED'] },
+            updatedAt: { lte: staleDate },
+            escrowPayment: {
+                releaseScheduledAt: null
+            }
         },
         select: { id: true, sellerId: true, sellerAmount: true },
     });
@@ -136,9 +142,11 @@ async function processStaleReleases() {
     const overdueCapped = await prisma.fulfillmentOrder.findMany({
         where: {
             paymentStatus:   'HELD',
-            escrowReleaseAt: {
-                lte: new Date(now.getTime() - STALE_RELEASE_DAYS * 24 * 60 * 60 * 1000),
-            },
+            escrowPayment: {
+                releaseScheduledAt: {
+                    lte: new Date(now.getTime() - STALE_RELEASE_DAYS * 24 * 60 * 60 * 1000),
+                }
+            }
         },
         select: { id: true, sellerId: true, sellerAmount: true },
     });
@@ -157,10 +165,10 @@ async function processStaleReleases() {
     for (const fo of allStale) {
         try {
             // Backfill escrowReleaseAt = now so the auto-release logic works
-            await prisma.fulfillmentOrder.update({
-                where: { id: fo.id },
-                data:  { escrowReleaseAt: new Date() },
-            });
+            await prisma.escrowPayment.update({
+                where: { fulfillmentOrderId: fo.id },
+                data:  { releaseScheduledAt: new Date() },
+            }).catch(() => {}); // ignore if doesn't exist
 
             await earningsLedger.releaseFulfillmentEscrow(fo.id, 'SYSTEM_AUTO');
 
@@ -236,6 +244,106 @@ async function cancelExpiredCheckouts() {
     }
 }
 
+// ─── Job 4: WalletHold auto-release for direct Orders (non-FulfillmentOrder) ──
+
+/**
+ * processWalletHoldAutoReleases
+ *
+ * Closes the gap where wallet-paid Orders (paymentMethod='WALLET') have a
+ * WalletHold record that was never released because the FulfillmentOrder-based
+ * cron jobs don't cover them.
+ *
+ * Runs hourly. Finds Orders where:
+ *   - paymentMethod = 'WALLET'
+ *   - paymentStatus = 'HELD'
+ *   - escrowReleaseAt <= now
+ *   - no open dispute
+ * Then calls escrowLedger.releaseToSeller() which:
+ *   1. Finds and releases the WalletHold (gongHeld decremented)
+ *   2. Credits seller wallet after deducting platform commission
+ */
+async function processWalletHoldAutoReleases() {
+    const now = new Date();
+    logger.info(`[EscrowV2-Wallet] WalletHold auto-release run at ${now.toISOString()}`);
+
+    const dueOrders = await prisma.order.findMany({
+        where: {
+            paymentMethod:   'WALLET',
+            paymentStatus:   'HELD',
+            escrowReleaseAt: { lte: now },
+            dispute:         null,          // no dispute record linked
+        },
+        select: { id: true, buyerId: true, sellerId: true, totalAmount: true },
+    });
+
+    if (dueOrders.length === 0) {
+        logger.info('[EscrowV2-Wallet] No wallet holds due for release');
+        return;
+    }
+
+    logger.info(`[EscrowV2-Wallet] ${dueOrders.length} wallet hold(s) due for release`);
+
+    let released = 0, skipped = 0, failed = 0;
+
+    for (const order of dueOrders) {
+        try {
+            // Double-check for any open dispute
+            const dispute = await prisma.dispute.findFirst({
+                where: {
+                    orderId: order.id,
+                    status:  { in: ['OPEN', 'SELLER_RESPONSE', 'MEDIATION', 'UNDER_REVIEW'] },
+                },
+                select: { id: true },
+            }).catch(() => null);
+
+            if (dispute) {
+                logger.info(`[EscrowV2-Wallet] Skipping Order ${order.id} — active dispute ${dispute.id}`);
+                skipped++;
+                continue;
+            }
+
+            if (!order.sellerId) {
+                logger.warn(`[EscrowV2-Wallet] Skipping Order ${order.id} — no sellerId`);
+                skipped++;
+                continue;
+            }
+
+            await escrowLedger.releaseToSeller({
+                orderId:       order.id,
+                buyerId:       order.buyerId,
+                sellerId:      order.sellerId,
+                amount:        order.totalAmount,
+                triggerSource: 'SYSTEM_AUTO',
+            });
+
+            // Mark Order as released
+            await prisma.order.update({
+                where: { id: order.id },
+                data:  { paymentStatus: 'RELEASED', escrowReleasedAt: now },
+            });
+
+            logger.info(`[EscrowV2-Wallet] Released WalletHold for Order ${order.id}`);
+            released++;
+
+        } catch (err) {
+            failed++;
+            logger.error(`[EscrowV2-Wallet] Failed for Order ${order.id}: ${err.message}`);
+            // Alert admin
+            await prisma.notification.create({
+                data: {
+                    userId:  'PLATFORM',
+                    type:    'ESCROW_RELEASE_FAILED',
+                    title:   'Wallet Hold Auto-Release Failed',
+                    body:    `Order ${order.id} wallet hold could not be released. Error: ${err.message}`,
+                    linkUrl: `/admin/orders/${order.id}`,
+                },
+            }).catch(() => {});
+        }
+    }
+
+    logger.info(`[EscrowV2-Wallet] Done: released=${released}, skipped=${skipped}, failed=${failed}`);
+}
+
 // ─── Registration ─────────────────────────────────────────────────────────────
 
 /**
@@ -243,15 +351,15 @@ async function cancelExpiredCheckouts() {
  * @param {CronJobManager} cronJobManager — singleton from cronJobManager.js
  */
 function registerEscrowV2Jobs(cronJobManager) {
-    // Job 1: Auto-release — top of every hour
+    // Job 1: Auto-release FulfillmentOrders — top of every hour
     cronJobManager.register(
         'escrow-v2-auto-release',
         '0 * * * *',
         processAutoReleases,
-        { runOnStartup: false, lockExpiry: 300 }  // 5-min lock (job can take time with many FOs)
+        { runOnStartup: false, lockExpiry: 300 }
     );
 
-    // Job 2: Stale safety net — 02:00 every night
+    // Job 2: Stale safety net for FulfillmentOrders — 02:00 every night
     cronJobManager.register(
         'escrow-v2-stale-release',
         '0 2 * * *',
@@ -264,18 +372,27 @@ function registerEscrowV2Jobs(cronJobManager) {
         'escrow-v2-expired-checkout',
         '*/15 * * * *',
         cancelExpiredCheckouts,
-        { runOnStartup: true, lockExpiry: 120 }   // runOnStartup: kill orphans on deploy
+        { runOnStartup: true, lockExpiry: 120 }
     );
 
-    logger.info('[EscrowV2] All Phase 6 cron jobs registered');
+    // Job 4: WalletHold auto-release for direct Orders — top of every hour (30s offset)
+    cronJobManager.register(
+        'escrow-v2-wallet-hold-release',
+        '0 * * * *',
+        processWalletHoldAutoReleases,
+        { runOnStartup: false, lockExpiry: 300 }
+    );
+
+    logger.info('[EscrowV2] All Phase 6 cron jobs registered (incl. wallet hold auto-release)');
 }
 
 // ─── Exports ──────────────────────────────────────────────────────────────────
 
 module.exports = {
     registerEscrowV2Jobs,
-    // Exported for admin manual trigger endpoints (Phase 10)
+    // Exported for admin manual trigger endpoints
     processAutoReleases,
     processStaleReleases,
     cancelExpiredCheckouts,
+    processWalletHoldAutoReleases,
 };

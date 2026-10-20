@@ -4,53 +4,45 @@ import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Search, Filter, Download, ArrowDownLeft, ArrowUpRight,
   ChevronDown, Calendar, RefreshCw, TrendingUp, TrendingDown, CheckCircle,
-  Clock, XCircle, ShoppingBag, Gift, RotateCcw, Wallet
+  Clock, XCircle, ShoppingBag, Gift, RotateCcw, Wallet, EyeOff, Copy
 } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useWalletStore } from '../../store/walletStore';
 
-const ALL_TRANSACTIONS = [
-  { id: 't1', type: 'CREDIT', amount: 500.00, desc: 'Order Refund #ORD-2341', date: '2026-07-12', category: 'refund', status: 'COMPLETED' },
-  { id: 't2', type: 'DEBIT', amount: 89.99, desc: 'Purchase – Wireless Headset Pro', date: '2026-07-11', category: 'purchase', status: 'COMPLETED' },
-  { id: 't3', type: 'CREDIT', amount: 25.00, desc: 'Cashback – Tech Purchase', date: '2026-07-10', category: 'cashback', status: 'COMPLETED' },
-  { id: 't4', type: 'DEBIT', amount: 299.99, desc: 'Purchase – Ergonomic Gaming Chair', date: '2026-07-09', category: 'purchase', status: 'COMPLETED' },
-  { id: 't5', type: 'CREDIT', amount: 50.00, desc: 'Referral Bonus – 2 friends', date: '2026-07-07', category: 'referral', status: 'COMPLETED' },
-  { id: 't6', type: 'DEBIT', amount: 45.00, desc: 'Top Up Fee – Card Payment', date: '2026-07-06', category: 'topup', status: 'COMPLETED' },
-  { id: 't7', type: 'CREDIT', amount: 200.00, desc: 'Wallet Top Up – Visa ••4242', date: '2026-07-05', category: 'topup', status: 'COMPLETED' },
-  { id: 't8', type: 'DEBIT', amount: 12.99, desc: 'Purchase – Phone Case', date: '2026-07-04', category: 'purchase', status: 'PENDING' },
-  { id: 't9', type: 'CREDIT', amount: 15.00, desc: 'Reward Points Redeemed', date: '2026-07-03', category: 'reward', status: 'COMPLETED' },
-  { id: 't10', type: 'DEBIT', amount: 150.00, desc: 'Withdrawal to Chase ••4521', date: '2026-07-02', category: 'withdrawal', status: 'COMPLETED' },
-  { id: 't11', type: 'DEBIT', amount: 59.99, desc: 'Purchase – Smart LED Strip', date: '2026-07-01', category: 'purchase', status: 'FAILED' },
-  { id: 't12', type: 'CREDIT', amount: 10.00, desc: 'Gift Card Received', date: '2026-06-30', category: 'gift', status: 'COMPLETED' },
-];
-
 const CATEGORY_ICONS = {
-  refund: RotateCcw,
+  topup: ArrowDownLeft,
   purchase: ShoppingBag,
-  cashback: TrendingUp,
-  referral: Gift,
-  topup: Wallet,
-  withdrawal: TrendingDown,
+  refund: RotateCcw,
   reward: Gift,
-  gift: Gift,
+  withdrawal: ArrowUpRight,
+  transfer: ArrowUpRight,
 };
 
 const STATUS_CONFIG = {
-  COMPLETED: { label: 'Completed', color: 'text-green-400 bg-green-500/15 border-green-500/30' },
-  PENDING: { label: 'Pending', color: 'text-yellow-400 bg-yellow-500/15 border-yellow-500/30' },
-  FAILED: { label: 'Failed', color: 'text-red-400 bg-red-500/15 border-red-500/30' },
+  COMPLETED: { label: 'Completed', color: 'bg-green-500/10 text-green-400 border-green-500/20' },
+  PENDING:   { label: 'Pending',   color: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' },
+  FAILED:    { label: 'Failed',    color: 'bg-red-500/10 text-red-400 border-red-500/20' },
+  REVERSED:  { label: 'Reversed',  color: 'bg-gray-500/10 text-gray-400 border-gray-500/20' },
 };
 
 export default function WalletTransactions() {
   const navigate = useNavigate();
+  const { transactions, fetchTransactions, currency } = useWalletStore();
   const [activeTab, setActiveTab] = useState('all');
   const [search, setSearch] = useState('');
   const [showDateFilter, setShowDateFilter] = useState(false);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [page, setPage] = useState(1);
+  const [selectedTx, setSelectedTx] = useState(null);
   const PER_PAGE = 8;
+  const currencySymbol = currency === 'NGN' ? '₦' : (currency === 'USD' ? '₦' : currency);
 
-  const filtered = ALL_TRANSACTIONS.filter(tx => {
+  useEffect(() => {
+    fetchTransactions();
+  }, []);
+
+  const filtered = transactions.filter(tx => {
     if (activeTab === 'credits' && tx.type !== 'CREDIT') return false;
     if (activeTab === 'debits' && tx.type !== 'DEBIT') return false;
     if (search && !tx.desc.toLowerCase().includes(search.toLowerCase())) return false;
@@ -87,16 +79,16 @@ export default function WalletTransactions() {
         <div className="flex gap-3 px-4 pb-3 max-w-2xl mx-auto">
           <div className="flex-1 bg-green-500/10 border border-green-500/20 rounded-xl px-3 py-2">
             <p className="text-xs text-[var(--text-faint)]">Credits</p>
-            <p className="text-sm font-bold text-green-400">+${totalCredits.toFixed(2)}</p>
+            <p className="text-sm font-bold text-green-400">+{currencySymbol}{totalCredits.toFixed(2)}</p>
           </div>
           <div className="flex-1 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">
             <p className="text-xs text-[var(--text-faint)]">Debits</p>
-            <p className="text-sm font-bold text-red-400">-${totalDebits.toFixed(2)}</p>
+            <p className="text-sm font-bold text-red-400">-{currencySymbol}{totalDebits.toFixed(2)}</p>
           </div>
           <div className="flex-1 bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-xl px-3 py-2">
             <p className="text-xs text-[var(--text-faint)]">Net</p>
             <p className={`text-sm font-bold ${totalCredits - totalDebits >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-              {totalCredits - totalDebits >= 0 ? '+' : ''}${(totalCredits - totalDebits).toFixed(2)}
+              {totalCredits - totalDebits >= 0 ? '+' : ''}{currencySymbol}{(totalCredits - totalDebits).toFixed(2)}
             </p>
           </div>
         </div>
@@ -161,10 +153,10 @@ export default function WalletTransactions() {
           ) : (
             <div className="divide-y divide-[var(--border-subtle)]">
               {paginated.map((tx) => {
-                const IconComp = CATEGORY_ICONS[tx.category] || Wallet;
-                const statusConf = STATUS_CONFIG[tx.status];
+                const IconComp = CATEGORY_ICONS[tx.category || tx.icon] || Wallet;
+                const statusConf = STATUS_CONFIG[tx.status] || STATUS_CONFIG['COMPLETED'];
                 return (
-                  <div key={tx.id} className="flex items-center gap-3 px-4 py-3.5 hover:bg-[var(--bg-tertiary)] transition-colors">
+                  <div key={tx.id} onClick={() => setSelectedTx(tx)} className="flex items-center gap-3 px-4 py-3.5 hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors">
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${tx.type === 'CREDIT' ? 'bg-green-500/15 border border-green-500/30' : 'bg-red-500/15 border border-red-500/30'}`}>
                       <IconComp size={17} className={tx.type === 'CREDIT' ? 'text-green-400' : 'text-red-400'} />
                     </div>
@@ -179,7 +171,7 @@ export default function WalletTransactions() {
                     </div>
                     <div className="flex flex-col items-end flex-shrink-0">
                       <span className={`text-sm font-bold ${tx.type === 'CREDIT' ? 'text-green-400' : 'text-red-400'}`}>
-                        {tx.type === 'CREDIT' ? '+' : '-'}${tx.amount.toFixed(2)}
+                        {tx.type === 'CREDIT' ? '+' : '-'}{currencySymbol}{tx.amount.toFixed(2)}
                       </span>
                     </div>
                   </div>
@@ -206,6 +198,64 @@ export default function WalletTransactions() {
           Export as CSV / PDF
         </button>
       </div>
+
+      {/* Transaction Details Modal */}
+      <AnimatePresence>
+        {selectedTx && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedTx(null)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-sm bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl p-5 shadow-xl overflow-hidden"
+            >
+              <div className="flex justify-between items-center mb-5">
+                <h3 className="text-lg font-bold text-[var(--text-main)]">Transaction Details</h3>
+                <button onClick={() => setSelectedTx(null)} className="p-1 rounded-lg hover:bg-[var(--bg-tertiary)]">
+                  <EyeOff size={20} className="text-[var(--text-muted)]" />
+                </button>
+              </div>
+
+              <div className="flex flex-col items-center justify-center py-4 mb-6 bg-[var(--bg-tertiary)] rounded-xl border border-[var(--border-subtle)]">
+                <p className="text-sm text-[var(--text-muted)] uppercase tracking-wider mb-1">{selectedTx.type === 'CREDIT' ? 'Received' : 'Spent'}</p>
+                <div className={`text-4xl font-black ${selectedTx.type === 'CREDIT' ? 'text-green-400' : 'text-[var(--text-main)]'}`}>
+                  {selectedTx.type === 'CREDIT' ? '+' : '-'}{currencySymbol}{selectedTx.amount.toFixed(2)}
+                </div>
+                <div className={`mt-2 px-2 py-0.5 rounded text-xs font-semibold ${selectedTx.status === 'COMPLETED' ? 'bg-green-500/10 text-green-400' : selectedTx.status === 'FAILED' ? 'bg-red-500/10 text-red-400' : 'bg-yellow-500/10 text-yellow-400'}`}>
+                  {selectedTx.status}
+                </div>
+              </div>
+
+              <div className="space-y-4 text-sm">
+                <div className="flex justify-between items-start pb-4 border-b border-[var(--border-subtle)]">
+                  <span className="text-[var(--text-muted)]">Description</span>
+                  <span className="text-[var(--text-main)] text-right font-medium max-w-[60%]">{selectedTx.desc}</span>
+                </div>
+                <div className="flex justify-between py-2 border-b border-[var(--border-subtle)]">
+                  <span className="text-[var(--text-muted)]">Date & Time</span>
+                  <span className="text-[var(--text-main)] font-medium">{selectedTx.date}</span>
+                </div>
+                <div className="flex justify-between py-2 border-b border-[var(--border-subtle)]">
+                  <span className="text-[var(--text-muted)]">Reference ID</span>
+                  <span className="text-[var(--text-main)] font-mono text-xs uppercase bg-[var(--bg-tertiary)] px-2 py-1 rounded">{selectedTx.id.substring(0, 12)}...</span>
+                </div>
+              </div>
+              
+              <button className="w-full mt-6 py-3 rounded-xl bg-[var(--accent-primary)] text-white font-bold hover:opacity-90 flex items-center justify-center gap-2">
+                <Copy size={16} />
+                Download Receipt
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

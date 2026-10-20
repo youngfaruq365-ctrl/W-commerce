@@ -80,15 +80,16 @@ class MessagingService {
             return existing;
         }
 
+        const participantsData = senderId === receiverId 
+            ? [{ userId: senderId }]
+            : [{ userId: senderId }, { userId: receiverId }];
+
         return prisma.conversation.create({
             data: {
                 type: 'DIRECT',
                 contextId,
                 participants: {
-                    create: [
-                        { userId: senderId },
-                        { userId: receiverId }
-                    ]
+                    create: participantsData
                 }
             }
         });
@@ -247,7 +248,7 @@ class MessagingService {
             autoReply: null
         };
 
-        if (!isAutoReply && sender.role === 'BUYER' && receiver.role === 'SELLER' && options.recipientOnline === false) {
+        if (!isAutoReply && !options.skipAutoReply && sender.role === 'BUYER' && receiver.role === 'SELLER' && options.recipientOnline === false) {
             const recentAutoReply = await prisma.message.findFirst({
                 where: {
                     conversationId: conversation.id,
@@ -341,7 +342,7 @@ class MessagingService {
         const conversations = [];
         for (const membership of memberships) {
             const conversation = membership.conversation;
-            const otherParticipant = conversation.participants.find((participant) => participant.userId !== userId);
+            const otherParticipant = conversation.participants.find((participant) => participant.userId !== userId) || conversation.participants[0];
             if (!otherParticipant) continue;
 
             const lastMessage = conversation.messages[0];

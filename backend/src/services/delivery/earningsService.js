@@ -1,5 +1,4 @@
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const prisma = require('../../utils/prismaClient');
 const crypto = require('crypto');
 const logger = require('../../utils/logger');
 // We require notificationService here for emitting events
@@ -123,7 +122,17 @@ class EarningsService {
                 }
             });
 
-            // 7. Insert Tracking Event
+            // 7. Increment Courier's User Balance
+            if (assignment.courier && assignment.courier.userId) {
+                await tx.user.update({
+                    where: { id: assignment.courier.userId },
+                    data: {
+                        balance: { increment: deliveryFeeAmount }
+                    }
+                });
+            }
+
+            // 8. Insert Tracking Event
             await tx.deliveryTrackingEvent.create({
                 data: {
                     assignmentId,
@@ -190,19 +199,27 @@ class EarningsService {
      * Gets paginated earnings history.
      */
     async getEarningsHistory(courierId, limit = 50, offset = 0) {
-        return await prisma.courierEarning.findMany({
+        const earnings = await prisma.courierEarning.findMany({
             where: { courierId },
             orderBy: { createdAt: 'desc' },
             take: limit,
-            skip: offset,
-            include: {
-                assignment: {
-                    include: {
-                        stops: true
-                    }
-                }
-            }
+            skip: offset
         });
+
+        // Manually fetch assignments for these earnings
+        const assignmentIds = earnings.map(e => e.assignmentId).filter(Boolean);
+        const assignments = await prisma.deliveryAssignment.findMany({
+            where: { id: { in: assignmentIds } },
+            include: { stops: true, order: true }
+        });
+
+        const assignmentMap = {};
+        assignments.forEach(a => assignmentMap[a.id] = a);
+
+        return earnings.map(e => ({
+            ...e,
+            assignment: e.assignmentId ? assignmentMap[e.assignmentId] : null
+        }));
     }
 }
 

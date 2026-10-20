@@ -1,30 +1,48 @@
 import React, { useState } from 'react';
-import { ShoppingCart, MessageSquare, Tag, X, Send, CheckCircle } from 'lucide-react';
+import { ShoppingCart, MessageSquare, Tag, X, Send, CheckCircle, Megaphone, Copy, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 
 // ─── Send Offer Modal ─────────────────────────────────────────────────────────
 const SendOfferModal = ({ cartGroup, onClose }) => {
   const [discount, setDiscount] = useState(10);
   const [note, setNote] = useState('');
+  const [broadcast, setBroadcast] = useState(true);
   const [sending, setSending] = useState(false);
-  const [sent, setSent] = useState(false);
+  const [result, setResult] = useState(null); // { promoCodes, broadcastCount, expiresAt }
   const [error, setError] = useState(null);
+  const [copiedCode, setCopiedCode] = useState(null);
 
   const discountedTotal = cartGroup.totalValue * (1 - discount / 100);
 
+  const handleCopy = (code) => {
+    navigator.clipboard.writeText(code).then(() => {
+      setCopiedCode(code);
+      setTimeout(() => setCopiedCode(null), 2000);
+    });
+  };
+
   const handleSend = async () => {
     setSending(true);
+    setError(null);
     try {
-      // Send via messaging API — compose an offer message to the buyer
-      const offerText = `🎁 *Special Offer Just for You!*\n\nHi ${cartGroup.buyer.fullName?.split(' ')[0] || 'there'},\n\nI noticed you have items in your cart worth ₦${cartGroup.totalValue.toLocaleString()}. I'd like to offer you a *${discount}% discount* — pay only ₦${Math.round(discountedTotal).toLocaleString()}!\n\n${note ? `📝 ${note}\n\n` : ''}This offer is valid for 24 hours. Reply to claim it! 🚀`;
+      const productIds = cartGroup.items
+        .map(item => item.product?.id)
+        .filter(Boolean);
 
-      await axios.post('/api/v1/messages/send', {
-        recipientId: cartGroup.buyer.id,
-        content: offerText,
+      const res = await axios.post('/api/v1/seller/offers/send-discount-broadcast', {
+        buyerId: cartGroup.buyer.id,
+        productIds,
+        discount,
+        note,
+        broadcast
       });
-      setSent(true);
-      setTimeout(onClose, 2000);
+
+      if (res.data.success) {
+        setResult(res.data.data);
+      } else {
+        setError(res.data.message || 'Failed to send offer.');
+      }
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to send offer. Please try again.');
     } finally {
@@ -40,13 +58,66 @@ const SendOfferModal = ({ cartGroup, onClose }) => {
         exit={{ opacity: 0, scale: 0.92, y: 20 }}
         className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
       >
-        {sent ? (
-          <div className="p-10 flex flex-col items-center justify-center gap-4 text-center">
+        {result ? (
+          // ── Success screen ──
+          <div className="p-8 flex flex-col items-center text-center gap-4">
             <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 300 }}>
               <CheckCircle size={56} className="text-emerald-500" />
             </motion.div>
-            <h3 className="text-xl font-extrabold text-black">Offer Sent!</h3>
-            <p className="text-sm text-gray-500">Your special offer has been sent to {cartGroup.buyer.fullName}.</p>
+            <h3 className="text-xl font-extrabold text-black">Offer Sent! 🎉</h3>
+            <p className="text-sm text-gray-500">
+              A private offer was sent to <span className="font-bold text-black">{cartGroup.buyer.fullName}</span>.
+            </p>
+
+            {/* Promo codes */}
+            <div className="w-full space-y-2 mt-2">
+              {result.promoCodes?.map((pc, i) => (
+                <div key={i} className="flex items-center justify-between bg-gray-50 border border-dashed border-gray-300 rounded-xl px-4 py-3">
+                  <div className="text-left">
+                    <p className="text-xs text-gray-400 font-medium">{pc.productTitle}</p>
+                    <p className="font-extrabold text-black font-mono tracking-widest text-lg">{pc.code}</p>
+                  </div>
+                  <button
+                    onClick={() => handleCopy(pc.code)}
+                    className="ml-3 p-2 rounded-lg bg-white border border-gray-200 hover:bg-gray-100 transition-colors"
+                    title="Copy code"
+                  >
+                    {copiedCode === pc.code ? <Check size={16} className="text-emerald-500" /> : <Copy size={16} className="text-gray-500" />}
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2 text-xs text-gray-400">
+              <span>⏰ Expires in 24 hours</span>
+            </div>
+
+            {/* Broadcast result */}
+            {broadcast && (
+              <div className={`w-full rounded-xl p-3 flex items-center gap-3 ${result.broadcastCount > 0 ? 'bg-indigo-50 border border-indigo-100' : 'bg-gray-50 border border-gray-100'}`}>
+                <Megaphone size={20} className={result.broadcastCount > 0 ? 'text-indigo-500' : 'text-gray-400'} />
+                <div className="text-left">
+                  {result.broadcastCount > 0 ? (
+                    <>
+                      <p className="font-bold text-indigo-700 text-sm">{result.broadcastCount} other buyer{result.broadcastCount !== 1 ? 's' : ''} notified!</p>
+                      <p className="text-xs text-indigo-500">Buyers with this item in their cart/wishlist received a flash deal alert.</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-bold text-gray-600 text-sm">No other buyers to notify</p>
+                      <p className="text-xs text-gray-400">No other buyers currently have these products in their cart or wishlist.</p>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={onClose}
+              className="mt-2 w-full py-3 rounded-xl bg-black text-white font-bold text-sm hover:bg-gray-800 transition-colors"
+            >
+              Done
+            </button>
           </div>
         ) : (
           <>
@@ -116,6 +187,27 @@ const SendOfferModal = ({ cartGroup, onClose }) => {
                 </div>
               </div>
 
+              {/* Broadcast toggle */}
+              <div
+                onClick={() => setBroadcast(!broadcast)}
+                className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${broadcast ? 'border-indigo-400 bg-indigo-50' : 'border-gray-200 bg-gray-50'}`}
+              >
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${broadcast ? 'bg-indigo-600' : 'bg-gray-300'}`}>
+                  <Megaphone size={18} className="text-white" />
+                </div>
+                <div className="flex-1">
+                  <p className={`text-sm font-bold ${broadcast ? 'text-indigo-700' : 'text-gray-600'}`}>
+                    Alert other interested buyers
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    Notify buyers who have these products in their cart or wishlist with a flash deal alert & promo code (valid 24hrs)
+                  </p>
+                </div>
+                <div className={`w-11 h-6 rounded-full transition-colors relative ${broadcast ? 'bg-indigo-600' : 'bg-gray-300'}`}>
+                  <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all ${broadcast ? 'left-6' : 'left-1'}`} />
+                </div>
+              </div>
+
               {/* Personal note */}
               <div>
                 <label className="text-sm font-bold text-black mb-1.5 block">Personal note <span className="text-gray-400 font-normal">(optional)</span></label>
@@ -127,6 +219,11 @@ const SendOfferModal = ({ cartGroup, onClose }) => {
                   className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 transition-all"
                 />
               </div>
+
+              {/* Info pill */}
+              <p className="text-center text-xs text-gray-400">
+                ⏰ A unique promo code will be auto-generated and expires in <strong>24 hours</strong>
+              </p>
             </div>
 
             {/* Footer */}

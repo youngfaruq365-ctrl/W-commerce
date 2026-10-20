@@ -1,65 +1,95 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { Star, Sparkles, LayoutGrid } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import { StaggerContainer, StaggerItem, InteractiveLift, FadeUp } from '../components/MotionEngine';
-import { celebrate } from '../components/CelebrationController';
+import { apiClient as axios } from '@/utils/apiClient';
+import toast from 'react-hot-toast';
 import { useCartStore } from '../store/cartStore';
+import { useBuyerStore } from '../store/buyerStore';
+import { Star, Sparkles, ArrowRight } from 'lucide-react';
+import { PLACEHOLDER_IMAGE } from '@/constants/placeholders';
+import { AnimatedList, AnimatedItem } from '../components/motion/AnimatedList';
+import { ErrorState } from '../components/shared/ErrorState';
+import LayoutEngine from '../components/storefront/LayoutEngine';
+import { 
+  useDiscoveryData, 
+  SellerStoriesSection, 
+  StoresNearYouSection 
+} from '../components/home/DiscoverySections';
+import BuyProductAgain from '../components/home/BuyProductAgain';
+import { offlineStorage } from '../offline/offlineStorage';
 
-import LayoutEngine from '../components/LayoutEngine';
-import PromotionsSection from '../components/PromotionsSection';
-import { ProductCardSkeleton, StoreCardSkeleton } from '../components/SkeletonLoaders';
-import { layoutLibrary } from '../config/layoutLibrary';
+// Generate a unique vivid gradient from a store ID string
+const storeGradient = (id = '') => {
+  const palette = [
+    'from-violet-600 to-indigo-500',
+    'from-rose-500 to-orange-400',
+    'from-cyan-500 to-blue-600',
+    'from-emerald-500 to-teal-600',
+    'from-fuchsia-500 to-pink-600',
+    'from-amber-500 to-yellow-400',
+    'from-sky-500 to-cyan-400',
+    'from-green-500 to-emerald-400',
+  ];
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = id.charCodeAt(i) + ((hash << 5) - hash);
+  return palette[Math.abs(hash) % palette.length];
+};
 
 export default function Home() {
   const [products, setProducts] = useState([]);
   const [stores, setStores] = useState([]);
   const [isLoaded, setIsLoaded] = useState(false);
-  
-  const addToCart = useCartStore(state => state.addToCart);
-  // Optional mockup wishlist for now
-  const wishlist = [];
-  const toggleWishlist = () => {};
-
-  const [searchQuery, setSearchQuery] = React.useState('');
-  const [randomLayouts] = React.useState(() => {
-    const layouts = [];
-    const available = [...layoutLibrary];
-    for (let i = 0; i < 4; i++) {
-       if (available.length > 0) {
-         const randomIndex = Math.floor(Math.random() * available.length);
-         layouts.push(available[randomIndex].id);
-         available.splice(randomIndex, 1);
-       }
-    }
-    return layouts;
-  });
-  const [selectedCategory, setSelectedCategory] = useState('Recommended');
   const navigate = useNavigate();
 
-  const filteredProducts = selectedCategory === 'Recommended' 
-    ? products 
-    : products.filter(p => p.category?.toLowerCase() === selectedCategory.toLowerCase());
+  const addToCart = useCartStore(state => state.addToCart);
+  const { wishlist, addToWishlist, removeFromWishlist, fetchWishlist } = useBuyerStore();
+  const { stories, stores: nearStores, country } = useDiscoveryData();
 
-  React.useEffect(() => {
-    
-    // Fetch products
+  const LAYOUT_OPTIONS = ['luxury-bento', 'editorial-masonry', 'layout-6'];
+  const [randomLayout, setRandomLayout] = useState('luxury-bento');
+
+  useEffect(() => {
+    if (fetchWishlist) fetchWishlist();
+    setRandomLayout(LAYOUT_OPTIONS[Math.floor(Math.random() * LAYOUT_OPTIONS.length)]);
+  }, []);
+
+  useEffect(() => {
     const fetchHomeData = async () => {
+      setIsLoaded(false);
       try {
-        const res = await axios.get('/api/v1/products?limit=32');
+        const res = await axios.get('/api/v1/products?limit=24&page=1');
         if (res.data) {
           const fetchedProducts = res.data.data || res.data.products || (Array.isArray(res.data) ? res.data : []);
-          // map products to what Home expects
-          const mapped = fetchedProducts.map(p => ({
+          
+          // Deduplicate products by id and randomize
+          const uniqueProducts = [];
+          const seenProductIds = new Set();
+          for (const p of fetchedProducts) {
+             if (!seenProductIds.has(p.id)) {
+                 seenProductIds.add(p.id);
+                 uniqueProducts.push(p);
+             }
+          }
+          
+          const mapped = uniqueProducts.map(p => ({
             ...p,
-            coverUrl: p.images?.[0]?.url || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500',
+            coverUrl: p.images?.[0]?.url || PLACEHOLDER_IMAGE,
             price: p.price || 0,
             title: p.title || p.name || 'Product',
           }));
-          setProducts(mapped);
           
-          // extract unique stores
+          // Fisher-Yates shuffle
+          const shuffle = (array) => {
+            const arr = [...array];
+            for (let i = arr.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [arr[j], arr[i]] = [arr[i], arr[j]];
+            }
+            return arr;
+          };
+          
+          setProducts(shuffle(mapped));
+          offlineStorage.saveProducts(fetchedProducts);
+          
           const storeMap = {};
           fetchedProducts.forEach(p => {
              if (p.store && !storeMap[p.store.id]) {
@@ -68,229 +98,221 @@ export default function Home() {
                    name: p.store.storeName,
                    slug: p.store.portfolioSlug,
                    logoUrl: p.store.logoUrl,
-                   logoLetter: p.store.storeName?.[0],
+                   logoLetter: p.store.storeName?.[0] || '?',
                    bannerUrl: p.store.bannerUrl,
+                   country: p.store.country,
+                   averageRating: p.store.averageRating || 0,
                 };
              }
           });
-          setStores(Object.values(storeMap));
+          setStores(shuffle(Object.values(storeMap)));
         }
       } catch (err) {
-        // console.error('Failed to fetch products', err);
+        try {
+          const cached = await offlineStorage.getProducts();
+          if (cached && cached.length > 0) {
+            console.log('[Home] Loaded cached products for offline browsing:', cached.length);
+            const mapped = cached.map(p => ({
+              ...p,
+              coverUrl: p.images?.[0]?.url || p.coverUrl || PLACEHOLDER_IMAGE,
+              price: p.price || 0,
+              title: p.title || p.name || 'Product',
+            }));
+            setProducts(mapped);
+            toast('Offline mode — displaying cached catalog', { icon: '📡' });
+            return;
+          }
+        } catch (cErr) {
+          console.warn('[Home] Offline cache read error:', cErr);
+        }
+        toast.error('Failed to load products');
       } finally {
         setIsLoaded(true);
       }
     };
     fetchHomeData();
   }, []);
-  
-  const handleAddToCart = async (eOrProduct, maybeProduct) => {
-    const isEvent = eOrProduct && typeof eOrProduct.preventDefault === 'function';
-    const e = isEvent ? eOrProduct : null;
-    const product = isEvent ? maybeProduct : eOrProduct;
-
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-      celebrate('standard', e);
-    }
-
-    if (!product || !product.id) return;
-    
-    try {
-      await addToCart(product.id, 1);
-    } catch(err) {
-      // console.error(err);
-    }
-  };  
-
-
-  const categoryImages = {
-    'Fashion': 'https://images.unsplash.com/photo-1445205170230-053b83016050?auto=format&fit=crop&q=80&w=200',
-    'Electronics': 'https://images.unsplash.com/photo-1498049794561-7780e7231661?auto=format&fit=crop&q=80&w=200',
-    'Beauty': 'https://images.unsplash.com/photo-1522337660859-02fbefca4702?auto=format&fit=crop&q=80&w=200',
-    'Books': 'https://images.unsplash.com/photo-1495446815901-a7297e633e8d?auto=format&fit=crop&q=80&w=200',
-    'Home': 'https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&q=80&w=200',
-    'Food': 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&q=80&w=200',
-    'Auto': 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&q=80&w=200',
-    'Gaming': 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&q=80&w=200',
-    'Sports': 'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?auto=format&fit=crop&q=80&w=200',
-    'Toys': 'https://images.unsplash.com/photo-1566576912321-d58ddd7a6088?auto=format&fit=crop&q=80&w=200',
-    'Art': 'https://images.unsplash.com/photo-1460661419201-fd4cecdf8a8b?auto=format&fit=crop&q=80&w=200',
-    'Health': 'https://images.unsplash.com/photo-1505751172876-fa1923c5c528?auto=format&fit=crop&q=80&w=200'
-  };
-
-  const baseCategories = ['Fashion', 'Electronics', 'Beauty', 'Books', 'Home', 'Food', 'Auto', 'Gaming', 'Sports', 'Toys', 'Art', 'Health'];
-  
-  const categories = [
-    { name: 'Recommended', icon: <LayoutGrid size={32} color="#333" fill="#333" />, isIcon: true },
-    ...baseCategories.map(catName => ({
-      name: catName,
-      img: categoryImages[catName] || 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&q=80&w=200'
-    }))
-  ];
 
   return (
-    <>
-      {/* Top Categories Navigation */}
-      <div className="bg-[var(--bg-main)] pt-6 md:pt-8 lg:pt-10 border-b border-black/5">
-        <div className="app-container pb-8 md:pb-12">
-          <div className="hide-scrollbar flex gap-4 md:gap-8 overflow-x-auto pb-2 scroll-smooth">
-            {categories.map(c => (
-              <div onClick={() => setSelectedCategory(c.name)} key={c.name} className={`flex-shrink-0 w-20 md:w-24 flex flex-col items-center cursor-pointer transition-opacity duration-300 ${selectedCategory === c.name ? 'opacity-100' : 'opacity-50 hover:opacity-80'}`}>
-                <div 
-                  className={`w-16 h-16 md:w-20 md:h-20 rounded-full mb-3 flex items-center justify-center overflow-hidden bg-white shadow-[0_4px_10px_rgba(0,0,0,0.1)] transition-transform duration-300 hover:scale-110 ${c.isIcon ? 'border-2 border-black/10' : 'border-2 border-transparent'}`}
-                >
-                  {c.isIcon ? (
-                    <div className="w-14 h-14 md:w-[70px] md:h-[70px] rounded-full bg-[#f5f5f5] flex items-center justify-center">
-                      {c.icon}
-                    </div>
-                  ) : (
-                    <img src={c.img} alt={c.name} loading="lazy" className="w-full h-full object-cover" />
-                  )}
-                </div>
-                <div className="font-semibold text-xs md:text-sm text-[var(--text-primary)] text-center leading-tight">{c.name}</div>
-              </div>
-            ))}
+    <main className="w-full max-w-[1180px] mx-auto px-4 pb-20">
+      {/* PayAI Global Cross-Border Showcase Banner */}
+      <div className="mt-4 mb-2 p-4 sm:p-5 neu-panel bg-gradient-to-r from-blue-600/10 via-indigo-600/10 to-purple-600/10 border border-blue-500/20 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-blue-600 flex items-center justify-center text-white shadow-md shrink-0">
+            <Sparkles size={20} className="animate-pulse" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="font-black text-sm sm:text-base tracking-tight uppercase">
+                Shop Amazon, AliExpress & eBay with PayAI
+              </h3>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-600 text-white uppercase">
+                New
+              </span>
+            </div>
+            <p className="text-xs text-[var(--text-muted)] mt-0.5">
+              15-minute locked landed cost quotes, guaranteed customs duties & PayPal Sandbox checkout.
+            </p>
           </div>
         </div>
+        <button
+          onClick={() => navigate('/payai')}
+          className="neu-button-primary px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 shrink-0 shadow-md cursor-pointer"
+        >
+          <span>Launch PayAI Global</span>
+          <ArrowRight size={15} />
+        </button>
       </div>
 
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="app-container"
-        style={{ paddingTop: '0rem' }}
-      >
-      {/* Marketplace Search Header */}
-      <motion.div 
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.5, delay: 0.1 }}
-        className="text-center mb-8 md:mb-12"
-      >
-        <form 
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (searchQuery.trim()) {
-              navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
-            }
-          }} 
-          className="max-w-2xl mx-auto relative px-4 md:px-0 group"
-        >
-          <input 
-            type="text" 
-            placeholder="What are you looking for?" 
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="glass-standard w-full py-4 px-6 md:py-5 md:px-8 rounded-[50px] bg-transparent border border-[var(--border-color)] text-[var(--text-primary)] text-base md:text-lg shadow-[0_10px_30px_rgba(0,0,0,0.15)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)] focus:shadow-[0_10px_40px_rgba(0,0,0,0.2)] transition-all duration-300" 
-          />
-          <button type="submit" className="btn btn-primary absolute right-6 md:right-2 top-2 bottom-2 rounded-full px-6 md:px-8 font-bold hover:scale-105 transition-transform duration-300">Search</button>
-        </form>
-      </motion.div>
+      {/* Categories Top Nav */}
+      <section className="py-6 border-b border-[var(--border-color)] bg-[var(--bg-primary)]">
+        <div className="flex gap-6 overflow-x-auto px-4 md:px-8 hide-scrollbar snap-x mx-auto max-w-7xl">
+          {[
+            { name: 'Recommended', isIcon: true },
+            { name: 'Beauty & Personal Care', img: 'https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=200&h=200&fit=crop' },
+            { name: "Women's Clothing", img: 'https://images.unsplash.com/photo-1550639525-c97d455acf70?w=200&h=200&fit=crop' },
+            { name: 'Home & Kitchen', img: 'https://images.unsplash.com/photo-1556910103-1c02745a872f?w=200&h=200&fit=crop' },
+            { name: "Men's Clothing", img: 'https://images.unsplash.com/photo-1617137968427-85924c800a22?w=200&h=200&fit=crop' },
+            { name: "Women's Shoes", img: 'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=200&h=200&fit=crop' },
+          ].map((cat, i) => (
+            <div 
+              key={i} 
+              onClick={() => {
+                if (cat.name === 'Recommended') {
+                  const el = document.getElementById('products-section');
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                } else {
+                  navigate(`/search?q=${encodeURIComponent(cat.name)}`);
+                }
+              }}
+              className="flex flex-col items-center gap-3 shrink-0 cursor-pointer group snap-start"
+            >
+              <div className={`w-[80px] h-[80px] rounded-full overflow-hidden flex items-center justify-center transition-all duration-300 ${cat.name === 'Recommended' ? 'border border-[var(--border-color)] bg-gray-50 shadow-sm group-hover:bg-gray-100' : 'bg-gray-100 group-hover:ring-2 ring-[var(--text-main)] ring-offset-2 ring-offset-[var(--bg-primary)]'}`}>
+                {cat.isIcon ? (
+                  <div className="grid grid-cols-2 gap-1 w-8 h-8 opacity-80 group-hover:opacity-100 transition-opacity">
+                    <div className="bg-black rounded-sm w-full h-full"></div>
+                    <div className="bg-black rounded-full w-full h-full"></div>
+                    <div className="bg-black rounded-sm w-full h-full"></div>
+                    <div className="bg-black rounded-sm w-full h-full" style={{ borderBottomRightRadius: '8px' }}></div>
+                  </div>
+                ) : (
+                  <img src={cat.img} alt={cat.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                )}
+              </div>
+              <span className={`text-[13px] text-center w-[100px] leading-tight ${cat.name === 'Recommended' ? 'font-bold text-[var(--text-main)]' : 'font-medium text-[var(--text-muted)] group-hover:text-[var(--text-main)]'}`}>
+                {cat.name}
+              </span>
+            </div>
+          ))}
+        </div>
+      </section>
 
-
-
-      {/* Trending Products - Random Layout on Refresh */}
-      <div style={{ marginBottom: '4rem' }}>
-        {!isLoaded ? (
-          <div>
-            <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1.5rem' }}>{selectedCategory === 'Recommended' ? 'Trending Across the Platform' : `${selectedCategory} Products`}</h2>
-            <StaggerContainer className="product-grid">
-              {Array.from({ length: 8 }).map((_, i) => <StaggerItem key={i}><ProductCardSkeleton /></StaggerItem>)}
-            </StaggerContainer>
+      {/* Products Section */}
+      <section id="products-section" className="py-12">
+        {isLoaded && products.length === 0 ? (
+          <div className="py-12 flex justify-center">
+            <ErrorState 
+              variant="empty"
+              title="No Products Found"
+              message="We couldn't find any products at the moment. Please check back later!"
+            />
           </div>
         ) : (
-          <div className="space-y-16">
-            {randomLayouts.map((layoutId, index) => {
-              // Duplicate products so we always have enough for 4 blocks even if DB has few
-              const repeatedProducts = [
-                ...filteredProducts, 
-                ...filteredProducts, 
-                ...filteredProducts, 
-                ...filteredProducts
-              ];
-              const productsForLayout = repeatedProducts.slice(index * 8, (index + 1) * 8);
-              if (productsForLayout.length === 0) return null;
-              
-              const sectionTitles = [
-                selectedCategory === 'Recommended' ? 'Trending Across the Platform' : `${selectedCategory} Products`,
-                'New Arrivals',
-                'Featured Collections',
-                'Don\'t Miss Out'
-              ];
-
-              return (
+          <div className="min-h-[400px] relative">
+            {!isLoaded ? (
+              <div key="loading-skeleton" className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                {Array.from({length: 8}).map((_, i) => (
+                  <div key={`skel-${i}`} className="neu-card h-80 animate-pulse bg-gray-200/20 rounded-xl" />
+                ))}
+              </div>
+            ) : (
+              <div key={`layout-${randomLayout}`} className="animate-fade-in">
                 <LayoutEngine 
-                  key={`${layoutId}-${index}`}
-                  section={{ id: `trending-random-${index}`, type: layoutId, title: sectionTitles[index] || 'More Products' }}
-                  products={productsForLayout}
-                  addToCart={handleAddToCart}
-                  wishlist={wishlist}
-                  toggleWishlist={toggleWishlist}
+                    section={{ type: randomLayout, title: '', hideTitle: true }} 
+                    products={products} 
+                    addToCart={(productId) => addToCart(productId, 1)} 
+                    wishlist={wishlist}
+                    toggleWishlist={(productId) => {
+                      const isWished = wishlist.some(w => String(w.productId) === String(productId) || String(w.product?.id) === String(productId));
+                      if (isWished) removeFromWishlist(productId);
+                      else addToWishlist(productId);
+                    }}
                 />
-              );
-            })}
+              </div>
+            )}
           </div>
         )}
-      </div>
+      </section>
 
-      {/* Promotions Section */}
-      <PromotionsSection products={products} addToCart={handleAddToCart} />
-
-      {/* Popular Stores */}
-      <div className="mb-0">
-        <h2 className="flex items-center gap-2 mb-6 text-xl md:text-2xl font-bold">
-          <Sparkles color="var(--accent-gold)" /> Popular Stores
-        </h2>
-        <StaggerContainer className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-          {!isLoaded ? (
-            Array.from({ length: 4 }).map((_, i) => <StaggerItem key={i}><StoreCardSkeleton /></StaggerItem>)
-          ) : (
-            Object.values(stores).map(store => (
-            <StaggerItem key={store.id}>
-            <Link to={`/store/${store.slug}`} className="no-underline text-inherit block group h-full">
-              <div className="store-card glass-standard flex gap-4 items-center bg-transparent transition-transform duration-300 hover:-translate-y-1 p-4 md:p-5 rounded-xl overflow-hidden relative text-[var(--text-primary)] shadow-md hover:shadow-xl h-full"
+      {/* The Real Store Section */}
+      <section className="py-6">
+        {!isLoaded ? (
+          <div className="flex gap-6 overflow-x-auto pb-8 hide-scrollbar snap-x">
+            <div className="animate-pulse flex gap-6 w-full">
+              {[1,2,3].map(i => <div key={i} className="neu-card w-[300px] md:w-[340px] h-64 shrink-0 bg-gray-200/20 rounded-xl"></div>)}
+            </div>
+          </div>
+        ) : (
+          <AnimatedList className="flex gap-6 overflow-x-auto pb-8 hide-scrollbar snap-x">
+            {stores.map(store => (
+              <AnimatedItem
+                key={store.id}
+                className="neu-card shrink-0 w-[300px] md:w-[340px] flex flex-col group snap-start hover:-translate-y-1 transition-transform overflow-hidden"
               >
-                {/* Background Image with Gradient Overlay */}
-                {store.bannerUrl ? (
-                  <>
-                    <div className="store-bg absolute inset-0 z-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-110" style={{
-                      backgroundImage: `url(${store.bannerUrl})`
-                    }} />
-                    {/* Overlay removed as requested */}
-                  </>
-                ) : (
-                  <div className="absolute inset-0 z-0 bg-gradient-to-br from-[var(--bg-tertiary)] to-[var(--bg-secondary)]" />
-                )}
+                <Link to={`/store/${store.slug || store.id}`} onClick={() => window.scrollTo(0, 0)} className="block h-full cursor-pointer">
+                  {/* Full Card Banner/Image */}
+                  <div className="h-[400px] relative overflow-hidden bg-[var(--bg-secondary)] rounded-xl">
+                    {store.bannerUrl ? (
+                      <img src={store.bannerUrl} alt={store.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                    ) : (
+                      <div className={`w-full h-full bg-gradient-to-br ${storeGradient(store.id)} flex items-center justify-center group-hover:scale-105 transition-transform duration-500`}>
+                        <span className="text-8xl font-black text-white/30 select-none">{store.logoLetter}</span>
+                      </div>
+                    )}
+                    
+                    {/* Dark gradient overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent flex flex-col justify-end p-5">
+                      <div className="flex justify-between items-end">
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-bold text-white text-lg truncate mb-1">
+                            {store.name && store.name !== store.country ? store.name : `Store ${store.id?.substring(0, 6)}`}
+                          </h4>
+                          {store.averageRating > 0 && (
+                          <div className="font-bold text-white text-sm flex items-center gap-1">
+                            <Star size={12} className="fill-yellow-400 text-yellow-400" /> {store.averageRating.toFixed(1)}
+                          </div>
+                          )}
+                        </div>
+                        
+                        {/* Action icon */}
+                        <div className="text-white shrink-0 ml-3 pb-1">
+                           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Country badge */}
+                    {store.country && (
+                      <div className="absolute top-3 left-3 bg-black/60 backdrop-blur-sm text-white text-xs font-bold px-3 py-1 rounded-full">
+                        {store.country}
+                      </div>
+                    )}
+                  </div>
+                </Link>
+              </AnimatedItem>
+            ))}
+          </AnimatedList>
+        )}
+      </section>
 
-                {/* Content */}
-                <div className="w-14 h-14 md:w-16 md:h-16 rounded-full bg-white text-black flex items-center justify-center text-xl md:text-2xl font-black shrink-0 z-10 shadow-[0_2px_10px_rgba(0,0,0,0.2)] overflow-hidden">
-                  {store.logoUrl ? (
-                    <img src={store.logoUrl.startsWith('http') || store.logoUrl.startsWith('/') ? store.logoUrl : `/${store.logoUrl}`} alt="logo" className="w-full h-full object-cover" />
-                  ) : (
-                    store.logoLetter || store.name.charAt(0)
-                  )}
-                </div>
-                <div className="min-w-0 flex-1 z-10">
-                  <h3 className="m-0 mb-1 text-lg md:text-xl whitespace-nowrap overflow-hidden text-ellipsis font-bold text-[var(--text-primary)] group-hover:text-[var(--accent-primary)] transition-colors">{store.name}</h3>
-                  <div className="text-[var(--text-secondary)] text-xs md:text-sm flex items-center gap-2 mb-1">
-                    <span>{36 + (store.name.length * 12)} Followers</span>
-                    <span className="opacity-50">|</span>
-                    <span>{5 + (store.name.length % 4)}.{store.name.length % 9}K+ Sold</span>
-                  </div>
-                  <div className="text-[var(--text-primary)] text-sm flex items-center gap-1 font-bold">
-                    4.8 <Star size={14} fill="var(--accent-gold)" color="var(--accent-gold)" className="ml-px" />
-                  </div>
-                </div>
-              </div>
-            </Link>
-            </StaggerItem>
-          )))}
-        </StaggerContainer>
-      </div>
-    </motion.div>
-    </>
+      {/* Stores Near You & Stories */}
+      <SellerStoriesSection stories={stories} />
+      <StoresNearYouSection stores={nearStores} country={country} />
+
+      {/* Buy product again */}
+      <BuyProductAgain products={products} />
+
+
+    </main>
   );
 }

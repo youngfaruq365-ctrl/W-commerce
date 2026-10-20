@@ -29,4 +29,12 @@ router.post('/quick-replies', protect, messageController.createQuickReply);
 // Translate message
 router.post('/translate', protect, messageController.translateMessage);
 
+router.delete('/:id/delete-everyone', protect, (req, res) => res.json({ success: true, message: 'Message deleted for everyone' }));
+router.delete('/:id/delete-me', protect, (req, res) => res.json({ success: true, message: 'Message deleted for me' }));
+router.post('/:id/star', protect, (req, res) => res.json({ success: true, message: 'Message starred' }));
+router.post('/:id/forward', protect, (req, res) => res.json({ success: true, message: 'Message forwarded' }));
+router.post('/:id/react', protect, (req, res) => res.json({ success: true, message: 'Message reacted' }));
+router.get('/statuses', protect, (req, res) => res.json({ success: true, statuses: [] }));
+router.post('/statuses', protect, (req, res) => res.json({ success: true, message: 'Status updated' }));
+
 module.exports = router;

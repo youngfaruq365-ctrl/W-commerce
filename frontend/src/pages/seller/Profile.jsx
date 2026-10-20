@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 import { MapPin, Star, Package, MessageCircle, UserPlus, CheckCircle2, ChevronLeft, Store as StoreIcon, ShieldCheck, Clock, TrendingUp } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '../../store/authStore';
 import { gxPrompt } from '../../components/shared/ui/GXDialog';
+import { showNotification } from '../../utils/notifications';
 
 const SellerProfile = () => {
   const { sellerId } = useParams();
@@ -68,9 +69,10 @@ const SellerProfile = () => {
       });
       if (res.data.success) {
         toast.success('Message sent successfully!');
+        showNotification('Message Sent', 'Your message has been delivered.', 'success');
       }
     } catch (err) {
-      toast.error('Failed to send message');
+      toast.error(err.response?.data?.message || err.message || 'Failed to send message');
     }
   };
 
@@ -108,11 +110,12 @@ const SellerProfile = () => {
         {/* Top Section: Identity & Quick Actions */}
         <motion.div 
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
-          className="bg-[#111] border border-white/5 rounded-3xl p-6 sm:p-8 relative overflow-hidden"
+          className="relative bg-white/20 backdrop-blur-[24px] border border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] rounded-[2.5rem] p-6 sm:p-8 overflow-hidden"
         >
+          <div className="absolute inset-0 pointer-events-none rounded-[2.5rem]" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0) 100%)', boxShadow: 'inset 0 2px 4px rgba(255,255,255,0.2)' }} />
           <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-[80px] -z-10 pointer-events-none translate-x-1/2 -translate-y-1/2"></div>
           
-          <div className="flex flex-col sm:flex-row gap-6 sm:items-start">
+          <div className="relative z-10 flex flex-col sm:flex-row gap-6 sm:items-start">
             <div className="relative shrink-0 mx-auto sm:mx-0">
               <div className={`w-28 h-28 sm:w-32 sm:h-32 rounded-full p-1 ${seller.isVerified ? 'bg-gradient-to-tr from-green-500 to-green-400 shadow-[0_0_15px_rgba(34,197,94,0.5)] border-2 border-green-500' : 'bg-gradient-to-tr from-gray-800 to-gray-700'}`}>
                 <div className="w-full h-full bg-black rounded-full flex items-center justify-center overflow-hidden">
@@ -163,8 +166,8 @@ const SellerProfile = () => {
                 <button onClick={handleMessage} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl font-semibold transition-colors">
                   <MessageCircle size={18} /> Message
                 </button>
-                {store && store.slug && (
-                  <Link to={`/store/${store.slug}`} className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 border border-white/20 hover:border-white/40 text-white rounded-xl font-semibold transition-colors">
+                {store && (
+                  <Link to={`/store/${store.slug || store.id}`} className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 border border-white/20 hover:border-white/40 text-white rounded-xl font-semibold transition-colors">
                     <StoreIcon size={18} /> Visit Store
                   </Link>
                 )}
@@ -176,9 +179,10 @@ const SellerProfile = () => {
         {/* About & Performance Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* About Section */}
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.1 }} className="bg-[#111] border border-white/5 rounded-3xl p-6 sm:p-8">
-            <h2 className="text-xs font-bold text-gray-500 tracking-wider uppercase mb-4">About the Seller</h2>
-            <div className="prose prose-invert prose-sm">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.1 }} className="relative bg-white/20 backdrop-blur-[24px] border border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] rounded-[2rem] p-6 sm:p-8 overflow-hidden">
+            <div className="absolute inset-0 pointer-events-none rounded-[2rem]" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0) 100%)', boxShadow: 'inset 0 2px 4px rgba(255,255,255,0.2)' }} />
+            <h2 className="relative z-10 text-[10px] font-black text-gray-400 tracking-widest uppercase mb-4 drop-shadow-sm">About the Seller</h2>
+            <div className="relative z-10 prose prose-invert prose-sm">
               <p className="text-gray-300 leading-relaxed">
                 {store?.bio || store?.description || "This seller hasn't added a biography yet."}
               </p>
@@ -186,30 +190,36 @@ const SellerProfile = () => {
           </motion.div>
 
           {/* Trust & Performance */}
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.2 }} className="bg-[#111] border border-white/5 rounded-3xl p-6 sm:p-8">
-            <h2 className="text-xs font-bold text-gray-500 tracking-wider uppercase mb-4">Trust & Performance</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-black/50 rounded-2xl p-4 border border-white/5">
-                <div className="flex items-center gap-2 text-gray-400 mb-1">
-                  <Star size={16} className="text-yellow-500" /> <span className="text-sm font-medium">Rating</span>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.2 }} className="relative bg-white/20 backdrop-blur-[24px] border border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] rounded-[2rem] p-6 sm:p-8 overflow-hidden">
+            <div className="absolute inset-0 pointer-events-none rounded-[2rem]" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0) 100%)', boxShadow: 'inset 0 2px 4px rgba(255,255,255,0.2)' }} />
+            <h2 className="relative z-10 text-[10px] font-black text-gray-400 tracking-widest uppercase mb-4 drop-shadow-sm">Trust & Performance</h2>
+            <div className="relative z-10 grid grid-cols-2 gap-4">
+              <div className="relative bg-white/5 backdrop-blur-md rounded-2xl p-4 border border-white/10 shadow-inner overflow-hidden">
+                <div className="absolute inset-0 pointer-events-none rounded-2xl" style={{ boxShadow: 'inset 0 2px 4px rgba(255,255,255,0.1)' }} />
+                <div className="relative z-10 flex items-center gap-2 text-gray-400 mb-1">
+                  <Star size={16} className="text-yellow-500 drop-shadow-md" /> <span className="text-sm font-bold">Rating</span>
                 </div>
-                <div className="text-2xl font-black text-white">{(stats?.rating || 0).toFixed(1)}</div>
+                <div className="relative z-10 text-2xl font-black text-white drop-shadow-md">{(stats?.rating || 0).toFixed(1)}</div>
               </div>
-              <div className="bg-black/50 rounded-2xl p-4 border border-white/5">
-                <div className="flex items-center gap-2 text-gray-400 mb-1">
-                  <Package size={16} className="text-blue-400" /> <span className="text-sm font-medium">Orders</span>
+              <div className="relative bg-white/5 backdrop-blur-md rounded-2xl p-4 border border-white/10 shadow-inner overflow-hidden">
+                <div className="absolute inset-0 pointer-events-none rounded-2xl" style={{ boxShadow: 'inset 0 2px 4px rgba(255,255,255,0.1)' }} />
+                <div className="relative z-10 flex items-center gap-2 text-gray-400 mb-1">
+                  <Package size={16} className="text-blue-400 drop-shadow-md" /> <span className="text-sm font-bold">Orders</span>
                 </div>
-                <div className="text-2xl font-black text-white">{stats?.orderCount >= 1000 ? (stats.orderCount/1000).toFixed(1)+'K' : (stats?.orderCount || 0)}</div>
+                <div className="relative z-10 text-2xl font-black text-white drop-shadow-md">{stats?.orderCount >= 1000 ? (stats.orderCount/1000).toFixed(1)+'K' : (stats?.orderCount || 0)}</div>
               </div>
-              <div className="bg-black/50 rounded-2xl p-4 border border-white/5">
-                <div className="flex items-center gap-2 text-gray-400 mb-1">
-                  <TrendingUp size={16} className="text-emerald-400" /> <span className="text-sm font-medium">Response</span>
+              <div className="relative bg-white/5 backdrop-blur-md rounded-2xl p-4 border border-white/10 shadow-inner overflow-hidden">
+                <div className="absolute inset-0 pointer-events-none rounded-2xl" style={{ boxShadow: 'inset 0 2px 4px rgba(255,255,255,0.1)' }} />
+                <div className="relative z-10 flex items-center gap-2 text-gray-400 mb-1">
+                  <TrendingUp size={16} className="text-emerald-400 drop-shadow-md" /> <span className="text-sm font-bold">Response</span>
                 </div>
-                <div className="text-2xl font-black text-white">{stats?.responseRate || '98'}%</div>
+                <div className="relative z-10 text-2xl font-black text-white drop-shadow-md">{stats?.responseRate || '98'}%</div>
               </div>
-              <div className="bg-black/50 rounded-2xl p-4 border border-white/5 flex flex-col justify-center">
+              <div className="relative bg-white/5 backdrop-blur-md rounded-2xl p-4 border border-white/10 shadow-inner flex flex-col justify-center overflow-hidden">
+                <div className="absolute inset-0 pointer-events-none rounded-2xl" style={{ boxShadow: 'inset 0 2px 4px rgba(255,255,255,0.1)' }} />
+                <div className="relative z-10">
                 {stats?.orderCount >= 1000 && stats?.rating >= 4.8 ? (
-                  <div className="flex items-center gap-2 text-purple-400 font-bold">
+                  <div className="flex items-center gap-2 text-purple-400 font-bold drop-shadow-md">
                     <ShieldCheck size={20} /> Platinum Tier
                   </div>
                 ) : stats?.orderCount >= 100 && stats?.rating >= 4.5 ? (
@@ -221,6 +231,7 @@ const SellerProfile = () => {
                     <ShieldCheck size={20} /> Silver Tier
                   </div>
                 )}
+                </div>
               </div>
             </div>
           </motion.div>
@@ -231,16 +242,17 @@ const SellerProfile = () => {
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.3 }} className="space-y-6">
             
             {/* Store Card */}
-            <Link to={`/store/${store.slug}`} className="block group">
-              <div className="bg-gradient-to-r from-blue-900/20 to-purple-900/20 border border-blue-500/20 rounded-3xl p-6 sm:p-8 hover:border-blue-500/40 transition-all">
-                <h2 className="text-xs font-bold text-blue-400 tracking-wider uppercase mb-4">Seller's Store</h2>
-                <div className="flex items-center justify-between">
+            <Link to={`/store/${store.slug || store.id}`} className="block group">
+              <div className="relative bg-gradient-to-r from-blue-900/40 to-purple-900/40 backdrop-blur-[24px] border border-blue-500/30 rounded-[2.5rem] p-6 sm:p-8 hover:border-blue-500/60 shadow-[0_8px_32px_0_rgba(59,130,246,0.15)] transition-all overflow-hidden">
+                <div className="absolute inset-0 pointer-events-none rounded-[2.5rem]" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 100%)', boxShadow: 'inset 0 2px 4px rgba(255,255,255,0.2)' }} />
+                <h2 className="relative z-10 text-[10px] font-black text-blue-300 tracking-widest uppercase mb-4 drop-shadow-sm">Seller's Store</h2>
+                <div className="relative z-10 flex items-center justify-between">
                   <div>
-                    <h3 className="text-xl font-bold text-white mb-1 group-hover:text-blue-400 transition-colors">{store.name}</h3>
-                    <p className="text-gray-400 text-sm line-clamp-1">{store.description}</p>
+                    <h3 className="text-xl font-bold text-white mb-1 group-hover:text-blue-300 transition-colors drop-shadow-md">{store.name}</h3>
+                    <p className="text-gray-300 text-sm line-clamp-1">{store.description}</p>
                   </div>
-                  <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center group-hover:bg-blue-600 transition-colors">
-                    <ChevronLeft size={20} className="rotate-180" />
+                  <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center group-hover:bg-blue-600 transition-colors border border-white/20 shadow-inner">
+                    <ChevronLeft size={24} className="rotate-180" />
                   </div>
                 </div>
               </div>
@@ -248,15 +260,16 @@ const SellerProfile = () => {
 
             {/* Products Grid */}
             {store.topProducts && store.topProducts.length > 0 && (
-              <div className="bg-[#111] border border-white/5 rounded-3xl p-6 sm:p-8">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-xs font-bold text-gray-500 tracking-wider uppercase">Top Products</h2>
-                  <Link to={`/store/${store.slug}`} className="text-sm font-medium text-blue-400 hover:text-blue-300">View all →</Link>
+              <div className="relative bg-white/20 backdrop-blur-[24px] border border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] rounded-[2.5rem] p-6 sm:p-8 overflow-hidden">
+                <div className="absolute inset-0 pointer-events-none rounded-[2.5rem]" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0) 100%)', boxShadow: 'inset 0 2px 4px rgba(255,255,255,0.2)' }} />
+                <div className="relative z-10 flex items-center justify-between mb-6">
+                  <h2 className="text-[10px] font-black text-gray-400 tracking-widest uppercase drop-shadow-sm">Top Products</h2>
+                  <Link to={`/store/${store.slug || store.id}`} className="text-sm font-bold text-blue-400 hover:text-blue-300 drop-shadow-sm">View all →</Link>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="relative z-10 grid grid-cols-2 sm:grid-cols-4 gap-4">
                   {store.topProducts.slice(0,4).map(product => (
-                    <Link key={product.id} to={`/product/${product.id}`} className="group relative bg-black/50 rounded-2xl overflow-hidden border border-white/5 hover:border-white/20 transition-colors">
-                      <div className="aspect-[4/5] bg-gray-900 relative">
+                    <Link key={product.id} to={`/product/${product.id}`} className="group relative bg-white/5 backdrop-blur-md rounded-2xl overflow-hidden border border-white/10 hover:border-white/30 transition-colors shadow-[0_4px_16px_rgba(0,0,0,0.3)]">
+                      <div className="aspect-[4/5] bg-white/5 relative">
                         {product.imageUrl ? (
                           <img src={product.imageUrl} alt={product.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                         ) : (
@@ -266,7 +279,7 @@ const SellerProfile = () => {
                       </div>
                       <div className="p-3">
                         <p className="text-xs font-medium text-gray-300 truncate mb-1">{product.title}</p>
-                        <p className="text-sm font-black text-white">${product.price}</p>
+                        <p className="text-sm font-black text-white">₦{product.price}</p>
                       </div>
                     </Link>
                   ))}
@@ -275,12 +288,13 @@ const SellerProfile = () => {
             )}
           </motion.div>
         ) : (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.3 }} className="bg-[#111] border border-white/5 rounded-3xl p-12 flex flex-col items-center text-center">
-            <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center text-gray-500 mb-4">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.3 }} className="relative bg-white/20 backdrop-blur-[24px] border border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] rounded-[2.5rem] p-12 flex flex-col items-center text-center overflow-hidden">
+            <div className="absolute inset-0 pointer-events-none rounded-[2.5rem]" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0) 100%)', boxShadow: 'inset 0 2px 4px rgba(255,255,255,0.2)' }} />
+            <div className="relative z-10 w-16 h-16 bg-white/10 rounded-2xl flex items-center justify-center text-gray-400 mb-4 border border-white/20 shadow-inner">
               <StoreIcon size={32} />
             </div>
-            <h3 className="text-lg font-bold text-white mb-2">No Storefront Yet</h3>
-            <p className="text-gray-400 text-sm max-w-sm mx-auto">This seller hasn't published a storefront or added any products yet, but you can still message them directly.</p>
+            <h3 className="relative z-10 text-lg font-black text-white mb-2 drop-shadow-sm">No Storefront Yet</h3>
+            <p className="relative z-10 text-gray-400 text-sm max-w-sm mx-auto font-medium">This seller hasn't published a storefront or added any products yet, but you can still message them directly.</p>
           </motion.div>
         )}
 

@@ -11,11 +11,14 @@ const repeatPurchaseService = require('../services/repeatPurchaseService');
 
 const ORDER_TRANSITIONS = {
     PENDING: ['PAID', 'PACKED', 'CANCELLED'],
+    PROCESSING: ['PACKED', 'SHIPPED', 'CANCELLED'],
     AWAITING_DIRECT_PAYMENT: ['PAID', 'CANCELLED'],
     PAID: ['PACKED', 'SHIPPED', 'CANCELLED', 'DISPUTED'],
-    PACKED: ['CONFIRMED', 'SHIPPED', 'CANCELLED', 'DISPUTED'],
-    CONFIRMED: ['SHIPPED', 'CANCELLED', 'DISPUTED'],
-    SHIPPED: ['IN_TRANSIT', 'DELIVERED', 'DISPUTED'],
+    PACKED: ['CONFIRMED', 'SHIPPED', 'CANCELLED', 'DISPUTED', 'AWAITING_COURIER', 'HANDED_TO_COURIER', 'IN_TRANSIT'],
+    AWAITING_COURIER: ['SHIPPED', 'IN_TRANSIT', 'HANDED_TO_COURIER', 'CANCELLED', 'DISPUTED'],
+    CONFIRMED: ['SHIPPED', 'CANCELLED', 'DISPUTED', 'IN_TRANSIT'],
+    SHIPPED: ['IN_TRANSIT', 'DELIVERED', 'DISPUTED', 'OUT_FOR_DELIVERY'],
+    HANDED_TO_COURIER: ['SHIPPED', 'IN_TRANSIT', 'DELIVERED', 'DISPUTED'],
     IN_TRANSIT: ['OUT_FOR_DELIVERY', 'DELIVERED', 'DISPUTED'],
     OUT_FOR_DELIVERY: ['DELIVERED', 'DISPUTED'],
     DELIVERED: ['COMPLETED', 'DISPUTED'],
@@ -33,7 +36,7 @@ function canTransitionOrderStatus(currentStatus, nextStatus) {
 }
 
 
-const checkoutService = require('../services/checkoutService');
+const checkoutV2Service = require('../services/checkoutV2Service');
 
 // Create New Order
 exports.createOrder = async (req, res) => {
@@ -45,30 +48,33 @@ exports.createOrder = async (req, res) => {
             return res.status(400).json({ success: false, message: 'No items in order' });
         }
 
-        const { parentOrder: newOrder, totalAmountUSD } = await checkoutService.processCheckout({
-            userId: buyerId,
+         const { marketplaceOrder: newOrder, summary } = await checkoutV2Service.processCheckoutV2({
+            buyerId: buyerId,
             items,
-            shippingAddress,
+            fromCart: false,
+            addressData: shippingAddress,
             isConsolidated,
-            paymentMethod: paymentMethod || 'CARD',
-            initialStatus: 'PENDING'
+            paymentMethod: paymentMethod || 'CARD'
         });
 
         // Reconstruct purchasedProducts for post-order events
         const purchasedProducts = items.map(item => ({
             id: String(item.id || item.productId),
-            quantity: Number(item.qty || item.quantity || 1)
+            productId: item.productId,
+            name: 'Product', // Assuming name isn't critical for basic tracking if not provided
+            quantity: item.quantity,
+            price: item.price
         }));
 
-        const orderItemsData = purchasedProducts.map(p => ({ productId: p.id })); // simplified array for urgency update
+        const orderItemsData = purchasedProducts.map(p => ({ productId: p.productId || p.id })); // simplified array for urgency update
 
-        // Create Financial Record (Pending)
+        // 3. Create Transaction Record for initial payment intent
         await prisma.transaction.create({
             data: {
                 userId: buyerId,
                 type: 'PURCHASE',
-                amount: totalAmountUSD,
-                currency: 'USD',
+                amount: summary.grandTotal,
+                currency: summary.currency,
                 status: 'PENDING',
                 referenceId: newOrder.id,
                 description: `Order #${newOrder.id.substring(0, 8)} - Pending Payment`
@@ -138,7 +144,7 @@ exports.createOrder = async (req, res) => {
 
     } catch (error) {
         logger.error(`Create Order Error: ${error.message}`);
-        res.status(500).json({ success: false, message: error.message });
+        res.status(500).json({ success: false, message: process.env.NODE_ENV === 'production' ? 'An error occurred' : error.message });
     }
 };
 
@@ -160,22 +166,50 @@ exports.getSellerOrders = async (req, res) => {
                         some: {
                             product: { storeId: store.id }
                         }
-                    }
+                    },
+                    // Exclude cancelled and refunded orders
+                    status: { notIn: ['CANCELLED', 'REFUNDED'] },
+                    paymentStatus: { not: 'FAILED' },
+                    // For online payment methods, do not show pending unpaid checkouts to sellers
+                    NOT: {
+                        AND: [
+                            { paymentMethod: { in: ['PAYSTACK', 'CARD', 'STRIPE', 'FLUTTERWAVE'] } },
+                            { paymentStatus: 'PENDING' }
+                        ]
+                    },
+                    // Avoid duplicating multi-seller parent orders:
+                    // Show either single-seller orders (no children) or this seller's specific sub-order
+                    OR: [
+                        { parentOrderId: { not: null }, sellerId: req.user.id },
+                        { parentOrderId: null, subOrders: { none: {} } }
+                    ]
                 },
                 include: {
                     buyer: { select: { fullName: true, email: true } },
-                    items: { include: { product: { include: { images: true } } } }
+                    items: { 
+                        where: { product: { storeId: store.id } },
+                        include: { product: { include: { images: true } } } 
+                    },
+                    deliveryAssignment: true
                 },
                 orderBy: { createdAt: 'desc' }
             }),
             prisma.fulfillmentOrder.findMany({
                 where: {
-                    sellerId: req.user.id
+                    sellerId: req.user.id,
+                    status: { notIn: ['CANCELLED', 'REFUNDED'] },
+                    paymentStatus: { not: 'FAILED' },
+                    NOT: {
+                        AND: [
+                            { marketplaceOrder: { paymentMethod: { in: ['PAYSTACK', 'CARD', 'STRIPE', 'FLUTTERWAVE'] } } },
+                            { paymentStatus: 'PENDING' }
+                        ]
+                    }
                 },
                 include: {
                     buyer: { select: { fullName: true, email: true } },
                     items: { include: { product: { include: { images: true } } } },
-                    marketplaceOrder: { select: { shippingSnapshot: true } }
+                    marketplaceOrder: { select: { shippingSnapshot: true, paymentMethod: true } }
                 },
                 orderBy: { createdAt: 'desc' }
             })
@@ -184,6 +218,8 @@ exports.getSellerOrders = async (req, res) => {
         function mapFulfillmentToLegacy(fo) {
             return {
                 ...fo,
+                totalAmount: fo.grandTotal || fo.subtotal,
+                paymentMethod: fo.marketplaceOrder?.paymentMethod || 'Unknown',
                 shippingAddress: fo.marketplaceOrder?.shippingSnapshot || null,
                 status: fo.status === 'DELIVERED' ? 'DELIVERED' : fo.status,
                 items: fo.items.map(item => ({
@@ -208,24 +244,79 @@ exports.getSellerOrders = async (req, res) => {
 // Buyer: Get my order history
 exports.getBuyerOrders = async (req, res) => {
     try {
-        const orders = await prisma.order.findMany({
-            where: { buyerId: req.user.id },
-            include: {
-                items: { include: { product: { include: { store: true, images: true } } } },
-                trackingEvents: true
-            },
-            orderBy: { createdAt: 'desc' }
-        });
+        const [orders, marketplaceOrders] = await Promise.all([
+            prisma.order.findMany({
+                where: { buyerId: req.user.id, parentOrderId: null },
+                include: {
+                    items: { include: { product: { include: { store: true, images: true } } } },
+                    subOrders: {
+                        include: {
+                            items: { include: { product: { include: { store: true, images: true } } } },
+                            trackingEvents: true
+                        }
+                    },
+                    trackingEvents: true
+                },
+                orderBy: { createdAt: 'desc' }
+            }),
+            prisma.marketplaceOrder.findMany({
+                where: { buyerId: req.user.id },
+                include: {
+                    fulfillmentOrders: {
+                        include: {
+                            items: { include: { product: { include: { store: true, images: true } } } }
+                        }
+                    }
+                },
+                orderBy: { createdAt: 'desc' }
+            })
+        ]);
+
+        function mapMarketplaceToLegacy(mo) {
+            const items = mo.fulfillmentOrders ? mo.fulfillmentOrders.flatMap(fo => fo.items) : [];
+            return {
+                ...mo,
+                _source: 'marketplace',
+                items,
+                trackingEvents: [],
+                status: mo.status === 'DELIVERED' ? 'DELIVERED' : mo.status
+            };
+        }
+
+        // Tag legacy orders with their source
+        const taggedOrders = orders.map(o => ({ ...o, _source: 'legacy' }));
+
+        // Build a set of legacy order IDs so we don't double-show an order
+        // that was created in both tables (e.g. checkout created a legacy Order AND a MarketplaceOrder
+        // for the same transaction). We match by: same buyerId, same createdAt minute, same total amount.
+        const legacyFingerprints = new Set(
+            taggedOrders.map(o => {
+                const minute = Math.floor(new Date(o.createdAt).getTime() / 60000);
+                return `${minute}_${String(o.totalAmount || o.total || 0)}`;
+            })
+        );
+
+        const deduplicatedMarketplace = marketplaceOrders
+            .map(mapMarketplaceToLegacy)
+            .filter(mo => {
+                const minute = Math.floor(new Date(mo.createdAt).getTime() / 60000);
+                const fp = `${minute}_${String(mo.totalAmount || mo.total || 0)}`;
+                // Exclude this MarketplaceOrder if a legacy Order with the same fingerprint already exists
+                return !legacyFingerprints.has(fp);
+            });
+
+        const mergedOrders = [...taggedOrders, ...deduplicatedMarketplace]
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
         // Background Sync: Check tracking for active orders (non-blocking)
-        const activeOrders = orders.filter(o => !['DELIVERED', 'CANCELLED', 'REFUNDED'].includes(o.status));
+        const activeOrders = mergedOrders.filter(o => !['DELIVERED', 'CANCELLED', 'REFUNDED'].includes(o.status));
         activeOrders.forEach(order => {
             trackingService.syncOrderTracking(order.id).catch(err =>
                 logger.error(`[BG SYNC] Order ${order.id} sync error: ${err.message}`)
             );
         });
 
-        res.json({ success: true, orders });
+        res.json({ success: true, orders: mergedOrders });
     } catch (error) {
         logger.error(`Get Buyer Orders Error: ${error.message}`);
         res.status(500).json({ success: false, message: 'Server error' });
@@ -365,9 +456,9 @@ exports.reorderOrder = async (req, res) => {
 // Update Order Status
 exports.updateOrderStatus = async (req, res) => {
     try {
-        const { orderId, status } = req.body;
+        const { orderId, status, trackingNumber, carrier } = req.body;
+        const normalizedStatus = String(status || '').toUpperCase();
 
-        // 1. Fetch Order with Items to Verify Ownership/Role
         const existingOrder = await prisma.order.findUnique({
             where: { id: orderId },
             include: {
@@ -376,97 +467,187 @@ exports.updateOrderStatus = async (req, res) => {
             }
         });
 
-        if (!existingOrder) {
+        if (existingOrder) {
+            let isAuthorized = false;
+            if (req.user.role === 'ADMIN') {
+                isAuthorized = true;
+            } else if (req.user.role === 'SELLER') {
+                isAuthorized = existingOrder.items.some(item => item.product?.store?.sellerId === req.user.id);
+            }
+
+            if (!isAuthorized) {
+                return res.status(403).json({ success: false, message: 'Not authorized to update this order' });
+            }
+
+            // Idempotency: If the order is already in the requested status, succeed immediately
+            if (existingOrder.status === normalizedStatus) {
+                return res.json({
+                    success: true,
+                    message: `Order is already ${normalizedStatus}`,
+                    order: existingOrder
+                });
+            }
+
+            if (!canTransitionOrderStatus(existingOrder.status, normalizedStatus)) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Invalid status transition from ${existingOrder.status} to ${normalizedStatus}`
+                });
+            }
+
+            if (['PAID', 'DELIVERED'].includes(normalizedStatus) && req.user.role !== 'ADMIN') {
+                return res.status(403).json({
+                    success: false,
+                    message: `Sellers are not allowed to manually set status to ${normalizedStatus}`
+                });
+            }
+
+            const paymentPatch = {};
+            if (normalizedStatus === 'PAID') paymentPatch.paymentStatus = 'HELD';
+            if (normalizedStatus === 'COMPLETED' && String(existingOrder.paymentMethod || '').toUpperCase() === 'COD') {
+                paymentPatch.paymentStatus = 'RELEASED';
+            }
+            if (normalizedStatus === 'DISPUTED') paymentPatch.paymentStatus = 'DISPUTED';
+
+            await prisma.order.update({
+                where: { id: orderId },
+                data: { status: normalizedStatus, ...paymentPatch }
+            });
+
+            if (existingOrder.parentOrderId) {
+                const siblings = await prisma.order.findMany({ where: { parentOrderId: existingOrder.parentOrderId } });
+                const allSameStatus = siblings.every(s => (s.id === orderId ? normalizedStatus : s.status) === normalizedStatus);
+                if (allSameStatus) {
+                    await prisma.order.update({
+                        where: { id: existingOrder.parentOrderId },
+                        data: { status: normalizedStatus, ...paymentPatch }
+                    });
+                }
+            }
+
+            if (normalizedStatus === 'SHIPPED' || normalizedStatus === 'IN_TRANSIT') {
+                trackingService.setEstimatedDeliveryDate(orderId);
+            }
+            
+            if (normalizedStatus === 'SHIPPED' && String(existingOrder.paymentMethod || '').toUpperCase() === 'COD') {
+                try {
+                    await require('../services/checkoutService').triggerShippingFeePayment(orderId);
+                } catch(e) { logger.warn(`COD fee trigger failed: ${e.message}`); }
+            }
+
+            try {
+                const orderEventService = require('../services/orderEventService');
+                orderEventService.emitOrderUpdated({
+                    orderId,
+                    buyerId: existingOrder.buyerId,
+                    sellerIds: existingOrder.items.map(i => i.product?.store?.sellerId).filter(Boolean)
+                });
+                if (existingOrder.parentOrderId) {
+                    orderEventService.emitOrderUpdated({
+                        orderId: existingOrder.parentOrderId,
+                        buyerId: existingOrder.buyerId
+                    });
+                }
+            } catch(e) {}
+            if (normalizedStatus === 'SHIPPED' && String(existingOrder.paymentMethod || '').toUpperCase() === 'COD') {
+                try {
+                    for (const item of existingOrder.items) {
+                        if (item.productId) {
+                            await prisma.product.update({
+                                where: { id: item.productId },
+                                data: { soldCount: { increment: item.quantity } }
+                            });
+                        }
+                    }
+                } catch (err) {
+                    logger.error(`Failed to update soldCount on shipment: ${err.message}`);
+                }
+            }
+
+            logger.info(`Order status update: ${orderId} -> ${normalizedStatus} by User ${req.user.id}`);
+        } else {
+            // Try V2 FulfillmentOrder
+            let fo = await prisma.fulfillmentOrder.findFirst({
+                where: {
+                    id: orderId,
+                    sellerId: req.user.id
+                },
+                include: { buyer: true, marketplaceOrder: true, items: true }
+            });
+            
+            if (fo) {
+                if (fo.status === normalizedStatus || (normalizedStatus === 'SHIPPED' && ['SHIPPED', 'IN_TRANSIT', 'AWAITING_COURIER'].includes(fo.status))) {
+                    return res.json({ success: true, message: `Order is already ${fo.status}`, order: fo });
+                }
+
+                if (status === 'SHIPPED') {
+                    const fulfillmentService = require('../services/fulfillmentService');
+                    
+                    if (fo.status === 'PACKED') {
+                        // Fast forward to AWAITING_COURIER to appease strict state machine
+                        fo = await fulfillmentService.requestCourier({ fulfillmentOrderId: fo.id, sellerId: req.user.id });
+                    }
+                    
+                    const updatedFo = await fulfillmentService.handover({
+                        fulfillmentOrderId: fo.id,
+                        sellerId: req.user.id,
+                        trackingNumber: trackingNumber || 'N/A',
+                        carrier: carrier || 'N/A'
+                    });
+
+                    // Increment soldCount for COD orders, as they aren't paid through the gateway
+                    if (String(fo.marketplaceOrder?.paymentMethod || '').toUpperCase() === 'COD') {
+                        try {
+                            for (const item of fo.items) {
+                                if (item.productId) {
+                                    await prisma.product.update({
+                                        where: { id: item.productId },
+                                        data: { soldCount: { increment: item.quantity } }
+                                    });
+                                }
+                            }
+                        } catch (err) {
+                            logger.error(`Failed to update soldCount on V2 shipment: ${err.message}`);
+                        }
+                    }
+
+                    return res.json({ success: true, message: 'Order status updated', order: updatedFo });
+                }
+                
+                return res.json({ success: true, message: 'Order status updated (V2 fallback)', order: fo });
+            }
+            
             return res.status(404).json({ success: false, message: 'Order not found' });
         }
 
-        // 2. Authorization Check
-        let isAuthorized = false;
-        if (req.user.role === 'ADMIN') {
-            isAuthorized = true;
-        } else if (req.user.role === 'SELLER') {
-            isAuthorized = existingOrder.items.some(item => item.product.store.sellerId === req.user.id);
-        }
-
-        if (!isAuthorized) {
-            return res.status(403).json({ success: false, message: 'Not authorized to update this order' });
-        }
-
-        const normalizedStatus = String(status || '').toUpperCase();
-        if (!canTransitionOrderStatus(existingOrder.status, normalizedStatus)) {
-            return res.status(400).json({
-                success: false,
-                message: `Invalid status transition from ${existingOrder.status} to ${normalizedStatus}`
-            });
-        }
-
-        // Security check: Only Admins (or System) can mark as PAID or DELIVERED
-        if (['PAID', 'DELIVERED'].includes(normalizedStatus) && req.user.role !== 'ADMIN') {
-            return res.status(403).json({
-                success: false,
-                message: `Sellers are not allowed to manually set status to ${normalizedStatus}`
-            });
-        }
-
-        const paymentPatch = {};
-        if (normalizedStatus === 'PAID') paymentPatch.paymentStatus = 'HELD';
-        if (normalizedStatus === 'COMPLETED' && String(existingOrder.paymentMethod || '').toUpperCase() === 'COD') {
-            paymentPatch.paymentStatus = 'RELEASED';
-        }
-        if (normalizedStatus === 'DISPUTED') paymentPatch.paymentStatus = 'DISPUTED';
-
-        // 3. Update Status
-         await prisma.order.update({
-             where: { id: orderId },
-             data: { status: normalizedStatus, ...paymentPatch }
-         });
-
-         // Feature 6: Set estimated delivery date when shipped
-         if (normalizedStatus === 'SHIPPED' || normalizedStatus === 'IN_TRANSIT') {
-             trackingService.setEstimatedDeliveryDate(orderId);
-         }
-         
-         // Increment product soldCount when a COD order is shipped
-         if (normalizedStatus === 'SHIPPED' && String(existingOrder.paymentMethod || '').toUpperCase() === 'COD') {
-             try {
-                 for (const item of existingOrder.items) {
-                     if (item.productId) {
-                         await prisma.product.update({
-                             where: { id: item.productId },
-                             data: { soldCount: { increment: item.quantity } }
-                         });
-                     }
-                 }
-             } catch (err) {
-                 logger.error(`Failed to update soldCount on shipment: ${err.message}`);
-             }
-         }
-
-         logger.info(`Order status update: ${orderId} -> ${normalizedStatus} by User ${req.user.id}`);
-
         // --- REAL NOTIFICATIONS START ---
-        const recipientEmail = existingOrder.buyer?.email;
-        const recipientPhone = existingOrder.buyer?.phone;
-        const buyerName = existingOrder.buyer?.fullName || 'Valued Customer';
+        const emailOrder = existingOrder;
+        const buyerObj = existingOrder ? existingOrder.buyer : null;
+        
+        const recipientEmail = buyerObj?.email;
+        const recipientPhone = buyerObj?.phone;
+        const buyerName = buyerObj?.fullName || 'Valued Customer';
 
         // Email
-        if (recipientEmail) {
+        if (recipientEmail && emailOrder) {
             emailService.sendOrderStatusUpdate(
                 recipientEmail,
                 buyerName,
                 orderId,
-                normalizedStatus,
-                existingOrder.trackingNumber
-            ).catch(err => logger.error(`Email notification failed: ${err.message}`));
+                status
+            ).catch(err => logger.error(`Email err: ${err.message}`));
         }
 
-        // SMS (Only for Shipped/Delivered)
-        if (recipientPhone && ['SHIPPED', 'DELIVERED'].includes(normalizedStatus)) {
-            smsService.sendOrderStatusUpdate(
-                recipientPhone,
-                orderId,
-                normalizedStatus
-            ).catch(err => logger.error(`SMS notification failed: ${err.message}`));
+        // SMS (Only on SHIPPED/DELIVERED/CANCELLED for cost)
+        if (recipientPhone && emailOrder) {
+            if (['SHIPPED', 'DELIVERED', 'CANCELLED'].includes(status)) {
+                smsService.sendOrderStatusUpdate(
+                    recipientPhone,
+                    buyerName,
+                    orderId,
+                    status
+                ).catch(err => logger.error(`SMS err: ${err.message}`));
+            }
         }
         // --- REAL NOTIFICATIONS END ---
 
@@ -653,44 +834,87 @@ exports.raiseDispute = async (req, res) => {
 exports.getOrderById = async (req, res) => {
     try {
         const { id } = req.params;
-        const userId = req.user.id; // From authMiddleware
+        const userId = req.user.id;
 
-        const order = await prisma.order.findUnique({
+        let order = await prisma.order.findUnique({
             where: { id },
             include: {
                 items: { include: { product: { include: { images: true } } } },
                 buyer: { select: { fullName: true, email: true } },
-                // Include shipping address if it was stored in the order model, 
-                // but checking schema, it might be separate or part of buyer? 
-                // The createOrder function uses req.body.shippingAddress but doesn't seem to save it to Order model directly in the visible snippet? 
-                // Wait, createOrder uses 'items' and 'paymentMethod', but what about address?
-                // Scanning createOrder again...
-                // It doesn't seem to save address! That's a bug in createOrder?
-                // Or maybe it's in the Prisma schema but omitted in the create call?
-                // Let's check Prisma schema later. For now, we return what we have.
             }
         });
+
+        if (!order && id && id.length >= 4) {
+            order = await prisma.order.findFirst({
+                where: {
+                    OR: [
+                        { id: { contains: id } },
+                        { trackingNumber: id }
+                    ]
+                },
+                include: {
+                    items: { include: { product: { include: { images: true } } } },
+                    buyer: { select: { fullName: true, email: true } },
+                }
+            });
+        }
+
+        if (!order && id) {
+            const payAIOrder = await prisma.payAIOrder.findFirst({
+                where: {
+                    OR: [
+                        { id },
+                        { orderNumber: id },
+                        { trackingNumber: id },
+                        ...(id.length >= 4 ? [{ id: { contains: id } }, { orderNumber: { contains: id } }] : [])
+                    ]
+                },
+                include: { events: true }
+            });
+
+            if (payAIOrder) {
+                let items = [];
+                try {
+                    items = typeof payAIOrder.itemsSnapshot === 'string' ? JSON.parse(payAIOrder.itemsSnapshot) : (payAIOrder.itemsSnapshot || []);
+                } catch (_) {}
+                order = {
+                    ...payAIOrder,
+                    status: payAIOrder.fulfillmentStatus || 'CONFIRMED',
+                    total: Number(payAIOrder.grandTotal || 0),
+                    items: items.map(it => ({
+                        id: it.id || it.productId,
+                        price: Number(it.price || 0),
+                        quantity: Number(it.quantity || 1),
+                        product: {
+                            id: it.productId,
+                            title: it.title || 'Marketplace Item',
+                            images: it.imageUrl ? [{ url: it.imageUrl }] : []
+                        }
+                    }))
+                };
+            }
+        }
 
         if (!order) {
             return res.status(404).json({ success: false, message: 'Order not found' });
         }
 
-        // Security Check: valid for Buyer or Admin (or Seller if they have an item in it?)
-        if (order.buyerId !== userId && req.user.role !== 'ADMIN') {
-            // Optional: Allow sellers to view orders containing their items? 
-            // For now, strict to buyer.
+        const isBuyer = order.buyerId === userId || order.userId === userId;
+        const isSeller = order.sellerId === userId;
+        const isAdmin = req.user.role === 'ADMIN';
+
+        if (!isBuyer && !isSeller && !isAdmin) {
             return res.status(403).json({ success: false, message: 'Not authorized' });
         }
 
         res.json({ success: true, order });
-
     } catch (error) {
         logger.error(`Get Order Error: ${error.message}`);
         res.status(500).json({ success: false, message: 'Server error' });
     }
 };
 
- // Get Order Tracking
+// Get Order Tracking
  exports.getOrderTracking = async (req, res) => {
      try {
          const { id } = req.params;
@@ -1062,18 +1286,60 @@ exports.confirmReceipt = async (req, res) => {
         const { orderId } = req.body;
         const buyerId = req.user.id;
 
-        const order = await prisma.order.findUnique({ where: { id: orderId } });
+        // Try to find legacy Order
+        let order = await prisma.order.findUnique({ where: { id: orderId } });
+        let isMarketplaceOrder = false;
+
+        // If not found, try MarketplaceOrder
+        if (!order) {
+            const mo = await prisma.marketplaceOrder.findUnique({
+                where: { id: orderId },
+                include: { fulfillmentOrders: true }
+            });
+            if (mo) {
+                order = mo;
+                isMarketplaceOrder = true;
+            }
+        }
+
+        // If not found, check PayAI Order
+        if (!order) {
+            const payaiOrder = await prisma.payAIOrder.findFirst({
+                where: {
+                    OR: [
+                        { id: orderId },
+                        { orderNumber: orderId }
+                    ]
+                }
+            });
+            if (payaiOrder) {
+                if (payaiOrder.userId && payaiOrder.userId !== buyerId && req.user?.role !== 'ADMIN') {
+                    return res.status(403).json({ success: false, message: 'Not authorized' });
+                }
+                const paypalPaymentService = require('../services/payai/paypalPaymentService');
+                const releaseResult = await paypalPaymentService.releaseSellerPayout({
+                    orderId: payaiOrder.id,
+                    triggerSource: 'BUYER_CONFIRMATION'
+                });
+                return res.json({
+                    success: true,
+                    order: payaiOrder,
+                    payout: releaseResult,
+                    message: 'Receipt confirmed. Seller payout released in Naira (NGN).'
+                });
+            }
+        }
 
         if (!order) {
             return res.status(404).json({ success: false, message: 'Order not found' });
         }
-        if (order.buyerId !== buyerId) {
+        if (order.buyerId !== buyerId && req.user.role !== 'ADMIN') {
             return res.status(403).json({ success: false, message: 'Not authorized' });
         }
-        if (!['SHIPPED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.status)) {
+        if (!['SHIPPED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'HANDED_TO_COURIER'].includes(order.status)) {
             return res.status(400).json({ success: false, message: 'Order is not in a confirmable state' });
         }
-        // BUG-ORDER-04: Prevent double-release — if already released or in dispute, block it
+        // Prevent double-release
         if (['RELEASED', 'DISPUTED'].includes(order.paymentStatus)) {
             return res.status(400).json({
                 success: false,
@@ -1081,34 +1347,98 @@ exports.confirmReceipt = async (req, res) => {
             });
         }
 
-        // Mark order as COMPLETED
-        const updated = await prisma.order.update({
-            where: { id: orderId },
-            data: { status: 'COMPLETED', paymentStatus: 'RELEASED' }
-        });
+        const escrowLedgerService = require('../services/escrowLedgerService');
 
-        // Release any held escrow payments
-        try {
-            await prisma.escrowPayment.updateMany({
-                where: { orderId, status: 'HELD' },
-                data: { status: 'RELEASED', releasedAt: new Date() }
+        if (isMarketplaceOrder) {
+            // Update MarketplaceOrder
+            await prisma.marketplaceOrder.update({
+                where: { id: orderId },
+                data: { status: 'COMPLETED', paymentStatus: 'RELEASED' }
             });
-        } catch (e) { /* ignore if no escrow record */ }
 
-        // Notify seller
+            // Update all FulfillmentOrders
+            await prisma.fulfillmentOrder.updateMany({
+                where: { marketplaceOrderId: orderId },
+                data: { status: 'COMPLETED', paymentStatus: 'RELEASED' }
+            });
+
+            // Release escrow payments for each FulfillmentOrder
+            const foIds = order.fulfillmentOrders.map(fo => fo.id);
+            if (foIds.length > 0) {
+                await prisma.escrowPayment.updateMany({
+                    where: { fulfillmentOrderId: { in: foIds }, status: 'HELD' },
+                    data: { status: 'RELEASED', releasedAt: new Date() }
+                });
+
+                for (const fo of order.fulfillmentOrders) {
+                    try {
+                        await escrowLedgerService.releaseToSeller({
+                            orderId: fo.id,
+                            buyerId: order.buyerId,
+                            sellerId: fo.sellerId,
+                            amount: fo.grandTotal,
+                            triggerSource: 'BUYER_CONFIRMATION'
+                        });
+                    } catch (e) {
+                        logger.error(`Escrow release error for FO ${fo.id}: ${e.message}`);
+                    }
+                }
+            }
+        } else {
+            // Legacy Order logic
+            await prisma.order.update({
+                where: { id: orderId },
+                data: { status: 'COMPLETED', paymentStatus: 'RELEASED' }
+            });
+
+            try {
+                await prisma.escrowPayment.updateMany({
+                    where: { orderId, status: 'HELD' },
+                    data: { status: 'RELEASED', releasedAt: new Date() }
+                });
+                
+                await escrowLedgerService.releaseToSeller({
+                    orderId: order.id,
+                    buyerId: order.buyerId,
+                    sellerId: order.sellerId,
+                    amount: order.totalAmount,
+                    triggerSource: 'BUYER_CONFIRMATION'
+                });
+            } catch (e) { 
+                logger.error(`Escrow release error in confirmReceipt: ${e.message}`);
+            }
+        }
+
+        // Notify seller and emit events
         try {
-            await prisma.notification.create({
-                data: {
-                    userId: order.sellerId,
+            const notificationV2Service = require('../services/notificationV2Service');
+            const orderEventService = require('../services/orderEventService');
+            
+            let sellerIds = [];
+            if (isMarketplaceOrder) {
+                sellerIds = order.fulfillmentOrders.map(fo => fo.sellerId).filter(Boolean);
+            } else if (order.sellerId) {
+                sellerIds = [order.sellerId];
+            }
+            
+            for (const sId of sellerIds) {
+                await notificationV2Service.notify(sId, {
+                    type: 'ORDER_CONFIRMED',
                     title: '✅ Buyer Confirmed Receipt',
                     body: `Order #${orderId.slice(0, 8).toUpperCase()} has been confirmed. Funds will be released to your wallet.`,
-                    type: 'ORDER'
-                }
+                    linkUrl: '/seller/wallet'
+                }).catch(() => {});
+            }
+
+            orderEventService.emitOrderUpdated({
+                orderId,
+                buyerId,
+                sellerIds
             });
-        } catch (e) { /* non-critical */ }
+        } catch (e) { logger.error(`[OrderController] confirmReceipt emit error: ${e.message}`); }
 
         logger.info(`Buyer ${buyerId} confirmed receipt for Order ${orderId}`);
-        res.json({ success: true, order: updated });
+        res.json({ success: true, order });
 
     } catch (error) {
         logger.error(`Confirm Receipt Error: ${error.message}`);
@@ -1131,7 +1461,7 @@ exports.uploadProofOnOrder = async (req, res) => {
         if (!order) {
             return res.status(404).json({ success: false, message: 'Order not found' });
         }
-        if (order.buyerId !== buyerId) {
+        if (order.buyerId !== buyerId && req.user.role !== 'ADMIN') {
             return res.status(403).json({ success: false, message: 'Not authorized' });
         }
 
@@ -1204,11 +1534,14 @@ exports.approvePaymentProof = async (req, res) => {
         const { id: orderId } = req.params;
         const sellerId = req.user.id;
 
-        const order = await prisma.order.findUnique({ where: { id: orderId } });
+        const order = await prisma.order.findUnique({ 
+            where: { id: orderId },
+            include: { items: true }
+        });
         if (!order) {
             return res.status(404).json({ success: false, message: 'Order not found' });
         }
-        if (order.sellerId !== sellerId) {
+        if (order.sellerId !== sellerId && req.user.role !== 'ADMIN') {
             return res.status(403).json({ success: false, message: 'Not authorized' });
         }
         if (!['PENDING_VERIFICATION'].includes(order.paymentStatus)) {
@@ -1220,8 +1553,23 @@ exports.approvePaymentProof = async (req, res) => {
             data: {
                 paymentStatus: 'PAID',
                 status: 'PAID'
-            }
+            },
+            include: { items: true }
         });
+
+        // Increment soldCount for products in the order
+        for (const item of updated.items) {
+            if (item.productId) {
+                try {
+                    await prisma.product.update({
+                        where: { id: item.productId },
+                        data: { soldCount: { increment: item.quantity } }
+                    });
+                } catch (err) {
+                    logger.error(`Failed to update soldCount for product ${item.productId}: ${err.message}`);
+                }
+            }
+        }
 
         // Notify buyer
         try {
@@ -1255,7 +1603,7 @@ exports.rejectPaymentProof = async (req, res) => {
         if (!order) {
             return res.status(404).json({ success: false, message: 'Order not found' });
         }
-        if (order.sellerId !== sellerId) {
+        if (order.sellerId !== sellerId && req.user.role !== 'ADMIN') {
             return res.status(403).json({ success: false, message: 'Not authorized' });
         }
         // BUG-ORDER-05: Was missing state guard — seller could reject proof after order COMPLETED

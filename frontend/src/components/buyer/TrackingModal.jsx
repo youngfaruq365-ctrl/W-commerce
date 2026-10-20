@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
+import { ExternalLink, Truck } from 'lucide-react';
+import { apiClient as axios } from '@/utils/apiClient';
 import GXModal from '../shared/ui/GXModal';
 import GXIcon from '../shared/assets/GXIcon';
 import GXSkeleton from '../shared/ui/GXSkeleton';
+import { MapView } from '../../maps/MapView';
 
 const TrackingModal = ({ isOpen, onClose, orderId }) => {
+  const navigate = useNavigate();
   const [trackingData, setTrackingData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -24,16 +28,44 @@ const TrackingModal = ({ isOpen, onClose, orderId }) => {
     setError(null);
     try {
       const token = localStorage.getItem('token');
-      const { data } = await axios.get(`${import.meta.env.VITE_API_URL || `${import.meta.env.VITE_API_URL || window.location.origin}`}/api/v1/tracking/${orderId}`, {
+      const { data } = await axios.get(`${import.meta.env.VITE_API_URL || window.location.origin}/api/v1/tracking/by-order/${orderId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (data.success) {
-        setTrackingData(data);
+        setTrackingData({
+          ...data.data,
+          events: data.data.trackingEvents || [],
+          trackingNumber: data.data.trackingNumber || data.data.id || 'N/A',
+          carrier: data.data.carrier || 'GlobalX Logistics'
+        });
       } else {
         setError(data.message || 'Failed to load tracking');
       }
     } catch (err) {
-      setError('An error occurred while fetching tracking info.');
+      try {
+        const payAiRes = await axios.get(`/api/v1/payai/orders/${orderId}/track`);
+        if (payAiRes.data?.success && payAiRes.data.tracking) {
+          const t = payAiRes.data.tracking;
+          setTrackingData({
+            trackingNumber: t.trackingNumber || t.orderNumber || orderId,
+            carrier: t.carrier || t.carrierName || 'GIG Logistics Express',
+            deliveryAddress: t.destination || t.destinationHub || 'Buyer Address',
+            events: (t.checkpoints || []).map(cp => ({
+              status: cp.status || 'IN_TRANSIT',
+              message: cp.label || cp.status,
+              location: t.origin || 'Regional Logistics Hub',
+              createdAt: cp.timestamp || new Date()
+            }))
+          });
+          return;
+        }
+      } catch (_) {}
+
+      if (err.response && err.response.status === 404) {
+        setTrackingData({ events: [], trackingNumber: 'PENDING', carrier: 'GIG Logistics Express' });
+      } else {
+        setError(err.response?.data?.message || 'An error occurred while fetching tracking info.');
+      }
     } finally {
       setLoading(false);
     }
@@ -74,23 +106,54 @@ const TrackingModal = ({ isOpen, onClose, orderId }) => {
       isOpen={isOpen}
       onClose={onClose}
       title="Track Order"
-      maxWidth="md"
+      maxWidth="3xl"
     >
-      <div className="p-2">
-        {trackingData && !loading && (
-          <div className="mb-8 p-4 bg-[var(--bg-tertiary)] rounded-xl border border-[var(--accent-gray)] shadow-[0_0_10px_var(--accent-gray-dim)]">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-[var(--text-muted)] text-sm">Tracking Number</span>
-              <span className="font-mono text-black font-bold">{trackingData.trackingNumber}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-[var(--text-muted)] text-sm">Carrier</span>
-              <span className="text-black font-bold">{trackingData.carrier}</span>
-            </div>
-          </div>
-        )}
+      <div className="p-2 flex flex-col md:flex-row gap-6">
+        <div className="w-full md:w-1/2 h-64 md:h-[500px] rounded-2xl overflow-hidden bg-[#e5e3df]">
+           {trackingData && !loading ? (
+             <MapView 
+               activeRoute={{
+                  pickupLat: 6.4281, // VI
+                  pickupLng: 3.4219,
+                  pickupAddress: "GlobalX Distribution Center",
+                  dropoffLat: 6.5244, // Ikeja
+                  dropoffLng: 3.3792,
+                  dropoffAddress: trackingData?.deliveryAddress || "Buyer Address"
+               }} 
+               className="w-full h-full" 
+             />
+           ) : (
+             <GXSkeleton variant="card" className="w-full h-full" />
+           )}
+        </div>
         
-        {renderTimeline()}
+        <div className="w-full md:w-1/2 max-h-[500px] overflow-y-auto pr-2">
+          {trackingData && !loading && (
+            <div className="mb-6 p-4 neu-panel rounded-2xl border border-[var(--border-color)]">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-[var(--text-muted)] text-xs font-bold uppercase tracking-wider">Tracking Number</span>
+                <span className="font-mono text-[var(--text-main)] font-black text-sm">{trackingData.trackingNumber}</span>
+              </div>
+              <div className="flex justify-between items-center mb-3">
+                <span className="text-[var(--text-muted)] text-xs font-bold uppercase tracking-wider">Carrier</span>
+                <span className="text-[var(--text-main)] font-bold text-xs">{trackingData.carrier}</span>
+              </div>
+              <button
+                onClick={() => {
+                  onClose();
+                  navigate(`/payai?tab=tracking&orderId=${orderId}`);
+                }}
+                className="w-full py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer"
+              >
+                <Truck size={14} />
+                <span>Open in PayAI Live Delivery Radar</span>
+                <ExternalLink size={12} className="ml-1 opacity-70" />
+              </button>
+            </div>
+          )}
+          
+          {renderTimeline()}
+        </div>
       </div>
     </GXModal>
   );

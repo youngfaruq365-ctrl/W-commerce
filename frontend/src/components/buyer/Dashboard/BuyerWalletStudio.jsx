@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 import { Megaphone, CheckCircle, ArrowRight, ArrowLeft, Sparkles, Download, Package, AlertCircle, Users, Settings, Star, Link, Truck, Zap, DollarSign } from 'lucide-react';
 
 const BuyerWalletStudio = ({ onSuccess }) => {

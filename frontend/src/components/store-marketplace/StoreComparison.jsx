@@ -3,11 +3,11 @@ import { Check, Minus } from 'lucide-react';
 
 const StoreComparison = () => {
   const tiers = [
-    { name: 'Essential', price: '$5', desc: 'Core storefront functionality' },
-    { name: 'Plus', price: '$9', desc: 'Conversion & customization' },
-    { name: 'Pro', price: '$14', desc: 'Advanced interactions & AI' },
-    { name: 'Studio', price: '$19', desc: 'Premium components & automation' },
-    { name: 'Signature', price: '$25', desc: 'Flagship AI & business tools' },
+    { name: 'Essential', price: '₦5', desc: 'Core storefront functionality' },
+    { name: 'Plus', price: '₦9', desc: 'Conversion & customization' },
+    { name: 'Pro', price: '₦14', desc: 'Advanced interactions & AI' },
+    { name: 'Studio', price: '₦19', desc: 'Premium components & automation' },
+    { name: 'Signature', price: '₦25', desc: 'Flagship AI & business tools' },
   ];
 
   const features = [

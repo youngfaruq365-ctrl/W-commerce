@@ -31,16 +31,18 @@ function client(tx) {
 
 async function ensureWallet(userId, tx = null) {
     const db = client(tx);
-    let wallet = await db.wallet.findUnique({ where: { userId } });
-    if (wallet) return wallet;
 
+    // Use upsert to atomically find-or-create, preventing race conditions
+    // when parallel requests (e.g. wallet/summary + wallet/transactions) both try to create
     const user = await db.user.findUnique({
         where: { id: userId },
         select: { balance: true }
     });
 
-    return db.wallet.create({
-        data: {
+    return db.wallet.upsert({
+        where: { userId },
+        update: {}, // Don't overwrite if already exists
+        create: {
             userId,
             gongAvailable: user ? Number(user.balance || 0) : 0
         }

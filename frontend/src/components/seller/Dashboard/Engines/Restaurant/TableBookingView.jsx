@@ -5,26 +5,71 @@ import { motion } from 'framer-motion';
 
 const TableBookingView = () => {
   const [activeTab, setActiveTab] = useState('floor');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showWalkInModal, setShowWalkInModal] = useState(false);
+  const [walkInForm, setWalkInForm] = useState({ name: '', time: '20:30', partySize: 2, phone: '' });
 
-  // Dummy Tables for Floor Plan
-  const tables = [
+  const [tables, setTables] = useState([
     { id: 1, type: 'round', seats: 4, status: 'occupied', x: 20, y: 20 },
     { id: 2, type: 'square', seats: 2, status: 'available', x: 20, y: 60 },
     { id: 3, type: 'rect', seats: 6, status: 'reserved', x: 50, y: 20 },
     { id: 4, type: 'round', seats: 4, status: 'available', x: 80, y: 20 },
     { id: 5, type: 'square', seats: 2, status: 'occupied', x: 80, y: 60 },
-  ];
+  ]);
 
-  // Dummy Bookings for Guest List
-  const bookings = [
+  const [bookings, setBookings] = useState([
     { id: 'B-1', name: 'Sarah Connor', time: '19:00', partySize: 4, status: 'confirmed', phone: '+1 234 567 890' },
     { id: 'B-2', name: 'John Smith', time: '19:30', partySize: 2, status: 'pending', phone: '+1 987 654 321' },
     { id: 'B-3', name: 'Emily Chen', time: '20:00', partySize: 6, status: 'confirmed', phone: '+1 555 123 456' },
-  ];
+  ]);
+
+  const toggleTableStatus = (tableId) => {
+    const order = ['available', 'occupied', 'reserved'];
+    setTables(prev => prev.map(t => {
+      if (t.id !== tableId) return t;
+      const next = order[(order.indexOf(t.status) + 1) % order.length];
+      toast.success(`Table T${t.id} marked ${next}`);
+      return { ...t, status: next };
+    }));
+  };
+
+  const handleAddWalkIn = () => {
+    if (!walkInForm.name.trim()) return toast.error('Guest name is required');
+    const newBooking = {
+      id: `B-${Date.now()}`,
+      name: walkInForm.name.trim(),
+      time: walkInForm.time || 'Now',
+      partySize: Number(walkInForm.partySize) || 2,
+      status: 'confirmed',
+      phone: walkInForm.phone || 'Walk-in'
+    };
+    setBookings(prev => [newBooking, ...prev]);
+    setWalkInForm({ name: '', time: '20:30', partySize: 2, phone: '' });
+    setShowWalkInModal(false);
+    setActiveTab('list');
+    toast.success(`Walk-in added for ${newBooking.name}`);
+  };
+
+  const updateBookingStatus = (id, status) => {
+    if (status === 'cancelled') {
+      setBookings(prev => prev.filter(b => b.id !== id));
+      toast.success('Reservation declined & removed');
+    } else {
+      setBookings(prev => prev.map(b => b.id === id ? { ...b, status } : b));
+      toast.success('Reservation confirmed!');
+    }
+  };
+
+  const filteredBookings = bookings.filter(b => {
+    const matchesStatus = statusFilter === 'all' || b.status === statusFilter;
+    const matchesSearch = !searchQuery.trim() || b.name.toLowerCase().includes(searchQuery.toLowerCase()) || b.phone.includes(searchQuery);
+    return matchesStatus && matchesSearch;
+  });
 
   const getTableColor = (status) => {
-    if (status === 'occupied') return 'bg-red-500 border-red-600 text-white';
-    if (status === 'reserved') return 'bg-orange-400 border-orange-500 text-white';
+    if (status === 'occupied') return 'bg-red-500 border-red-600 text-white cursor-pointer';
+    if (status === 'reserved') return 'bg-orange-400 border-orange-500 text-white cursor-pointer';
     return 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100 cursor-pointer';
   };
 
@@ -47,14 +92,43 @@ const TableBookingView = () => {
           <p className="text-[var(--text-muted)] text-sm">Manage your floor plan, upcoming bookings, and walk-ins.</p>
         </div>
         <div className="flex gap-3">
-          <button onClick={() => toast('Feature coming soon', { icon: '🚀' })}  className="bg-white border border-[var(--border-color)] text-black font-bold px-4 py-2 rounded-xl text-sm flex items-center gap-2 hover:bg-gray-50 transition-colors shadow-sm">
-            <Filter size={16} /> Filter
+          <button
+            onClick={() => {
+              const next = statusFilter === 'all' ? 'pending' : statusFilter === 'pending' ? 'confirmed' : 'all';
+              setStatusFilter(next);
+              setActiveTab('list');
+              toast.success(`Filter: ${next.toUpperCase()}`);
+            }}
+            className="bg-white border border-[var(--border-color)] text-black font-bold px-4 py-2 rounded-xl text-sm flex items-center gap-2 hover:bg-gray-50 transition-colors shadow-sm"
+          >
+            <Filter size={16} /> Filter ({statusFilter})
           </button>
-          <button onClick={() => toast('Feature coming soon', { icon: '🚀' })}  className="bg-black hover:bg-gray-900 text-white font-bold px-6 py-2 rounded-xl text-sm flex items-center gap-2 transition-colors shadow-lg">
+          <button
+            onClick={() => setShowWalkInModal(prev => !prev)}
+            className="bg-black hover:bg-gray-900 text-white font-bold px-6 py-2 rounded-xl text-sm flex items-center gap-2 transition-colors shadow-lg"
+          >
             <Plus size={16} /> New Walk-in
           </button>
         </div>
       </div>
+
+      {showWalkInModal && (
+        <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-xl grid grid-cols-1 sm:grid-cols-5 gap-3 items-end">
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-bold text-gray-700 mb-1">Guest Name</label>
+            <input type="text" value={walkInForm.name} onChange={e => setWalkInForm({ ...walkInForm, name: e.target.value })} placeholder="Guest Full Name" className="w-full p-2.5 border rounded-lg text-sm text-black bg-white" />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-700 mb-1">Time</label>
+            <input type="text" value={walkInForm.time} onChange={e => setWalkInForm({ ...walkInForm, time: e.target.value })} placeholder="19:30" className="w-full p-2.5 border rounded-lg text-sm text-black bg-white" />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-700 mb-1">Party Size</label>
+            <input type="number" min="1" value={walkInForm.partySize} onChange={e => setWalkInForm({ ...walkInForm, partySize: e.target.value })} className="w-full p-2.5 border rounded-lg text-sm text-black bg-white" />
+          </div>
+          <button onClick={handleAddWalkIn} className="bg-black text-white font-bold py-2.5 px-4 rounded-lg text-sm">Seat Guest</button>
+        </div>
+      )}
 
       {/* View Toggle */}
       <div className="flex gap-2 mb-6 bg-[var(--bg-tertiary)] p-1.5 rounded-xl w-fit">
@@ -80,7 +154,6 @@ const TableBookingView = () => {
           
           {activeTab === 'floor' ? (
             <div className="flex-1 relative p-8">
-              {/* Dummy Grid Background */}
               <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: 'linear-gradient(#e5e7eb 1px, transparent 1px), linear-gradient(90deg, #e5e7eb 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
               
               {/* Floor Plan Legend */}
@@ -97,6 +170,8 @@ const TableBookingView = () => {
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
                   whileHover={{ scale: 1.05 }}
+                  onClick={() => toggleTableStatus(table.id)}
+                  title="Click to cycle table status"
                   className={`absolute flex items-center justify-center font-bold text-sm border-2 shadow-sm transition-colors ${getTableColor(table.status)} ${getTableShape(table.type)}`}
                   style={{
                     left: `${table.x}%`,
@@ -117,11 +192,17 @@ const TableBookingView = () => {
             <div className="flex-1 bg-white p-6 overflow-y-auto">
                <div className="relative mb-6">
                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                 <input type="text" placeholder="Search guests or reservations..." className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-xl pl-10 pr-4 py-3 font-medium text-sm focus:outline-none focus:border-black transition-colors" />
+                 <input
+                   type="text"
+                   value={searchQuery}
+                   onChange={e => setSearchQuery(e.target.value)}
+                   placeholder="Search guests or reservations..."
+                   className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-xl pl-10 pr-4 py-3 font-medium text-sm focus:outline-none focus:border-black transition-colors"
+                 />
                </div>
                
                <div className="space-y-4">
-                 {bookings.map(booking => (
+                 {filteredBookings.map(booking => (
                    <div key={booking.id} className="border border-[var(--border-color)] rounded-xl p-4 flex justify-between items-center hover:border-black/30 transition-colors group">
                      <div className="flex gap-4 items-center">
                        <div className="bg-[var(--bg-tertiary)] text-black font-mono font-bold px-3 py-2 rounded-lg text-lg border border-[var(--border-color)] text-center w-20 shadow-sm">
@@ -138,8 +219,8 @@ const TableBookingView = () => {
                      <div className="flex items-center gap-3">
                        {booking.status === 'pending' ? (
                          <>
-                           <button onClick={() => toast('Feature coming soon', { icon: '🚀' })}  className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors border border-green-200"><Check size={18}/></button>
-                           <button onClick={() => toast('Feature coming soon', { icon: '🚀' })}  className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors border border-red-200"><X size={18}/></button>
+                           <button onClick={() => updateBookingStatus(booking.id, 'confirmed')} className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors border border-green-200"><Check size={18}/></button>
+                           <button onClick={() => updateBookingStatus(booking.id, 'cancelled')} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors border border-red-200"><X size={18}/></button>
                          </>
                        ) : (
                          <span className="bg-gray-100 text-gray-600 px-3 py-1 rounded-full text-xs font-bold uppercase border border-gray-200">Confirmed</span>
@@ -163,7 +244,7 @@ const TableBookingView = () => {
               </div>
               <div className="flex justify-between items-center p-3 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-color)]">
                 <span className="text-[var(--text-muted)] text-sm font-medium">Expected Guests</span>
-                <span className="font-bold text-xl text-black">12</span>
+                <span className="font-bold text-xl text-black">{bookings.reduce((sum, b) => sum + Number(b.partySize || 0), 0)}</span>
               </div>
               <div className="flex justify-between items-center p-3 bg-red-50 text-red-700 rounded-lg border border-red-100">
                 <span className="text-sm font-medium">Current Wait Time</span>
@@ -177,8 +258,8 @@ const TableBookingView = () => {
              <Clock size={24} className="mb-4 text-gray-300" />
              <h3 className="font-bold text-lg mb-1">Shift Management</h3>
              <p className="text-gray-400 text-sm mb-4">View staff schedules and assign sections to waiters.</p>
-             <button onClick={() => toast('Feature coming soon', { icon: '🚀' })}  className="text-white text-sm font-bold flex items-center gap-1 group-hover:gap-2 transition-all">
-               Manage Staff &rarr;
+             <button onClick={() => setActiveTab(activeTab === 'floor' ? 'list' : 'floor')} className="text-white text-sm font-bold flex items-center gap-1 group-hover:gap-2 transition-all">
+               Switch Floor / Guest View &rarr;
              </button>
           </div>
         </div>

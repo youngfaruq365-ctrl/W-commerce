@@ -31,14 +31,16 @@ const LeaveReviewModal = ({ isOpen, onClose, order }) => {
     setError('');
 
     try {
-      const success = await submitReview(productId, order.id, rating, comment);
-      if (success) {
+      const response = await submitReview(productId, order.id, rating, comment);
+      if (response === true) {
         onClose();
         setComment('');
         setRating(5);
         setSelectedProductId('');
       } else {
-        setError('Failed to submit review. You may have already reviewed this item.');
+        // useBuyerStore stores the last error in state.error
+        const errorMsg = useBuyerStore.getState().error;
+        setError(errorMsg || 'Failed to submit review.');
       }
     } catch (err) {
       setError('An unexpected error occurred.');
@@ -49,7 +51,7 @@ const LeaveReviewModal = ({ isOpen, onClose, order }) => {
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-fade-in">
-      <div className="absolute inset-0 bg-white/80 backdrop-blur-sm" onClick={onClose}></div>
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-md" onClick={onClose}></div>
       <div className="relative modal-3d-glass rounded-xl w-full max-w-md p-6 shadow-2xl">
         <button onClick={onClose} className="absolute top-4 right-4 text-gray-700 hover:text-black transition-colors">
           <X size={20} />

@@ -1,7 +1,5 @@
 import { create } from 'zustand';
-import axios from 'axios';
-
-axios.defaults.withCredentials = true;
+import { apiClient as axios } from '../utils/apiClient';
 
 export const useSellerStore = create((set, get) => ({
   products: [],
@@ -19,9 +17,30 @@ export const useSellerStore = create((set, get) => ({
   reviews: [],
   walletSummary: null,
   activeCarts: [],
+  banningStatus: null,
+  banningLoading: false,
   activeEngine: (typeof window !== 'undefined' ? localStorage.getItem('activeEngine') : null) || 'commerce',
   isLoading: false,
   error: null,
+
+  resetSellerStore: () => set({
+    products: [],
+    orders: [],
+    flashDeals: [],
+    analytics: null,
+    alerts: [],
+    messages: [],
+    toPack: [],
+    packed: [],
+    disputes: [],
+    buyers: [],
+    buyerRequests: [],
+    reviews: [],
+    walletSummary: null,
+    activeCarts: [],
+    isLoading: false,
+    error: null,
+  }),
 
   fetchActiveCarts: async () => {
     set({ isLoading: true, error: null });
@@ -73,7 +92,7 @@ export const useSellerStore = create((set, get) => ({
   },
 
   fetchAnalytics: async () => {
-    set({ isLoading: true, error: null });
+    set({ isLoading: true, error: null, analytics: null });
     try {
       // The analytics route is /api/v1/seller/analytics
       const response = await axios.get('/api/v1/seller/analytics?t=' + Date.now());
@@ -117,19 +136,20 @@ export const useSellerStore = create((set, get) => ({
     }
   },
 
-  withdrawFunds: async (amount, destination) => {
+  withdrawFunds: async (amount, destination, pin) => {
     set({ isLoading: true, error: null });
     try {
       const payload = { 
         amount, 
         destination: destination.type || destination, 
-        idempotencyKey: `wd_${Date.now()}` 
+        idempotencyKey: `wd_${Date.now()}`,
+        pin
       };
-      if (destination.type === 'BANK_TRANSFER') {
+      if (destination.type === 'BANK' || destination.type === 'BANK_TRANSFER') {
         payload.bankName = destination.bankName;
         payload.accountNumber = destination.accountNumber;
         payload.accountName = destination.accountName;
-        payload.bankCode = '044'; // Mocked bank code for Access Bank
+        payload.bankCode = destination.bankCode || '044'; // Use actual bank code, fallback to 044 (Access Bank) if not provided
       }
       const response = await axios.post('/api/v1/wallet/withdraw', payload);
       if (response.data.success) {
@@ -173,7 +193,8 @@ export const useSellerStore = create((set, get) => ({
       const response = await axios.post('/api/v1/products', productData);
       if (response.data.success) {
         // Fetch products again to update the list
-        await useSellerStore.getState().fetchSellerProducts();
+        await get().fetchSellerProducts();
+        set({ lastCreatedProduct: response.data.product });
         return true;
       }
       return false;
@@ -210,7 +231,7 @@ export const useSellerStore = create((set, get) => ({
       set({ isLoading: true });
       const response = await axios.post(`/api/v1/products/restock/${productId}`, { stock });
       if (response.data.success) {
-        await useSellerStore.getState().fetchSellerProducts();
+        await get().fetchSellerProducts();
         set({ isLoading: false });
         return true;
       }
@@ -306,7 +327,7 @@ export const useSellerStore = create((set, get) => ({
       set({ isLoading: true });
       const response = await axios.put(`/api/v1/products/${productId}`, productData);
       if (response.data.success) {
-        await useSellerStore.getState().fetchSellerProducts();
+        await get().fetchSellerProducts();
         return true;
       }
       return false;
@@ -324,7 +345,7 @@ export const useSellerStore = create((set, get) => ({
       set({ isLoading: true });
       const response = await axios.post(`/api/v1/buyer-requests/${requestId}/respond`, responseData);
       if (response.data.success) {
-        await useSellerStore.getState().fetchBuyerRequests();
+        await get().fetchBuyerRequests();
         return true;
       }
       return false;
@@ -340,7 +361,7 @@ export const useSellerStore = create((set, get) => ({
       set({ isLoading: true });
       const response = await axios.post(`/api/v1/orders/${orderId}/approve-proof`);
       if (response.data.success) {
-        await useSellerStore.getState().fetchSellerOrders();
+        await get().fetchSellerOrders();
         set({ isLoading: false });
         return true;
       }
@@ -357,7 +378,7 @@ export const useSellerStore = create((set, get) => ({
       set({ isLoading: true });
       const response = await axios.post(`/api/v1/orders/${orderId}/reject-proof`, { reason });
       if (response.data.success) {
-        await useSellerStore.getState().fetchSellerOrders();
+        await get().fetchSellerOrders();
         set({ isLoading: false });
         return true;
       }
@@ -414,6 +435,44 @@ export const useSellerStore = create((set, get) => ({
     }
   },
 
+  setWithdrawPin: async (pin) => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await axios.post('/api/v1/wallet/set-pin', { pin });
+      set({ isLoading: false });
+      return response.data;
+    } catch (err) {
+      set({ error: err.response?.data?.message || 'Failed to set PIN', isLoading: false });
+      throw err;
+    }
+  },
+
+  forgotWithdrawPin: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await axios.post('/api/v1/wallet/forgot-pin');
+      set({ isLoading: false });
+      return response.data;
+    } catch (err) {
+      set({ error: err.response?.data?.message || 'Failed to send OTP', isLoading: false });
+      throw err;
+    }
+  },
+
+  resetWithdrawPin: async (otp, newPin) => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await axios.post('/api/v1/wallet/reset-pin', { otp, newPin });
+      set({ isLoading: false });
+      return response.data;
+    } catch (err) {
+      set({ error: err.response?.data?.message || 'Failed to reset PIN', isLoading: false });
+      throw err;
+    }
+  },
+
+  clearError: () => set({ error: null }),
+
   fetchPackingOrders: async () => {
     set({ isLoading: true, error: null });
     try {
@@ -421,7 +480,7 @@ export const useSellerStore = create((set, get) => ({
         axios.get('/api/v1/packing/to-pack'),
         axios.get('/api/v1/packing/packed')
       ]);
-      
+
       set({ 
         toPack: toPackRes.data.data || toPackRes.data.orders || [],
         packed: packedRes.data.data || packedRes.data.orders || [],
@@ -437,7 +496,7 @@ export const useSellerStore = create((set, get) => ({
       set({ isLoading: true });
       const response = await axios.post('/api/v1/packing/pack', { orderId });
       if (response.data.success) {
-        await useSellerStore.getState().fetchPackingOrders();
+        await get().fetchPackingOrders();
         return true;
       }
       return false;
@@ -467,7 +526,7 @@ export const useSellerStore = create((set, get) => ({
       const response = await axios.put(`/api/v1/disputes/${disputeId}/respond`, responseData);
       if (response.data.success) {
         set({ isLoading: false });
-        get().fetchDisputes();
+        await get().fetchDisputes();
         return true;
       }
       return false;
@@ -503,6 +562,40 @@ export const useSellerStore = create((set, get) => ({
       }
     } catch (err) {
       set({ error: err.response?.data?.message || 'Error fetching buyer requests', isLoading: false });
+    }
+  },
+
+    fetchBanningStatus: async () => {
+    try {
+      set({ banningLoading: true });
+      const response = await axios.get('/api/v1/seller/banning-status');
+      if (response.data && response.data.success) {
+        set({ banningStatus: response.data, banningLoading: false });
+        return response.data;
+      }
+      set({ banningLoading: false });
+      return null;
+    } catch (err) {
+      console.warn('[SELLER STORE] fetchBanningStatus failed:', err.message);
+      set({ banningLoading: false });
+      return null;
+    }
+  },
+
+  curePenalty: async ({ incidentId, orderId }) => {
+    try {
+      set({ banningLoading: true });
+      const response = await axios.post('/api/v1/seller/banning/cure', { incidentId, orderId });
+      if (response.data && response.data.success) {
+        await get().fetchBanningStatus();
+        return { success: true, data: response.data };
+      }
+      return { success: false, message: response.data.message };
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || 'Cure failed';
+      return { success: false, message: msg };
+    } finally {
+      set({ banningLoading: false });
     }
   },
 

@@ -2,11 +2,13 @@ import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { ROUTES } from '../constants/routes';
+import { useIsPresent } from 'framer-motion';
 
 const GuestGuard = () => {
-  const { user, isAuthenticated, isLoading } = useAuthStore();
+  const { user, isAuthenticated, isCheckingAuth } = useAuthStore();
+  const isPresent = useIsPresent();
 
-  if (isLoading) {
+  if (isCheckingAuth) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[var(--bg-primary)]">
         <div className="w-8 h-8 border-2 border-[var(--accent-primary)] border-t-transparent rounded-full animate-spin"></div>
@@ -14,7 +16,7 @@ const GuestGuard = () => {
     );
   }
 
-  if (isAuthenticated) {
+  if (isAuthenticated && isPresent) {
     const userRole = user?.role?.toUpperCase();
     // If they are logged in, redirect them away from auth pages
     if (!userRole || userRole === 'PENDING') {

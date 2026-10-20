@@ -2,10 +2,10 @@ import React from 'react';
 import { Outlet } from 'react-router-dom';
 import AppShell from './AppShell';
 
-export const SellerShell = ({ children, className = '' }) => {
+export const SellerShell = ({ className = '' }) => {
   return (
     <AppShell className={`sellershell ${className}`}>
-      {children || <Outlet />}
+      <Outlet />
     </AppShell>
   );
 };

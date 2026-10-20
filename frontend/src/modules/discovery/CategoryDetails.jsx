@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ChevronRight, SlidersHorizontal, Star, Heart, ShoppingCart, X, ChevronDown } from 'lucide-react';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 import toast from 'react-hot-toast';
 
 const CATEGORY_META = {
@@ -19,21 +19,6 @@ const CATEGORY_META = {
   jewelry: { name: 'Jewelry', emoji: '💍', gradient: 'from-rose-600 to-pink-600', banner: 'from-rose-900 to-pink-900' },
 };
 
-const MOCK_PRODUCTS = Array.from({ length: 16 }, (_, i) => ({
-  id: i + 1,
-  name: ['MacBook Air M4', 'Samsung Galaxy S25', 'Sony WH-1000XM6', 'iPad Pro 13"',
-    'LG OLED 65"', 'AirPods Pro 3', 'DJI Mini 4K', 'Logitech MX Master',
-    'Razer DeathAdder', 'Elgato 4K Cam', 'ASUS ROG Monitor', 'SteelSeries Headset',
-    'Dell XPS 15', 'Bose QC45', 'Anker Power Bank', 'Kingston SSD 2TB'][i],
-  price: [899, 999, 249, 1099, 1299, 189, 299, 79, 59, 149, 399, 179, 1299, 229, 49, 89][i],
-  original: [1299, 1199, 399, 1499, 1799, 329, 399, 99, 79, 199, 549, 249, 1799, 329, 79, 129][i],
-  rating: [4.9, 4.8, 4.9, 4.7, 4.8, 4.8, 4.6, 4.7, 4.5, 4.4, 4.7, 4.6, 4.8, 4.9, 4.3, 4.8][i],
-  reviews: [2300, 8900, 3400, 1200, 4500, 9800, 1100, 7800, 12000, 890, 3200, 5600, 1800, 6700, 15000, 4300][i],
-  image: ['💻', '📱', '🎵', '📱', '📺', '🎧', '🚁', '🖱️', '🖱️', '📷', '🖥️', '🎧', '💻', '🎵', '🔋', '💾'][i],
-  badge: i < 4 ? 'Best Seller' : i < 8 ? 'New' : null,
-  condition: i % 3 === 0 ? 'New' : 'New',
-}));
-
 const BRANDS = ['All Brands', 'Apple', 'Samsung', 'Sony', 'LG', 'Dell', 'Asus', 'Logitech', 'Bose', 'Razer'];
 const SORT_OPTIONS = ['Relevance', 'Price: Low to High', 'Price: High to Low', 'Best Rated', 'Most Reviews', 'Newest'];
 
@@ -41,7 +26,7 @@ export default function CategoryDetails() {
   const { slug } = useParams();
   const meta = CATEGORY_META[slug] || { name: slug, emoji: '🛍️', gradient: 'from-gray-600 to-slate-600', banner: 'from-gray-900 to-slate-900' };
 
-  const [products, setProducts] = useState(MOCK_PRODUCTS);
+  const [products, setProducts] = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sort, setSort] = useState('Relevance');
   const [priceRange, setPriceRange] = useState([0, 2000]);
@@ -51,7 +36,15 @@ export default function CategoryDetails() {
 
   useEffect(() => {
     axios.get(`/api/v1/products?category=${slug}&limit=16`)
-      .then(r => { if (r.data?.products?.length) setProducts(r.data.products); })
+      .then(r => { 
+        if (r.data?.data) {
+          setProducts(r.data.data); 
+        } else if (r.data?.products) {
+          setProducts(r.data.products);
+        } else if (Array.isArray(r.data)) {
+          setProducts(r.data);
+        }
+      })
       .catch(() => {
         toast.error('Failed to load category products');
       });
@@ -204,8 +197,8 @@ export default function CategoryDetails() {
                     <span className="text-[var(--text-faint)] text-xs">({p.reviews?.toLocaleString()})</span>
                   </div>
                   <div className="flex items-center gap-1.5 mt-1.5">
-                    <span className="text-[var(--text-main)] font-bold text-sm">${p.price}</span>
-                    {p.original && <span className="text-[var(--text-faint)] text-xs line-through">${p.original}</span>}
+                    <span className="text-[var(--text-main)] font-bold text-sm">₦{p.price}</span>
+                    {p.original && <span className="text-[var(--text-faint)] text-xs line-through">₦{p.original}</span>}
                   </div>
                 </div>
               </Link>

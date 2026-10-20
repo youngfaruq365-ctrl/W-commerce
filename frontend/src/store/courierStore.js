@@ -18,6 +18,10 @@ export const useCourierStore = create((set, get) => ({
     earningsLoading: false,
     earningsError: null,
     earningsLastFetchedAt: null,
+
+    dashboard: null,
+    dashboardLoading: false,
+    dashboardError: null,
     
     setProfile: (profile) => set({ profile }),
     setAvailability: async (status) => {
@@ -75,6 +79,16 @@ export const useCourierStore = create((set, get) => ({
             });
         } catch (error) {
             set({ earningsError: error.message || 'Failed to fetch earnings', earningsLoading: false });
+        }
+    },
+
+    fetchDashboard: async () => {
+        set({ dashboardLoading: true, dashboardError: null });
+        try {
+            const data = await courierApi.getDashboard();
+            set({ dashboard: data.data, dashboardLoading: false });
+        } catch (error) {
+            set({ dashboardError: error.message || 'Failed to fetch dashboard', dashboardLoading: false });
         }
     }
 }));

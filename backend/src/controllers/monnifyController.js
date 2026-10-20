@@ -187,7 +187,7 @@ exports.createMonnifyPayment = async (req, res) => {
 
   } catch (error) {
     logger.error(`[MONNIFY] Init Error: ${error.message}`);
-    return res.status(500).json({ success: false, message: 'Monnify payment initialization failed', error: error.message });
+    return res.status(500).json({ success: false, message: 'Monnify payment initialization failed', error: process.env.NODE_ENV === 'production' ? 'An error occurred' : error.message });
   }
 };
 
@@ -235,7 +235,7 @@ exports.verifyMonnifyTransaction = async (req, res) => {
 
   } catch (error) {
     logger.error(`[MONNIFY] Verify Error: ${error.message}`);
-    return res.status(500).json({ success: false, message: 'Verification failed', error: error.message });
+    return res.status(500).json({ success: false, message: 'Verification failed', error: process.env.NODE_ENV === 'production' ? 'An error occurred' : error.message });
   }
 };
 

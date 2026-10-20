@@ -10,7 +10,7 @@ const CartItem = ({ item, style }) => {
       <img src={item.image} alt={item.name} className="w-20 h-20 object-cover rounded-[var(--s-radius,8px)] flex-shrink-0" />
       <div className="flex-1 min-w-0">
         <div className="font-bold text-sm truncate">{item.name}</div>
-        <div className="text-[var(--s-primary)] font-bold mt-1">${item.price}</div>
+        <div className="text-[var(--s-primary)] font-bold mt-1">₦{item.price}</div>
         <div className="flex items-center gap-2 mt-2">
           <button onClick={() => updateQty(item.id, item.qty - 1)} className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors">
             <Minus size={12} />
@@ -33,10 +33,10 @@ const CartFooter = ({ onCheckout }) => {
   const shipping = cartTotal > 100 ? 0 : 9.99;
   return (
     <div className="p-6 border-t border-[var(--s-border,#f0f0f0)] space-y-4">
-      <div className="flex justify-between text-sm"><span className="opacity-60">Subtotal</span><span className="font-bold">${cartTotal.toFixed(2)}</span></div>
+      <div className="flex justify-between text-sm"><span className="opacity-60">Subtotal</span><span className="font-bold">₦{cartTotal.toFixed(2)}</span></div>
       <div className="flex justify-between text-sm"><span className="opacity-60">Shipping</span><span className="font-bold">{shipping === 0 ? 'Free' : `$${shipping}`}</span></div>
       <div className="h-px bg-gray-100"></div>
-      <div className="flex justify-between font-black text-lg"><span>Total</span><span>${(cartTotal + shipping).toFixed(2)}</span></div>
+      <div className="flex justify-between font-black text-lg"><span>Total</span><span>₦{(cartTotal + shipping).toFixed(2)}</span></div>
       <button onClick={onCheckout} disabled={cart.length === 0}
         className="w-full py-4 bg-[var(--s-primary,#000)] text-[var(--s-bg,#fff)] font-bold rounded-[var(--s-radius,8px)] disabled:opacity-40 flex items-center justify-center gap-2 hover:opacity-90 transition-opacity">
         Checkout <ArrowRight size={16} />
@@ -105,11 +105,11 @@ export const MinimalPanelCart = ({ onClose, onCheckout }) => {
         {cart.map(item => (
           <div key={item.id} className="flex justify-between items-center py-2 text-sm border-b border-gray-50">
             <span className="font-medium truncate flex-1 mr-2">{item.name}</span>
-            <span className="font-bold">${(item.price * item.qty).toFixed(2)}</span>
+            <span className="font-bold">₦{(item.price * item.qty).toFixed(2)}</span>
           </div>
         ))}
         <div className="flex justify-between font-black mt-4 mb-3">
-          <span>Total</span><span>${cartTotal.toFixed(2)}</span>
+          <span>Total</span><span>₦{cartTotal.toFixed(2)}</span>
         </div>
         <button onClick={onCheckout} className="w-full py-3 bg-black text-white font-bold rounded-lg">Checkout</button>
       </motion.div>

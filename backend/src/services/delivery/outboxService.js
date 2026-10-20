@@ -1,6 +1,5 @@
 // src/backend/services/delivery/outboxService.js
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const prisma = require('../../utils/prismaClient');
 
 const processOutbox = async () => {
     const events = await prisma.notificationOutbox.findMany({

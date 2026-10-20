@@ -53,10 +53,28 @@ exports.sendMessage = async (req, res) => {
             recipientOnline: socketService.isUserOnline(req.body.receiverId || req.body.recipientId || null)
         });
 
+        const io = socketService.getIO();
+        if (io && result.message) {
+            const senderId = String(result.message.senderId || req.user.id);
+            const targetReceiverId = String(result.message.receiverId || req.body.receiverId || req.body.recipientId || '');
+
+            if (targetReceiverId) {
+                io.to(targetReceiverId).emit('receiveMessage', result.message);
+                io.to(targetReceiverId).emit('notification', {
+                    title: `New message from ${result.message.senderName || 'Seller'}`,
+                    body: (result.message.content || '').slice(0, 100),
+                    data: result.message
+                });
+            }
+            if (senderId) {
+                io.to(senderId).emit('receiveMessage', result.message);
+            }
+        }
+
         res.json({ success: true, message: result.message, autoReply: result.autoReply });
     } catch (error) {
         logger.error(`Send Message Error: ${error.message}`);
-        res.status(500).json({ success: false, message: error.message || 'Failed to send message' });
+        res.status(500).json({ success: false, message: process.env.NODE_ENV === 'production' ? 'Failed to send message' : error.message });
     }
 };
 

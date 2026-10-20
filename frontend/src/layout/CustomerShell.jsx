@@ -2,10 +2,10 @@ import React from 'react';
 import { Outlet } from 'react-router-dom';
 import AppShell from './AppShell';
 
-export const CustomerShell = ({ children, className = '' }) => {
+export const CustomerShell = ({ className = '' }) => {
   return (
     <AppShell className={`customershell ${className}`}>
-      {children || <Outlet />}
+      <Outlet />
     </AppShell>
   );
 };

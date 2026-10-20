@@ -1,5 +1,6 @@
 const prisma = require('../utils/prismaClient');
 const logger = require('../utils/logger');
+const checkoutService = require('../services/checkoutService');
 
 async function cancelExpiredOrders() {
     logger.info('[CRON] Checking for expired pending orders...');
@@ -16,8 +17,8 @@ async function cancelExpiredOrders() {
                     lt: now
                 }
             },
-            include: {
-                items: true
+            select: {
+                id: true
             }
         });
 
@@ -29,29 +30,12 @@ async function cancelExpiredOrders() {
         logger.info(`[CRON] Found ${expiredOrders.length} expired orders. Cancelling and restoring stock...`);
 
         for (const order of expiredOrders) {
-            await prisma.$transaction(async (tx) => {
-                // Restore stock for each item
-                for (const item of order.items) {
-                    await tx.product.update({
-                        where: { id: item.productId },
-                        data: { stock: { increment: item.quantity } }
-                    });
-                }
-
-                // Mark order as CANCELLED
-                await tx.order.update({
-                    where: { id: order.id },
-                    data: { status: 'CANCELLED' }
-                });
-                
-                // If this is a parent order, its children will be caught in the query since they also have expiresAt and are PENDING,
-                // but we could also cascade just in case. 
-                await tx.order.updateMany({
-                    where: { parentOrderId: order.id, status: 'PENDING' },
-                    data: { status: 'CANCELLED' }
-                });
-            });
-            logger.info(`[CRON] Cancelled order ${order.id} and restored stock.`);
+            try {
+                await checkoutService.cancelAndRestoreOrder({ orderId: order.id });
+                logger.info(`[CRON] Cancelled order ${order.id} and restored stock.`);
+            } catch (orderErr) {
+                logger.error(`[CRON] Error cancelling order ${order.id}: ${orderErr.message}`);
+            }
         }
         
     } catch (error) {

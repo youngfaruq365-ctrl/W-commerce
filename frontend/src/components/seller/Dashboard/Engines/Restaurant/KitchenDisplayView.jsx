@@ -87,13 +87,40 @@ const KitchenDisplayView = () => {
                     ))}
                   </ul>
                   {ticket.status === 'new' && (
-                    <button onClick={() => toast('Feature coming soon', { icon: '🚀' })}  className="w-full bg-orange-500 hover:bg-orange-600 text-black font-black py-2 rounded-lg text-sm transition-colors">START COOKING</button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        updateStatus(ticket.id, 'cooking');
+                        toast.success(`${ticket.id} is now cooking`);
+                      }}
+                      className="w-full bg-orange-500 hover:bg-orange-600 text-black font-black py-2 rounded-lg text-sm transition-colors"
+                    >
+                      START COOKING
+                    </button>
                   )}
                   {ticket.status === 'cooking' && (
-                    <button onClick={() => toast('Feature coming soon', { icon: '🚀' })}  className="w-full bg-green-500 hover:bg-green-600 text-black font-black py-2 rounded-lg text-sm transition-colors">MARK READY</button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        updateStatus(ticket.id, 'ready');
+                        toast.success(`${ticket.id} marked ready for pickup`);
+                      }}
+                      className="w-full bg-green-500 hover:bg-green-600 text-black font-black py-2 rounded-lg text-sm transition-colors"
+                    >
+                      MARK READY
+                    </button>
                   )}
                   {ticket.status === 'ready' && (
-                    <div className="text-center font-bold text-green-400 text-sm tracking-widest bg-green-900/30 py-2 rounded-lg border border-green-500/30">AWAITING PICKUP</div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setTickets(prev => prev.filter(t => t.id !== ticket.id));
+                        toast.success(`${ticket.id} served & bumped`);
+                      }}
+                      className="w-full text-center font-bold text-green-400 hover:bg-green-900/50 text-sm tracking-widest bg-green-900/30 py-2 rounded-lg border border-green-500/30 transition-colors"
+                    >
+                      AWAITING PICKUP • TAP TO BUMP
+                    </button>
                   )}
                 </motion.div>
               ))}

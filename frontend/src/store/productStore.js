@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import axios from 'axios';
+import { apiClient as axios } from '../utils/apiClient';
+import { offlineStorage } from '../offline/offlineStorage';
 
 export const useProductStore = create((set) => ({
   products: [],
@@ -9,6 +10,7 @@ export const useProductStore = create((set) => ({
   categories: [],
   isLoading: false,
   error: null,
+  isOfflineCache: false,
 
   fetchProducts: async (params = {}) => {
     try {
@@ -16,9 +18,23 @@ export const useProductStore = create((set) => ({
       // Fetching all products or with query params
       const response = await axios.get('/api/v1/products', { params });
       if (response.data.success) {
-        set({ products: response.data.products || [] });
+        const products = response.data.products || [];
+        set({ products, isOfflineCache: false });
+        // Asynchronously persist to IndexedDB offline storage
+        offlineStorage.saveProducts(products);
       }
     } catch (err) {
+      // Offline fallback: retrieve cached catalog from IndexedDB
+      try {
+        const cachedProducts = await offlineStorage.getProducts();
+        if (cachedProducts && cachedProducts.length > 0) {
+          console.log('[ProductStore] Loaded cached products for offline browsing:', cachedProducts.length);
+          set({ products: cachedProducts, isOfflineCache: true, error: null });
+          return;
+        }
+      } catch (cacheErr) {
+        console.warn('[ProductStore] Cache retrieval error:', cacheErr);
+      }
       set({ error: err.response?.data?.message || 'Error fetching products' });
     } finally {
       set({ isLoading: false });

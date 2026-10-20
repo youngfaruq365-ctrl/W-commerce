@@ -1,10 +1,39 @@
 import { create } from 'zustand';
-import axios from 'axios';
+import { apiClient as axios } from '../utils/apiClient';
+import { offlineStorage } from '../offline/offlineStorage';
+import { offlineSyncManager } from '../offline/offlineSyncManager';
 
 axios.defaults.withCredentials = true;
 
+const mapCartItem = (i) => {
+  const dealDiscount = (i.product.flashDeals && i.product.flashDeals.length > 0)
+    ? Number(i.product.flashDeals[0].discount || 0)
+    : (Number(i.product.discountPercentage) || 0);
+  const basePrice = Number(i.product.price || 0);
+  const price = dealDiscount > 0
+    ? Number((basePrice * (1 - dealDiscount / 100)).toFixed(2))
+    : basePrice;
+
+  return {
+    id: i.id,
+    productId: i.productId,
+    title: i.product.title,
+    price,
+    originalPrice: basePrice,
+    discount: dealDiscount,
+    quantity: i.quantity,
+    stock: i.product.stock,
+    variants: i.variants,
+    image: i.product.images?.[0]?.url || `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23111827'/%3E%3Ctext x='50' y='54' text-anchor='middle' dominant-baseline='middle' font-family='sans-serif' font-size='11' fill='%236b7280'%3ENo Image%3C/text%3E%3C/svg%3E`,
+    seller: i.product.store?.storeName || 'Verified Seller',
+    sellerId: i.product.store?.sellerId || null,
+    directShippingRate: parseFloat(i.product.shippingFee) || 0
+  };
+};
+
 export const useCartStore = create((set, get) => ({
   cartItems: [],
+  lastCheckoutItems: [],   // items from the last direct-bank checkout, cleared on success
   isLoading: false,
   error: null,
 
@@ -18,89 +47,127 @@ export const useCartStore = create((set, get) => ({
       set({ isLoading: true, error: null });
       const res = await axios.get('/api/v1/cart?_t=' + Date.now());
       if (res.data.success && res.data.cart) {
-        const items = res.data.cart.items.map(i => ({
-          id: i.id,
-          productId: i.productId,
-          title: i.product.title,
-          price: (i.product.flashDeals && i.product.flashDeals.length > 0)
-            ? Number((i.product.price * (1 - (i.product.flashDeals[0].discount || 0) / 100)).toFixed(2))
-            : i.product.price,
-          originalPrice: i.product.price,
-          discount: (i.product.flashDeals && i.product.flashDeals.length > 0) ? i.product.flashDeals[0].discount : 0,
-          quantity: i.quantity,
-          variants: i.variants,
-          image: i.product.images?.[0]?.url || `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23111827'/%3E%3Ctext x='50' y='54' text-anchor='middle' dominant-baseline='middle' font-family='sans-serif' font-size='11' fill='%236b7280'%3ENo Image%3C/text%3E%3C/svg%3E`,
-          seller: i.product.store?.storeName || 'Verified Seller',
-          sellerId: i.product.store?.sellerId || null,
-          directShippingRate: (() => {
-            try {
-              if (!i.product.store?.portfolioConfig) return 75.00;
-              const config = JSON.parse(i.product.store.portfolioConfig);
-              return parseFloat(config.directShippingRate) || 75.00;
-            } catch(e) { return 75.00; }
-          })()
-        }));
+        const items = res.data.cart.items.map(mapCartItem);
         set({ cartItems: items, isLoading: false });
+        // Cache to IndexedDB
+        offlineStorage.saveCart(items);
       } else {
         set({ cartItems: [], isLoading: false });
+        offlineStorage.saveCart([]);
       }
     } catch (err) {
-      console.error('fetchCart Error:', err);
+      console.warn('fetchCart network error, checking offline cache:', err.message);
+      // Fallback: load cart from IndexedDB offline storage
+      try {
+        const cachedCart = await offlineStorage.getCart();
+        if (cachedCart && cachedCart.length > 0) {
+          console.log('[CartStore] Loaded offline cached cart:', cachedCart.length, 'items');
+          set({ cartItems: cachedCart, isLoading: false, error: null });
+          return;
+        }
+      } catch (cacheErr) {
+        console.warn('[CartStore] Offline cart read error:', cacheErr);
+      }
       set({ error: err.response?.data?.message || err.message || 'Failed to fetch cart', isLoading: false });
     }
   },
 
-  addToCart: async (productId, quantity = 1) => {
+  addToCart: async (productId, quantity = 1, variants = null) => {
+    // If browser is offline, handle immediately via offline manager
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return get()._addOffline(productId, quantity, variants);
+    }
+
     try {
       set({ isLoading: true, error: null });
-      const res = await axios.post('/api/v1/cart/add', { productId, quantity });
+      const res = await axios.post('/api/v1/cart/add', { productId, quantity, variants });
       if (res.data.success && res.data.cart) {
-        const items = res.data.cart.items.map(i => ({
-          id: i.id,
-          productId: i.productId,
-          title: i.product.title,
-          price: (i.product.flashDeals && i.product.flashDeals.length > 0)
-            ? Number((i.product.price * (1 - (i.product.flashDeals[0].discount || 0) / 100)).toFixed(2))
-            : i.product.price,
-          originalPrice: i.product.price,
-          discount: (i.product.flashDeals && i.product.flashDeals.length > 0) ? i.product.flashDeals[0].discount : 0,
-          quantity: i.quantity,
-          variants: i.variants,
-          image: i.product.images?.[0]?.url || `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23111827'/%3E%3Ctext x='50' y='54' text-anchor='middle' dominant-baseline='middle' font-family='sans-serif' font-size='11' fill='%236b7280'%3ENo Image%3C/text%3E%3C/svg%3E`,
-          seller: i.product.store?.storeName || 'Verified Seller',
-          sellerId: i.product.store?.sellerId || null,
-          directShippingRate: (() => {
-            try {
-              if (!i.product.store?.portfolioConfig) return 75.00;
-              const config = JSON.parse(i.product.store.portfolioConfig);
-              return parseFloat(config.directShippingRate) || 75.00;
-            } catch(e) { return 75.00; }
-          })()
-        }));
+        const items = res.data.cart.items.map(mapCartItem);
         set({ cartItems: items, isLoading: false });
+        offlineStorage.saveCart(items);
       } else {
         await get().fetchCart();
       }
     } catch (err) {
+      // If network failure (server unreachable or sudden connection drop), save offline!
+      if (!err.response) {
+        console.warn('[CartStore] Network drop during addToCart, switching to offline queue');
+        return get()._addOffline(productId, quantity, variants);
+      }
       set({ error: err.response?.data?.message || 'Failed to add to cart', isLoading: false });
       throw err;
     }
   },
 
+  _addOffline: async (productId, quantity = 1, variants = null) => {
+    try {
+      const product = await offlineStorage.getProductById(productId);
+      const currentItems = [...get().cartItems];
+      const existingIdx = currentItems.findIndex(i => i.productId === productId);
+
+      let updatedItems;
+      if (existingIdx >= 0) {
+        updatedItems = currentItems.map((item, idx) => 
+          idx === existingIdx ? { ...item, quantity: item.quantity + quantity } : item
+        );
+      } else {
+        const newItem = {
+          id: `offline_item_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+          productId,
+          title: product?.title || 'Selected Product',
+          price: product?.price || 0,
+          originalPrice: product?.price || 0,
+          discount: product?.discountPercentage || 0,
+          quantity,
+          stock: product?.stock || 99,
+          variants,
+          image: product?.images?.[0]?.url || product?.imageUrl || `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23111827'/%3E%3Ctext x='50' y='54' text-anchor='middle' dominant-baseline='middle' font-family='sans-serif' font-size='11' fill='%236b7280'%3ENo Image%3C/text%3E%3C/svg%3E`,
+          seller: product?.store?.storeName || 'Verified Seller',
+          sellerId: product?.store?.sellerId || null,
+          directShippingRate: parseFloat(product?.shippingFee) || 0
+        };
+        updatedItems = [...currentItems, newItem];
+      }
+
+      set({ cartItems: updatedItems, isLoading: false, error: null });
+      await offlineStorage.saveCart(updatedItems);
+      await offlineSyncManager.queueCartAdd(productId, quantity, variants, product);
+    } catch (e) {
+      console.error('[CartStore] _addOffline error:', e);
+      set({ isLoading: false });
+    }
+  },
+
   updateQuantity: async (productId, quantity, variants = null) => {
+    if (quantity < 1) return;
+
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      const updated = get().cartItems.map(item =>
+        item.productId === productId ? { ...item, quantity } : item
+      );
+      set({ cartItems: updated });
+      await offlineStorage.saveCart(updated);
+      await offlineSyncManager.queueCartUpdate(productId, quantity, variants);
+      return;
+    }
+
     try {
       set({ isLoading: true, error: null });
-      if (quantity < 1) {
-        set({ isLoading: false });
-        return;
-      }
       await axios.post('/api/v1/cart/update', { productId, quantity, variants });
       await get().fetchCart();
     } catch (error) {
+      if (!error.response) {
+        // Network drop: persist locally and queue
+        const updated = get().cartItems.map(item =>
+          item.productId === productId ? { ...item, quantity } : item
+        );
+        set({ cartItems: updated, isLoading: false });
+        await offlineStorage.saveCart(updated);
+        await offlineSyncManager.queueCartUpdate(productId, quantity, variants);
+        return;
+      }
       console.error('Update quantity error:', error.response?.data || error);
-      set({ error: error.response?.data?.message || 'Failed to update quantity' });
-    } finally {
-      set({ isLoading: false });
+      set({ error: error.response?.data?.message || 'Failed to update quantity', isLoading: false });
     }
   },
 
@@ -110,6 +177,11 @@ export const useCartStore = create((set, get) => ({
       const remainingItems = get().cartItems.filter(i => !targetItems.includes(i));
       set({ cartItems: remainingItems, lastCheckoutItems: [] });
     }
+  },
+
+  clearCart: () => {
+    set({ cartItems: [] });
+    offlineStorage.saveCart([]);
   },
 
   verifyCartPrices: async () => {
@@ -131,6 +203,14 @@ export const useCartStore = create((set, get) => ({
   },
 
   removeFromCart: async (productId, variants = null) => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      const remaining = get().cartItems.filter(item => item.productId !== productId);
+      set({ cartItems: remaining });
+      await offlineStorage.saveCart(remaining);
+      await offlineSyncManager.queueCartRemove(productId, variants);
+      return;
+    }
+
     try {
       set({ isLoading: true, error: null });
       const res = await axios.post('/api/v1/cart/remove', { productId, variants });
@@ -138,6 +218,14 @@ export const useCartStore = create((set, get) => ({
         await get().fetchCart();
       }
     } catch (err) {
+      if (!err.response) {
+        // Network drop: remove locally and queue
+        const remaining = get().cartItems.filter(item => item.productId !== productId);
+        set({ cartItems: remaining, isLoading: false });
+        await offlineStorage.saveCart(remaining);
+        await offlineSyncManager.queueCartRemove(productId, variants);
+        return;
+      }
       set({ error: err.response?.data?.message || 'Failed to remove from cart', isLoading: false });
     }
   },
@@ -262,12 +350,10 @@ export const useCartStore = create((set, get) => ({
       const pm = shippingOptions.paymentMethod;
       if (pm === 'direct_bank') endpoint = shippingOptions.sellerOnly ? '/api/v1/orders/direct' : '/api/v1/payment/bank-transfer';
       else if (pm === 'wallet') endpoint = '/api/v1/payment/pay-wallet';
+      else if (pm === 'monnify') endpoint = '/api/v1/payment/monnify-intent';
       else if (pm === 'cod') endpoint = '/api/v1/payment/cod-order';
       else if (pm === 'flutterwave') endpoint = '/api/v1/payment/flutterwave-intent';
-      else if (['klarna', 'afterpay', 'affirm'].includes(pm)) {
-        endpoint = '/api/v1/payment/v2/bnpl/initialize';
-        orderPayload.provider = pm;
-      }
+      else if (pm === 'paystack') orderPayload.gateway = 'PAYSTACK';
 
       let idempotencyKey = sessionStorage.getItem('checkout_idempotency');
       if (!idempotencyKey) {

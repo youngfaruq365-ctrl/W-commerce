@@ -107,7 +107,10 @@ async function broadcastGpsToRoom(courierUserId, point) {
         const assignments = await prisma.deliveryAssignment.findMany({
             where: {
                 courierId:          profile.id,
-                fulfillmentOrderId: { not: null },
+                OR: [
+                    { fulfillmentOrderId: { not: null } },
+                    { orderId: { not: null } }
+                ],
                 status: {
                     in: ['ASSIGNED', 'COURIER_ACCEPTED', 'EN_ROUTE_TO_PICKUP',
                          'ARRIVED_AT_PICKUP', 'PICKED_UP', 'IN_TRANSIT',
@@ -153,9 +156,10 @@ async function broadcastStatusUpdate(assignmentId, newStatus, context = {}) {
         const assignment = await prisma.deliveryAssignment.findUnique({
             where:   { id: assignmentId },
             select: {
-                id:                true,
+                id:                 true,
                 fulfillmentOrderId: true,
-                fulfillmentOrder:  {
+                orderId:            true,
+                order: {
                     select: {
                         buyerId:  true,
                         sellerId: true,
@@ -178,9 +182,10 @@ async function broadcastStatusUpdate(assignmentId, newStatus, context = {}) {
         }
 
         // 2. Push notification for key milestones (buyer)
-        if (BUYER_NOTIFY_MILESTONES.has(newStatus) && assignment.fulfillmentOrder?.buyerId) {
+        const buyerId = assignment.order?.buyerId;
+        if (BUYER_NOTIFY_MILESTONES.has(newStatus) && buyerId) {
             const label = STATUS_LABELS[newStatus] || `Delivery status: ${newStatus}`;
-            notificationV2.notify(assignment.fulfillmentOrder.buyerId, {
+            notificationV2.notify(buyerId, {
                 type:      'DELIVERY_UPDATE',
                 title:     'Delivery Update 📦',
                 body:      label,
@@ -188,20 +193,34 @@ async function broadcastStatusUpdate(assignmentId, newStatus, context = {}) {
             }).catch(() => {});
         }
 
-        // 3. When DELIVERED: update FulfillmentOrder status to DELIVERED
-        if (newStatus === 'DELIVERED' && assignment.fulfillmentOrderId) {
-            await prisma.fulfillmentOrder.update({
-                where: { id: assignment.fulfillmentOrderId },
-                data:  { status: 'DELIVERED' },
-            }).catch(e => logger.warn(`[GPSTracking] FO DELIVERED update: ${e.message}`));
+        // 3. When DELIVERED: update FulfillmentOrder or Order status to DELIVERED
+        if (newStatus === 'DELIVERED') {
+            if (assignment.fulfillmentOrderId) {
+                await prisma.fulfillmentOrder.update({
+                    where: { id: assignment.fulfillmentOrderId },
+                    data:  { status: 'DELIVERED' },
+                }).catch(e => logger.warn(`[GPSTracking] FO DELIVERED update: ${e.message}`));
+            } else if (assignment.orderId) {
+                await prisma.order.update({
+                    where: { id: assignment.orderId },
+                    data:  { status: 'DELIVERED' },
+                }).catch(e => logger.warn(`[GPSTracking] Legacy Order DELIVERED update: ${e.message}`));
+            }
         }
 
-        // 4. When FAILED/CANCELLED: update FulfillmentOrder accordingly
-        if (['FAILED', 'CANCELLED'].includes(newStatus) && assignment.fulfillmentOrderId) {
-            await prisma.fulfillmentOrder.update({
-                where: { id: assignment.fulfillmentOrderId },
-                data:  { status: newStatus === 'FAILED' ? 'CANCELLED' : 'CANCELLED' },
-            }).catch(e => logger.warn(`[GPSTracking] FO ${newStatus} update: ${e.message}`));
+        // 4. When FAILED/CANCELLED: update FulfillmentOrder or Order accordingly
+        if (['FAILED', 'CANCELLED'].includes(newStatus)) {
+            if (assignment.fulfillmentOrderId) {
+                await prisma.fulfillmentOrder.update({
+                    where: { id: assignment.fulfillmentOrderId },
+                    data:  { status: newStatus === 'FAILED' ? 'CANCELLED' : 'CANCELLED' },
+                }).catch(e => logger.warn(`[GPSTracking] FO ${newStatus} update: ${e.message}`));
+            } else if (assignment.orderId) {
+                await prisma.order.update({
+                    where: { id: assignment.orderId },
+                    data:  { status: newStatus === 'FAILED' ? 'CANCELLED' : 'CANCELLED' },
+                }).catch(e => logger.warn(`[GPSTracking] Legacy Order ${newStatus} update: ${e.message}`));
+            }
         }
 
     } catch (e) {
@@ -228,8 +247,8 @@ async function handleTrackingJoin(socket, assignmentId) {
         const assignment = await prisma.deliveryAssignment.findUnique({
             where:   { id: assignmentId },
             include: {
-                fulfillmentOrder: { select: { buyerId: true, sellerId: true } },
-                courier:          { select: { userId: true } },
+                order:   { select: { buyerId: true, sellerId: true } },
+                courier: { select: { userId: true } },
             },
         });
 
@@ -238,8 +257,8 @@ async function handleTrackingJoin(socket, assignmentId) {
             return;
         }
 
-        const buyerId    = assignment.fulfillmentOrder?.buyerId;
-        const sellerId   = assignment.fulfillmentOrder?.sellerId;
+        const buyerId    = assignment.order?.buyerId;
+        const sellerId   = assignment.order?.sellerId;
         const courierUid = assignment.courier?.userId;
         const isAdmin    = ['ADMIN', 'SUPER_ADMIN', 'DISPATCH_ADMIN'].includes(role);
 
@@ -299,7 +318,7 @@ async function getTrackingSnapshot(assignmentId, userId) {
     const assignment = await prisma.deliveryAssignment.findUnique({
         where: { id: assignmentId },
         include: {
-            fulfillmentOrder: {
+            order: {
                 select: {
                     buyerId:  true,
                     sellerId: true,
@@ -329,9 +348,10 @@ async function getTrackingSnapshot(assignmentId, userId) {
         throw Object.assign(new Error('Assignment not found.'), { statusCode: 404 });
     }
 
-    // Authorization
-    const buyerId  = assignment.fulfillmentOrder?.buyerId;
-    const sellerId = assignment.fulfillmentOrder?.sellerId;
+    // Authorization — buyer, seller, or courier can view tracking
+    const buyerId  = assignment.order?.buyerId;
+    const sellerId = assignment.order?.sellerId;
+    const isAdmin  = false; // role not available here; checked at route level if needed
     if (userId !== buyerId && userId !== sellerId && userId !== assignment.courier?.userId) {
         throw Object.assign(new Error('Access denied.'), { statusCode: 403 });
     }

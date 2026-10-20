@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, CheckCircle, ArrowRight, ArrowLeft, Sparkles, Download, Package, AlertCircle, Users, Settings, Star, Truck, Megaphone, Zap, DollarSign } from 'lucide-react';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 import toast from 'react-hot-toast';
 
 const ConnectIntegrationStudio = ({ onSuccess }) => {
@@ -22,7 +22,7 @@ const ConnectIntegrationStudio = ({ onSuccess }) => {
     setTimeout(() => { setProgress(75); setProgressText('Establishing connection...'); }, 1600);
 
     try {
-      await axios.post('http://localhost:5000/api/v1/sellers/integration', { platform, apiKey }, { withCredentials: true });
+      await axios.post('/api/v1/seller/integration', { platform, apiKey }, { withCredentials: true });
       setTimeout(() => {
         setIsSubmitting(false);
         setProgress(100);

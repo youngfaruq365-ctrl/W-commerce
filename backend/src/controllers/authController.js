@@ -9,9 +9,20 @@ const kycService = require('../services/kycService');
 
 const prisma = require('../utils/prismaClient');
 
+const isUsingPlaceholderKeys = () => {
+    const twilioSid = process.env.TWILIO_VERIFY_SID || '';
+    const termiiKey = process.env.TERMII_API_KEY || '';
+    return (
+        process.env.NODE_ENV !== 'production' ||
+        twilioSid.includes('REPLACE') ||
+        termiiKey.includes('tlv_Fzu4b2A') ||
+        (!process.env.TWILIO_ACCOUNT_SID && !process.env.TERMII_API_KEY)
+    );
+};
+
 exports.signup = async (req, res) => {
     try {
-        const { fullName, email, password, role, phone } = req.body;
+        const { fullName, email, password, role, phone, layout } = req.body;
 
         // Check if user exists
         const existingUser = await prisma.user.findUnique({
@@ -45,9 +56,24 @@ exports.signup = async (req, res) => {
                     storeName: `${user.fullName}'s Shop`,
                     description: 'Global marketplace merchant.',
                     country: 'USA',
-                    isVerified: false
+                    isVerified: false,
+                    portfolioConfig: JSON.stringify(layout ? { storeConfig: { productLayout: layout } } : {}),
+                    approvalStatus: 'PENDING'
                 }
             });
+
+            try {
+                const notificationV2Service = require('../services/notificationV2Service');
+                const socketService = require('../services/socketService');
+                await notificationV2Service.notifyAdmins({
+                    type: 'STORE_APPROVAL_REQUIRED',
+                    title: 'New Store Pending Approval',
+                    body: `A new seller "${user.fullName}" has signed up. Their store requires admin approval.`,
+                    linkUrl: '/admin/sellers'
+                });
+                const io = socketService.getIO();
+                if (io) io.to('role:ADMIN').emit('admin_dashboard_update');
+            } catch (err) {}
         }
 
         // Generate 6-Digit Verification Code
@@ -83,7 +109,7 @@ exports.signup = async (req, res) => {
                 role: user.role,
                 isVerified: false
             },
-            ...(process.env.NODE_ENV !== 'production' && { _devCode: verificationCode })
+            ...(isUsingPlaceholderKeys() && { _devCode: verificationCode })
         });
 
 
@@ -188,7 +214,7 @@ exports.login = async (req, res) => {
         // Set httpOnly Cookie
         res.cookie('token', token, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
+            secure: process.env.NODE_ENV === 'production' && !req.hostname.includes('localhost') && !req.hostname.includes('127.0.0.1'),
             sameSite: 'lax',
             maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
         });
@@ -197,7 +223,7 @@ exports.login = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            // token removed for security
+            token, // Required for mobile Capacitor and certain frontend Socket.io plugins
             user: {
                 id: user.id,
                 fullName: user.fullName,
@@ -215,7 +241,7 @@ exports.login = async (req, res) => {
 
     } catch (error) {
         logger.error(`Login Error: ${error.message}`);
-        res.status(500).json({ success: false, message: 'Server error during login' });
+        res.status(500).json({ success: false, message: 'Server error during login', error: error.message, stack: error.stack });
     }
 };
 
@@ -248,7 +274,7 @@ exports.forgotPassword = async (req, res) => {
             await smsService.sendVerificationCode(user.phone, resetCode);
         }
 
-        res.json({ success: true, message: 'Password reset code has been sent to your email (and phone if registered).', ...(process.env.NODE_ENV !== 'production' && { _devCode: resetCode }) });
+        res.json({ success: true, message: 'Password reset code has been sent to your email (and phone if registered).', ...(isUsingPlaceholderKeys() && { _devCode: resetCode }) });
 
     } catch (error) {
         logger.error(`Forgot Password Error: ${error.message}`);
@@ -321,7 +347,7 @@ exports.logout = async (req, res) => {
             httpOnly: true,
             expires: new Date(0),
             secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict'
+            sameSite: 'lax'
         });
         res.json({ success: true, message: 'Logged out successfully' });
     } catch (error) {
@@ -392,7 +418,7 @@ exports.verifyOTP = async (req, res) => {
  */
 exports.resendVerification = async (req, res) => {
     try {
-        const { email } = req.body;
+        const { email, phone } = req.body;
 
         if (!email) {
             return res.status(400).json({ success: false, message: 'Email is required' });
@@ -427,7 +453,13 @@ exports.resendVerification = async (req, res) => {
         // Send verification email
         await emailService.sendVerificationCode(email, user.fullName, verificationCode);
 
-        res.json({ success: true, message: 'Verification link resent to your email.', ...(process.env.NODE_ENV !== 'production' && { _devCode: verificationCode }) });
+        // Send SMS with Code (if phone provided)
+        const targetPhone = phone || user.phone;
+        if (targetPhone) {
+            await smsService.sendVerificationCode(targetPhone, verificationCode);
+        }
+
+        res.json({ success: true, message: 'Verification link resent to your email and phone.', ...(isUsingPlaceholderKeys() && { _devCode: verificationCode }) });
 
     } catch (error) {
         logger.error(`Resend Verification Error: ${error.message}`);
@@ -495,9 +527,52 @@ exports.setRole = async (req, res) => {
         }
 
         if (user.role && user.role !== 'PENDING') {
-            return res.status(400).json({ success: false, message: 'Role has already been set.' });
-        }
+            const token = jwt.sign(
+                { id: user.id, role: user.role, email: user.email },
+                getJwtSecret(),
+                { expiresIn: '30d' }
+            );
 
+            // Invalidate old session
+            const oldToken = req.cookies.token || req.headers.authorization?.split(' ')[1];
+            if (oldToken) {
+                 await prisma.userSession.updateMany({
+                     where: { token: oldToken },
+                     data: { isActive: false }
+                 });
+            }
+
+            await prisma.userSession.create({
+                data: {
+                    userId: user.id,
+                    token: token,
+                    userAgent: req.headers['user-agent'] || null,
+                    ipAddress: req.ip || req.connection?.remoteAddress || null,
+                    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+                }
+            });
+
+            res.cookie('token', token, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production' && !req.hostname.includes('localhost') && !req.hostname.includes('127.0.0.1'),
+                sameSite: 'lax',
+                maxAge: 30 * 24 * 60 * 60 * 1000
+            });
+
+            return res.status(200).json({
+                success: true,
+                message: 'Role has already been set.',
+                token,
+                user: {
+                    id: user.id,
+                    fullName: user.fullName,
+                    email: user.email,
+                    role: user.role,
+                    hasPaidAccess: user.hasPaidAccess,
+                    accessExpiry: user.accessExpiry
+                }
+            });
+        }
         const updatedUser = await prisma.user.update({
             where: { id: userId },
             data: { role },
@@ -517,9 +592,28 @@ exports.setRole = async (req, res) => {
             { expiresIn: '30d' }
         );
 
+        // Invalidate old session
+        const oldToken = req.cookies.token || req.headers.authorization?.split(' ')[1];
+        if (oldToken) {
+             await prisma.userSession.updateMany({
+                 where: { token: oldToken },
+                 data: { isActive: false }
+             });
+        }
+
+        await prisma.userSession.create({
+            data: {
+                userId: updatedUser.id,
+                token: token,
+                userAgent: req.headers['user-agent'] || null,
+                ipAddress: req.ip || req.connection?.remoteAddress || null,
+                expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+            }
+        });
+
         res.cookie('token', token, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
+            secure: process.env.NODE_ENV === 'production' && !req.hostname.includes('localhost') && !req.hostname.includes('127.0.0.1'),
             sameSite: 'lax',
             maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
         });
@@ -527,6 +621,7 @@ exports.setRole = async (req, res) => {
         return res.json({
             success: true,
             message: 'Role updated successfully',
+            token,
             user: updatedUser
         });
     } catch (error) {
@@ -624,17 +719,27 @@ exports.socialLogin = async (req, res) => {
             { expiresIn: '30d' }
         );
 
+        await prisma.userSession.create({
+            data: {
+                userId: user.id,
+                token: authToken,
+                userAgent: req.headers['user-agent'] || null,
+                ipAddress: req.ip || req.connection?.remoteAddress || null,
+                expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+            }
+        });
+
         res.cookie('token', authToken, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
+            secure: process.env.NODE_ENV === 'production' && !req.hostname.includes('localhost') && !req.hostname.includes('127.0.0.1'),
             sameSite: 'lax',
             maxAge: 30 * 24 * 60 * 60 * 1000
         });
 
-        // BUG-AUTH-02: Do NOT return the token in the body — it's already set as httpOnly cookie.
-        // Returning it in the body defeats the security purpose of httpOnly cookies.
+        // Return token so Capacitor/local storage scripts can persist it
         res.json({
             success: true,
+            token: authToken,
             user: { id: user.id, email: user.email, fullName: user.fullName, role: user.role, avatarUrl: user.avatarUrl }
         });
     } catch (error) {
@@ -734,6 +839,16 @@ exports.appleLogin = async (req, res) => {
             getJwtSecret(),
             { expiresIn: '30d' }
         );
+
+        await prisma.userSession.create({
+            data: {
+                userId: user.id,
+                token: authToken,
+                userAgent: req.headers['user-agent'] || null,
+                ipAddress: req.ip || req.connection?.remoteAddress || null,
+                expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+            }
+        });
 
         res.cookie('token', authToken, {
             httpOnly: true,

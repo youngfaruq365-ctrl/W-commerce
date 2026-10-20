@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Activity, Clock, AlertTriangle, TrendingUp } from 'lucide-react';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const FleetAnalytics = () => {

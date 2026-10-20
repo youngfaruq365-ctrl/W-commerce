@@ -1,10 +1,11 @@
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import QRCode from 'react-qr-code';
 import { gxDelete } from '../../components/shared/ui/GXDialog';
 
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
+import toast from 'react-hot-toast';
 import { 
   BarChart2, Activity, Package, AlertCircle, ShoppingBag, 
   Layout, MessageSquare, ShieldCheck, Zap, Users, 
@@ -36,8 +37,13 @@ import RequestFreightStudio from '../../components/seller/Dashboard/RequestFreig
 import CreateFlashStudio from '../../components/seller/Dashboard/CreateFlashStudio';
 // Design Studio removed
 import ActiveCartsView from '../../components/seller/Dashboard/ActiveCartsView';
-
+import CouriersView from '../../components/seller/Dashboard/CouriersView';
+import FreightOffersView from '../../components/seller/Dashboard/FreightOffersView';
 import PremiumUnlockModal from '../../components/PremiumUnlockModal';
+import DesignStudio from '../../components/seller/Dashboard/DesignStudio';
+import SellerAIStudio from '../../components/seller/Dashboard/SellerAIStudio';
+import ExternalSiteStudio from '../../components/seller/Dashboard/ExternalSiteStudio';
+import SellerNegotiationControlRoom from '../../components/seller/Dashboard/SellerNegotiationControlRoom';
 
 // ── Error Boundary: prevents blank white screen on any render crash ───────────
 class SellerDashboardErrorBoundary extends React.Component {
@@ -129,14 +135,53 @@ const SellerDashboard = () => {
     useSellerStore.setState((state) => ({ storeConfig: typeof update === 'function' ? update(state.storeConfig) : update }));
   };
 
-  // Derive chart data from real analytics fetched by the store.
-  // Falls back to a 4-week flat line so the chart renders nicely instead of broken axes.
-  const performanceData = analytics?.monthlySales?.length > 0 ? analytics.monthlySales : [
-    { name: 'Week 1', sales: 0, visits: 0 },
-    { name: 'Week 2', sales: 0, visits: 0 },
-    { name: 'Week 3', sales: 0, visits: 0 },
-    { name: 'Week 4', sales: 0, visits: 0 }
-  ];
+  // Derive chart data from real analytics or calculate dynamically from orders & visits.
+  const performanceData = React.useMemo(() => {
+    if (Array.isArray(analytics?.monthlySales) && analytics.monthlySales.length > 0) {
+      return analytics.monthlySales;
+    }
+
+    const nowMs = Date.now();
+    const weekMs = 7 * 24 * 60 * 60 * 1000;
+    const weeks = [
+      { name: 'Week 1', sales: 0, visits: 0, start: nowMs - 4 * weekMs, end: nowMs - 3 * weekMs },
+      { name: 'Week 2', sales: 0, visits: 0, start: nowMs - 3 * weekMs, end: nowMs - 2 * weekMs },
+      { name: 'Week 3', sales: 0, visits: 0, start: nowMs - 2 * weekMs, end: nowMs - 1 * weekMs },
+      { name: 'Week 4', sales: 0, visits: 0, start: nowMs - 1 * weekMs, end: nowMs }
+    ];
+
+    if (Array.isArray(orders) && orders.length > 0) {
+      orders.forEach(order => {
+        const time = new Date(order.createdAt).getTime();
+        const valid = ['PAID', 'PACKED', 'CONFIRMED', 'SHIPPED', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED'].includes(order.status) || order.paymentStatus === 'PAID';
+        if (valid) {
+          const amt = Number(order.sellerAmount ?? order.totalAmount ?? 0);
+          for (const w of weeks) {
+            if (time >= w.start && time < w.end) {
+              w.sales += amt;
+              break;
+            }
+          }
+        }
+      });
+    }
+
+    const totalViews = Number(analytics?.totalViews || 0);
+    const dailyViews = Array.isArray(analytics?.dailyViews) ? analytics.dailyViews : [];
+    const week4Views = dailyViews.reduce((s, v) => s + Number(v || 0), 0);
+    weeks[3].visits = week4Views;
+    const earlierViews = Math.max(0, totalViews - week4Views);
+    const avgEarlier = Math.floor(earlierViews / 3);
+    weeks[0].visits = avgEarlier;
+    weeks[1].visits = avgEarlier;
+    weeks[2].visits = avgEarlier + (earlierViews % 3);
+
+    return weeks.map(({ name, sales, visits }) => ({
+      name,
+      sales: Math.round(sales),
+      visits: Math.round(visits)
+    }));
+  }, [analytics, orders]);
 
   // Real-time socket events — refresh data when buyers interact
   useSocket({
@@ -144,6 +189,7 @@ const SellerDashboard = () => {
     'order:updated':     () => { fetchSellerOrders(); fetchAnalytics(); },
     'dispute:new':       () => fetchDisputes(),
     'review:new':        () => fetchReviews(),
+    'payment_proof:new': () => { showNotification('New payment proof submitted by a buyer!', 'info'); },
     'new_notification':  () => {},
   });
 
@@ -164,6 +210,12 @@ const SellerDashboard = () => {
   }, []);
 
   React.useEffect(() => {
+    if (activeTab === 'products') {
+      fetchSellerProducts();
+    }
+  }, [activeTab, fetchSellerProducts]);
+
+  React.useEffect(() => {
     if (fetchedStoreConfig) {
       setPortfolio(prev => ({
         ...prev,
@@ -171,6 +223,14 @@ const SellerDashboard = () => {
         slug: fetchedStoreConfig.portfolioSlug || fetchedStoreConfig.storeName?.toLowerCase().replace(/[^a-z0-9]+/g, '-') || prev.slug,
         sellerTier: fetchedStoreConfig.sellerTier || 'Free'
       }));
+
+      setBankDetails(prev => ({
+        ...prev,
+        bankName: fetchedStoreConfig.bankName || prev.bankName,
+        accountNumber: fetchedStoreConfig.accountNumber || prev.accountNumber,
+        accountName: fetchedStoreConfig.accountName || prev.accountName,
+      }));
+
       if (fetchedStoreConfig.portfolioConfig) {
         try {
           const parsed = JSON.parse(fetchedStoreConfig.portfolioConfig);
@@ -178,24 +238,39 @@ const SellerDashboard = () => {
           // Do NOT call setStoreConfig here — it writes back to Zustand which changes
           // fetchedStoreConfig and causes an infinite re-render loop.
           setBrandConfig(parsed);
-        } catch(e) {}
+          
+          if (parsed.paymentGatewayType) setPaymentGateway(parsed.paymentGatewayType);
+          setBankDetails(prev => ({
+            ...prev,
+            routingNumber: parsed.routingNumber || prev.routingNumber,
+            bankCountry: parsed.bankCountry || prev.bankCountry
+          }));
+        } catch(e) { toast.error('Failed to load store data'); }
       }
     }
   }, [fetchedStoreConfig]);
 
-  const handlePackSubmit = async () => {
-    if (!packingOrder) return;
+  const handlePackSubmit = useCallback(async () => {
     setPackingOrder(null);
     showNotification('Order successfully packed.', 'success');
     fetchPackingOrders();
-  };
+    fetchSellerOrders();
+  }, [fetchPackingOrders, fetchSellerOrders, showNotification]);
 
-  const handleShipSubmit = async () => {
-    if (!shippingOrder) return;
+  const handleShipSubmit = useCallback(async () => {
     setShippingOrder(null);
     showNotification('Order shipped successfully.', 'success');
     fetchPackingOrders();
-  };
+    fetchSellerOrders();
+  }, [fetchPackingOrders, fetchSellerOrders, showNotification]);
+
+  const handleClosePacking = useCallback(() => {
+    setPackingOrder(null);
+  }, []);
+
+  const handleCloseShipping = useCallback(() => {
+    setShippingOrder(null);
+  }, []);
 
   const commerceTabs = [
     { id: 'analytics', label: 'Analytics', iconName: 'seller.analytics' },
@@ -204,7 +279,15 @@ const SellerDashboard = () => {
     { id: 'inventory-alerts', label: 'Alerts', iconName: 'shared.bell' },
     { id: 'orders', label: 'Orders', iconName: 'seller.orders' },
     { id: 'active-carts', label: 'Active Carts', iconName: 'seller.orders' },
+    { id: 'couriers', label: 'Find Couriers', iconName: 'seller.logistics' },
+    { id: 'freight-offers', label: 'Freight Offers', iconName: 'seller.logistics' },
+    { id: 'external-site', label: 'External Site', iconName: 'shared.globe' },
+    { id: 'ai-sales-rep', label: 'AI Sales Rep', iconName: 'seller.ai' },
     { id: 'studio', label: 'Studio', iconName: 'seller.dashboard' },
+    ...(user?.subscriptionTier?.toLowerCase()?.includes('premium') ? [
+      { id: 'design-studio', label: 'Design Studio', iconName: 'seller.palette' },
+      { id: 'ai-assistant', label: 'AI Assistant', iconName: 'seller.ai' }
+    ] : []),
     { id: 'messages', label: 'Messages', iconName: 'seller.messages' },
     { id: 'verify', label: 'Verification', iconName: 'seller.verification' },
     { id: 'packing', label: 'Packing', iconName: 'seller.inventory' },
@@ -247,11 +330,6 @@ const SellerDashboard = () => {
 
   return (
     <div className="min-h-screen bg-[var(--bg-main)] text-[var(--text-primary)] pt-20 pb-12 font-sans selection:bg-[var(--color-10-accent)] selection:text-white relative transition-colors duration-500">
-      {/* Global Ambient Glows */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
-        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-[var(--color-10-accent)] opacity-[0.08] dark:opacity-[0.04] blur-[150px] rounded-full mix-blend-screen" />
-        <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-blue-500 opacity-[0.05] dark:opacity-[0.03] blur-[150px] rounded-full mix-blend-screen" />
-      </div>
       {notification.show && (
         <div className={`fixed top-8 left-1/2 transform -translate-x-1/2 z-[9999] flex items-center gap-3 px-6 py-4 rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.5)] border backdrop-blur-md transition-all duration-500 animate-in fade-in slide-in-from-top-4 ${
           notification.type === 'error' ? 'bg-gray-950/80 border-gray-900 text-gray-200' : 'bg-gray-950/80 border-gray-900 text-gray-200'
@@ -266,7 +344,7 @@ const SellerDashboard = () => {
       {packingOrder && (
         <PackingAnimationModal 
           order={packingOrder} 
-          onClose={() => setPackingOrder(null)} 
+          onClose={handleClosePacking} 
           onSuccess={handlePackSubmit} 
         />
       )}
@@ -274,7 +352,7 @@ const SellerDashboard = () => {
       {shippingOrder && (
         <ShippingAnimationModal 
           order={shippingOrder} 
-          onClose={() => setShippingOrder(null)} 
+          onClose={handleCloseShipping} 
           onSuccess={handleShipSubmit} 
         />
       )}
@@ -312,7 +390,7 @@ const SellerDashboard = () => {
       <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         
         <div className="lg:hidden">
-          <DashboardHeader setIsSidebarOpen={setIsSidebarOpen} />
+          <DashboardHeader setIsSidebarOpen={setIsSidebarOpen} user={user} storeConfig={storeConfig} setActiveTab={setActiveTab} />
         </div>
 
         <div className="flex flex-col lg:flex-row gap-8 mt-4 lg:mt-0">
@@ -334,7 +412,7 @@ const SellerDashboard = () => {
             handleLogout={handleLogout} 
           />
 
-        <main className="flex-1 glass-premium rounded-[2.5rem] p-6 lg:p-12 min-h-[750px] shadow-[var(--shadow-level-4)] border border-white/30 dark:border-white/5 relative overflow-hidden transition-all duration-500 group/main">
+        <main className={`flex-1 glass-premium rounded-[2.5rem] p-6 lg:p-12 min-h-[750px] shadow-[var(--shadow-level-4)] border border-white/30 dark:border-white/5 relative overflow-hidden transition-all duration-500 group/main ${activeTab === 'design-studio' ? 'bg-black !border-black' : ''}`}>
           {isLoading && !analytics && !fetchedStoreConfig ? (
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -347,15 +425,13 @@ const SellerDashboard = () => {
             </div>
           ) : (
           <div className="relative z-10 w-full animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out">
-            {/* Dynamic internal dashboard ambient glow */}
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80%] h-40 bg-[var(--color-10-accent)] opacity-[0.05] blur-[120px] rounded-[100%] pointer-events-none"></div>
 
             <div className="relative z-10 animate-[fadeIn_0.5s_ease-in-out]">
 
 
 
             {activeTab === 'analytics' && (
-              <AnalyticsView analytics={analytics} performanceData={performanceData} products={products} />
+              <AnalyticsView analytics={analytics} performanceData={performanceData} products={products} setActiveTab={setActiveTab} />
             )}
 
             {activeTab === 'performance' && (() => {
@@ -388,86 +464,84 @@ const SellerDashboard = () => {
               }
 
               return (
-              <div className="bg-white/40 backdrop-blur-md border border-slate-200/50 p-8 rounded-3xl min-h-[600px] flex flex-col relative overflow-hidden shadow-sm">
-              <div className="space-y-6 animate-[fadeIn_0.5s_ease-in-out]">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div className="space-y-6 sm:space-y-8 animate-[fadeIn_0.5s_ease-in-out] max-w-full overflow-hidden relative rounded-3xl">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative z-10 neu-card p-6 md:p-8">
                   <div>
-                    <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight mb-2">Performance Scale Board</h1>
-                    <p className="text-slate-500 text-sm">Monitor your seller tier, metrics, and unlock new benefits.</p>
+                    <h1 className="text-3xl md:text-5xl font-black text-[var(--text-main)] mb-2 tracking-tight">Performance Scale Board</h1>
+                    <p className="text-[var(--text-muted)] text-sm md:text-base font-medium">Monitor your seller tier, metrics, and unlock new benefits.</p>
                   </div>
-                  <div className={`bg-gradient-to-r ${tierColors} px-5 py-2.5 rounded-xl flex items-center gap-2 shadow-lg transform transition-transform hover:scale-105`}>
-                    <Star className="text-current" fill="currentColor" size={20} />
-                    <span className="font-extrabold tracking-widest uppercase">{tierName}</span>
+                  <div className={`bg-gradient-to-r ${tierColors} px-5 py-2.5 rounded-xl flex items-center gap-2 shadow-[0_4px_15px_rgba(0,0,0,0.1)] dark:shadow-[0_4px_15px_rgba(255,255,255,0.05)] transform transition-transform hover:scale-105`}>
+                    <Star className="text-white drop-shadow-md" fill="currentColor" size={20} />
+                    <span className="font-extrabold tracking-widest uppercase text-white drop-shadow-sm">{tierName}</span>
                   </div>
                 </div>
 
-                <div className="bg-white border border-slate-200/60 p-8 rounded-3xl shadow-sm relative overflow-hidden">
-                  <div className={`absolute top-0 right-0 w-64 h-64 ${bgGlow} blur-[100px] rounded-full pointer-events-none`}></div>
+                <div className="neu-card p-6 md:p-8 relative overflow-hidden">
                   <div className="flex justify-between items-end mb-4 relative z-10">
                     <div>
-                      <h3 className="text-xl font-bold text-black">Next Tier: {nextTier}</h3>
-                      <p className="text-[var(--text-muted)] text-sm mt-1">Increase sales volume and reach a {targetRating} average rating.</p>
+                      <h3 className="text-xl md:text-2xl font-bold text-[var(--text-main)]">Next Tier: {nextTier}</h3>
+                      <p className="text-[var(--text-muted)] text-sm mt-1 font-medium">Increase sales volume and reach a {targetRating} average rating.</p>
                     </div>
                     <div className="text-right">
-                      <div className="text-3xl font-black text-black">{Math.round(progress)}%</div>
+                      <div className="text-3xl md:text-4xl font-black text-[var(--text-main)]">{Math.round(progress)}%</div>
                       <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider font-bold mt-1">Progress</p>
                     </div>
                   </div>
-                  <div className="w-full bg-white border border-[var(--border-color)] rounded-full h-4 mb-3 relative z-10 p-0.5">
-                    <div className={`bg-gradient-to-r ${tierColors} h-full rounded-full shadow-lg relative`} style={{ width: `${progress}%` }}>
+                  <div className="w-full bg-gray-200 dark:bg-gray-800 rounded-full h-4 mb-3 relative z-10 p-0.5 shadow-inner">
+                    <div className={`bg-gradient-to-r ${tierColors} h-full rounded-full shadow-[0_0_10px_rgba(0,0,0,0.2)] relative`} style={{ width: `${progress}%` }}>
                       <div className="absolute right-0 top-0 bottom-0 w-4 bg-white/30 rounded-full animate-pulse"></div>
                     </div>
                   </div>
-                  <p className="text-xs text-slate-400 text-right font-mono mt-4">Rating Performance Scaling</p>
+                  <p className="text-xs text-[var(--text-muted)] text-right font-mono mt-4 font-semibold uppercase tracking-wider">Rating Performance Scaling</p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                   {[
-                    { title: "Fulfillment Rate", value: "98.5%", target: "> 95%", status: "Excellent", color: "text-gray-400", border: "border-gray-500/20", bg: "bg-gray-500/5", glow: "shadow-[0_0_15px_rgba(34,197,94,0.05)]" },
-                    { title: "Average Rating", value: parseFloat(analytics?.avgRating) || 0, target: "> 4.5", status: "Excellent", color: "text-gray-400", border: "border-gray-500/20", bg: "bg-gray-500/5", glow: "shadow-[0_0_15px_rgba(34,197,94,0.05)]" },
-                    { title: "Response Rate", value: "92%", target: "> 90%", status: "Good", color: "text-yellow-400", border: "border-yellow-500/20", bg: "bg-yellow-500/5", glow: "shadow-[0_0_15px_rgba(234,179,8,0.05)]" },
-                    { title: "Dispute Rate", value: "1.2%", target: "< 2%", status: "Warning", color: "text-orange-400", border: "border-orange-500/20", bg: "bg-orange-500/5", glow: "shadow-[0_0_15px_rgba(249,115,22,0.05)]" },
+                    { title: "Fulfillment Rate", value: `${parseFloat(analytics?.onTimeDeliveryRate || 0).toFixed(1)}%`, target: "> 95%", status: parseFloat(analytics?.onTimeDeliveryRate || 0) >= 95 ? "Excellent" : "Warning" },
+                    { title: "Average Rating", value: parseFloat(analytics?.avgRating || 0).toFixed(1), target: "> 4.5", status: parseFloat(analytics?.avgRating || 0) >= 4.5 ? "Excellent" : "Warning" },
+                    { title: "Response Rate", value: `${parseFloat(analytics?.responseRate || 0).toFixed(1)}%`, target: "> 90%", status: parseFloat(analytics?.responseRate || 0) >= 90 ? "Good" : "Warning" },
+                    { title: "Dispute Rate", value: `${parseFloat(analytics?.disputeRate || 0).toFixed(1)}%`, target: "< 2%", status: parseFloat(analytics?.disputeRate || 0) <= 2 ? "Good" : "Warning" },
                   ].map((metric, idx) => (
-                    <div key={idx} className={`p-6 rounded-xl border ${metric.border} ${metric.bg} ${metric.glow} backdrop-blur-sm relative overflow-hidden transition-all hover:-translate-y-1 hover:shadow-lg duration-300`}>
-                      <h4 className="text-[var(--text-muted)] text-sm font-medium mb-1">{metric.title}</h4>
-                      <div className="text-3xl font-black text-black mb-4 tracking-tight">{metric.value}</div>
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="text-[var(--text-muted)]">Target: {metric.target}</span>
-                        <span className={`font-bold ${metric.color} px-2.5 py-1 rounded-md bg-white/40 border ${metric.border}`}>{metric.status}</span>
+                    <div key={idx} className={`neu-card p-6 flex flex-col relative overflow-hidden transition-all hover:-translate-y-1 hover:shadow-[var(--shadow-level-3)] duration-300`}>
+                      <h4 className="text-[var(--text-muted)] text-sm font-bold mb-1 uppercase tracking-wider">{metric.title}</h4>
+                      <div className="text-3xl font-black text-[var(--text-main)] mb-4 tracking-tight">{metric.value}</div>
+                      <div className="flex justify-between items-center text-xs mt-auto">
+                        <span className="text-[var(--text-muted)] font-medium">Target: {metric.target}</span>
+                        <span className={`font-bold text-[var(--bg-primary)] px-2.5 py-1 rounded-md ${metric.status === 'Warning' ? 'bg-[var(--text-main)] opacity-80' : 'bg-[var(--text-main)]'}`}>{metric.status}</span>
                       </div>
                     </div>
                   ))}
                 </div>
 
-                <div className="bg-white border border-slate-200/60 rounded-3xl overflow-hidden shadow-sm">
-                  <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
-                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Scale size={18} className="text-slate-500"/> Scale Board Benefits</h3>
+                <div className="neu-card rounded-3xl overflow-hidden">
+                  <div className="p-6 border-b border-gray-200 dark:border-gray-800 bg-[var(--bg-tertiary)] flex items-center justify-between">
+                    <h3 className="text-lg font-black text-[var(--text-main)] flex items-center gap-2"><Scale size={18} className="text-[var(--text-muted)]"/> Scale Board Benefits</h3>
                   </div>
-                  <div className="divide-y divide-slate-100">
+                  <div className="divide-y divide-gray-200 dark:divide-gray-800">
                     {[
-                      { tier: "Bronze", req: "0 - ₦10k Sales", ben: "Standard fees, basic support, 50 product limit", active: false, color: "text-[#cd7f32]", border: "border-[#cd7f32]" },
-                      { tier: "Silver", req: "$10k - ₦25k Sales", ben: "Reduced fees, priority support, 200 product limit", active: false, color: "text-gray-800", border: "border-gray-300" },
-                      { tier: "Gold", req: "$25k - ₦50k Sales", ben: "Lowest fees, dedicated manager, unlimited products, flash deal access", active: true, color: "text-yellow-400", border: "border-yellow-400" },
-                      { tier: "Platinum", req: "$50k+ Sales", ben: "Zero listing fees, API access, homepage featuring, early payouts", active: false, color: "text-cyan-300", border: "border-cyan-300" }
+                      { tier: "Bronze", req: "0 - ₦10k Sales", ben: "Standard fees, basic support, 50 product limit", active: false, color: "text-[var(--text-muted)]" },
+                      { tier: "Silver", req: "₦10k - ₦25k Sales", ben: "Reduced fees, priority support, 200 product limit", active: false, color: "text-[var(--text-muted)]" },
+                      { tier: "Gold", req: "₦25k - ₦50k Sales", ben: "Lowest fees, dedicated manager, unlimited products, flash deal access", active: true, color: "text-[var(--text-main)]" },
+                      { tier: "Platinum", req: "₦50k+ Sales", ben: "Zero listing fees, API access, homepage featuring, early payouts", active: false, color: "text-[var(--text-muted)]" }
                     ].map((t, idx) => (
-                      <div key={idx} className={`p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 transition-colors duration-300 ${t.active ? 'bg-[var(--bg-tertiary)]/60 shadow-inner' : 'hover:bg-[var(--bg-tertiary)]/20'}`}>
+                      <div key={idx} className={`p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 transition-colors duration-300 ${t.active ? 'bg-[var(--bg-tertiary)]/60' : 'hover:bg-[var(--bg-tertiary)]/30'}`}>
                         <div className="flex items-center gap-4 min-w-[200px]">
-                          <div className={`p-2.5 rounded-full border shadow-sm ${t.active ? `border-current ${t.color} bg-white` : 'border-[var(--border-color)] text-gray-700 bg-[var(--bg-tertiary)]/50'}`}>
-                            <Star size={18} fill={t.active ? "currentColor" : "none"} className={t.active ? "drop-shadow-[0_0_8px_currentColor]" : ""} />
+                          <div className={`p-2.5 rounded-full border shadow-[0_2px_10px_rgba(0,0,0,0.05)] ${t.active ? `border-current ${t.color} bg-[var(--bg-primary)]` : 'border-transparent text-[var(--text-muted)] bg-[var(--bg-tertiary)]'}`}>
+                            <Star size={18} fill={t.active ? "currentColor" : "none"} className={t.active ? "drop-shadow-md" : ""} />
                           </div>
                           <div>
-                            <h4 className={`font-bold text-lg tracking-wide ${t.active ? t.color : 'text-[var(--text-muted)]'}`}>{t.tier}</h4>
-                            <p className="text-xs text-[var(--text-muted)] font-mono mt-0.5">{t.req}</p>
+                            <h4 className={`font-black text-lg tracking-wide ${t.active ? t.color : 'text-[var(--text-muted)]'}`}>{t.tier}</h4>
+                            <p className="text-xs text-[var(--text-muted)] font-mono font-medium mt-0.5">{t.req}</p>
                           </div>
                         </div>
-                        <div className="flex-1 border-l border-[var(--border-color)]/50 pl-6 hidden md:block">
-                          <p className={`text-sm leading-relaxed ${t.active ? 'text-black' : 'text-gray-600'}`}>{t.ben}</p>
+                        <div className="flex-1 border-l border-gray-200 dark:border-gray-800 pl-6 hidden md:block">
+                          <p className={`text-sm leading-relaxed font-medium ${t.active ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)]'}`}>{t.ben}</p>
                         </div>
                         <div className="flex-1 block md:hidden">
-                          <p className={`text-sm leading-relaxed ${t.active ? 'text-black' : 'text-gray-600'}`}>{t.ben}</p>
+                          <p className={`text-sm leading-relaxed font-medium ${t.active ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)]'}`}>{t.ben}</p>
                         </div>
                         {t.active && (
-                          <div className="px-4 py-1.5 bg-gray-500/10 text-gray-400 border border-gray-500/20 rounded-full text-xs font-bold shrink-0 shadow-[0_0_10px_rgba(34,197,94,0.1)]">
+                          <div className="px-4 py-1.5 bg-[var(--text-main)] text-[var(--bg-primary)] rounded-full text-xs font-black shrink-0 shadow-lg uppercase tracking-wider">
                             Current Tier
                           </div>
                         )}
@@ -476,12 +550,11 @@ const SellerDashboard = () => {
                   </div>
                 </div>
               </div>
-              </div>
               );
             })()}
 
             {activeTab === 'products' && (
-              <div className="bg-white/40 backdrop-blur-md border border-slate-200/50 p-8 rounded-3xl min-h-[600px] flex flex-col relative overflow-hidden shadow-sm">
+              <div className="space-y-6 sm:space-y-8 animate-[fadeIn_0.5s_ease-in-out] max-w-full overflow-hidden relative rounded-3xl neu-card p-6 md:p-8">
                   <InventoryView
                     products={products}
                     setIsAddProductModalOpen={() => setIsAddProductModalOpen(true)}
@@ -491,25 +564,24 @@ const SellerDashboard = () => {
                     deleteProduct={deleteProduct}
                     restoreProduct={restoreProduct}
                     showNotification={showNotification}
-                    useSellerStore={useSellerStore}
                   />
               </div>
             )}
 
             {activeTab === 'inventory-alerts' && (
-              <div className="bg-white/40 backdrop-blur-md border border-slate-200/50 p-8 rounded-3xl min-h-[600px] flex flex-col relative overflow-hidden shadow-sm">
+              <div className="space-y-6 sm:space-y-8 animate-[fadeIn_0.5s_ease-in-out] max-w-full overflow-hidden relative rounded-3xl neu-card p-6 md:p-8">
               <div className="space-y-6">
-                <h1 className="text-3xl font-extrabold text-black mb-2">Inventory Alerts</h1>
-                <div className="bg-white border border-[var(--border-color)] p-6 rounded-xl">
-                  <h3 className="font-bold text-black mb-4">Low Stock Warnings</h3>
+                <h1 className="text-3xl font-extrabold text-[var(--text-main)] mb-2">Inventory Alerts</h1>
+                <div className="bg-[var(--bg-tertiary)] border border-gray-200 dark:border-gray-800 p-6 rounded-xl">
+                  <h3 className="font-bold text-[var(--text-main)] mb-4">Low Stock Warnings</h3>
                   <div className="space-y-3">
                     {alerts?.length > 0 ? alerts.map((alert, i) => (
-                      <div key={i} className="flex justify-between items-center py-3 border-b border-[var(--border-color)]">
-                        <span className="text-gray-800">{alert.message || alert.title}</span>
-                        <span className="text-gray-500 text-sm font-bold">{alert.severity || 'Urgent'}</span>
+                      <div key={i} className="flex justify-between items-center py-3 border-b border-gray-200 dark:border-gray-800 last:border-0">
+                        <span className="text-[var(--text-main)] font-medium">{alert.message || alert.title}</span>
+                        <span className="text-[var(--text-muted)] text-sm font-bold bg-[var(--bg-primary)] px-2.5 py-1 rounded-md border border-gray-200 dark:border-gray-800 shadow-sm">{alert.severity || 'Urgent'}</span>
                       </div>
                     )) : (
-                      <p className="text-[var(--text-muted)] text-sm">No inventory alerts right now. Stock is healthy.</p>
+                      <p className="text-[var(--text-muted)] text-sm font-medium">No inventory alerts right now. Stock is healthy.</p>
                     )}
                   </div>
                 </div>
@@ -518,7 +590,7 @@ const SellerDashboard = () => {
             )}
 
             {activeTab === 'orders' && (
-              <div className="bg-white/40 backdrop-blur-md border border-slate-200/50 p-8 rounded-3xl min-h-[600px] flex flex-col relative overflow-hidden shadow-sm">
+              <div className="space-y-6 sm:space-y-8 animate-[fadeIn_0.5s_ease-in-out] max-w-full overflow-hidden relative rounded-3xl neu-card p-6 md:p-8">
               <OrdersView
                 orders={orders}
                 storeConfig={storeConfig}
@@ -532,7 +604,7 @@ const SellerDashboard = () => {
             )}
 
             {activeTab === 'active-carts' && (
-              <div className="bg-white/40 backdrop-blur-md border border-slate-200/50 p-8 rounded-3xl min-h-[600px] flex flex-col relative overflow-hidden shadow-sm">
+              <div className="space-y-6 sm:space-y-8 animate-[fadeIn_0.5s_ease-in-out] max-w-full overflow-hidden relative rounded-3xl neu-card p-6 md:p-8">
                 <ActiveCartsView
                   activeCarts={activeCarts}
                   onMessageBuyer={(buyer) => {
@@ -543,6 +615,32 @@ const SellerDashboard = () => {
                   onSendOffer={(cartGroup) => {
                     setActiveTab('messages');
                     setTimeout(() => window.__gxOpenOfferChat?.(cartGroup), 100);
+                  }}
+                />
+              </div>
+            )}
+
+            {activeTab === 'couriers' && (
+              <div className="space-y-6 sm:space-y-8 animate-[fadeIn_0.5s_ease-in-out] max-w-full overflow-hidden relative rounded-3xl neu-card p-6 md:p-8">
+                <CouriersView />
+              </div>
+            )}
+
+            {activeTab === 'freight-offers' && (
+              <div className="space-y-6 sm:space-y-8 animate-[fadeIn_0.5s_ease-in-out] max-w-full overflow-hidden relative rounded-3xl neu-card p-6 md:p-8">
+                <FreightOffersView />
+              </div>
+            )}
+
+            {activeTab === 'external-site' && (
+              <div className="space-y-6 sm:space-y-8 animate-[fadeIn_0.5s_ease-in-out] max-w-full overflow-hidden relative rounded-3xl neu-card p-6 md:p-8">
+                <ExternalSiteStudio 
+                  user={user} 
+                  storeConfig={storeConfig} 
+                  setActiveTab={setActiveTab}
+                  onUpgrade={() => {
+                    setSelectedTierToUnlock({ name: 'Pro', price: 99 });
+                    setIsPremiumModalOpen(true);
                   }}
                 />
               </div>
@@ -560,6 +658,20 @@ const SellerDashboard = () => {
                 useSellerStore={useSellerStore}
                 user={user}
               />
+            )}
+
+            {activeTab === 'ai-sales-rep' && (
+              <div className="space-y-6 sm:space-y-8 animate-[fadeIn_0.5s_ease-in-out] max-w-full overflow-hidden relative rounded-3xl neu-card p-6 md:p-8">
+                <SellerNegotiationControlRoom products={products} />
+              </div>
+            )}
+
+            {activeTab === 'ai-assistant' && (
+              <SellerAIStudio products={products} />
+            )}
+
+            {activeTab === 'design-studio' && (
+              <DesignStudio />
             )}
 
             {activeTab === 'messages' && (
@@ -618,7 +730,7 @@ const SellerDashboard = () => {
                                 <p className="text-3xl font-black tracking-widest text-black">{order.packingConfirmationCode || 'SCAN'}</p>
                               </div>
                               <div className="bg-white p-2 rounded-lg shadow-sm border border-gray-100">
-                                <QRCode value={String(order.deliveryAssignment?.pickupQrCode || order.packingConfirmationCode)} size={64} />
+                                <QRCode value={String(order.deliveryAssignment?.pickupQrCode || order.packingConfirmationCode)} size={128} />
                               </div>
                             </div>
                           )}
@@ -660,7 +772,12 @@ const SellerDashboard = () => {
                             <p className="text-sm text-[var(--text-muted)] mt-2">{dispute.description}</p>
                           </div>
                           <div className="flex flex-col items-end gap-2">
-                            <span className="text-xs uppercase bg-[var(--bg-tertiary)] px-2 py-1 rounded text-gray-800 border border-gray-700">{dispute.status}</span>
+                            <span className={`text-xs uppercase px-2.5 py-1 rounded-full font-bold border ${
+                              dispute.status === 'OPEN' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 
+                              'bg-[var(--bg-tertiary)] text-gray-500 border-gray-700'
+                            }`}>
+                              Status: {dispute.status}
+                            </span>
                             <button 
                               onClick={() => { setRespondingDispute(dispute); setIsDisputeModalOpen(true); }}
                               className="text-sm bg-gray-100 px-3 py-1 rounded text-black hover:bg-gray-700 transition-colors"
@@ -732,7 +849,7 @@ const SellerDashboard = () => {
                           <span className="text-xs px-2 py-1 bg-[var(--bg-tertiary)] text-gray-800 rounded border border-[var(--border-color)] inline-block mb-3">{req.category}</span>
                           <p className="text-sm text-[var(--text-muted)] mb-4 line-clamp-2">{req.description}</p>
                           <div className="text-xs text-[var(--text-muted)] mb-4">
-                            Target Price: <span className="text-black font-mono"> ₦{req.targetPrice}</span> | Qty: {req.quantity}
+                            Target Price: <span className="text-black font-mono"> ₦{req.budget}</span> | Qty: {req.quantity}
                           </div>
                         </div>
                         <button 
@@ -803,7 +920,7 @@ const SellerDashboard = () => {
                   <div>
                     <label className="block text-xs text-[var(--text-muted)] mb-1 uppercase tracking-wide">Logo URL</label>
                     <div className="flex items-center gap-4">
-                      {storeConfig.logoUrl && <img src={storeConfig.logoUrl} alt="Logo" className="h-12 w-12 object-contain bg-gray-100 rounded" />}
+                      {storeConfig.logoUrl ? <img src={storeConfig.logoUrl} alt="Logo" className="h-12 w-12 object-contain bg-gray-100 rounded" /> : null}
                       <input type="text" value={storeConfig.logoUrl || ''} onChange={e => setStoreConfig({...storeConfig, logoUrl: e.target.value})} className="flex-1 bg-white border border-[var(--border-color)] rounded-lg p-3 text-black outline-none focus:border-gray-500 transition-colors" placeholder="https://..." />
                       <label className="cursor-pointer bg-blue-600 text-white px-4 py-3 rounded-lg font-bold hover:bg-blue-700 transition">
                         Upload
@@ -813,13 +930,20 @@ const SellerDashboard = () => {
                             formData.append('file', e.target.files[0]);
                             formData.append('type', 'logo');
                             const toast = (await import('react-hot-toast')).default;
+                            const loadingToast = toast.loading('Uploading logo...');
                             try {
                               const res = await axios.post('/api/v1/stores/upload-asset', formData);
+                              toast.dismiss(loadingToast);
                               if (res.data.success) {
-                                setStoreConfig({...storeConfig, logoUrl: res.data.url});
-                                toast.success('Logo uploaded');
+                                setStoreConfig(prev => ({...prev, logoUrl: res.data.url}));
+                                toast.success('Logo uploaded successfully');
+                              } else {
+                                toast.error(res.data.message || 'Logo upload failed');
                               }
-                            } catch (err) { toast.error('Upload failed'); }
+                            } catch (err) {
+                              toast.dismiss(loadingToast);
+                              toast.error(err.response?.data?.message || err.message || 'Upload failed');
+                            }
                           }
                         }} />
                       </label>
@@ -828,7 +952,7 @@ const SellerDashboard = () => {
                   <div>
                     <label className="block text-xs text-[var(--text-muted)] mb-1 uppercase tracking-wide">Banner URL</label>
                     <div className="flex flex-col gap-2">
-                      {storeConfig.bannerUrl && <img src={storeConfig.bannerUrl} alt="Banner" className="h-24 w-full object-cover bg-gray-100 rounded-lg border" />}
+                      {storeConfig.bannerUrl ? <img src={storeConfig.bannerUrl} alt="Banner" className="h-24 w-full object-cover bg-gray-100 rounded-lg border" /> : null}
                       <div className="flex items-center gap-4">
                         <input type="text" value={storeConfig.bannerUrl || ''} onChange={e => setStoreConfig({...storeConfig, bannerUrl: e.target.value})} className="flex-1 bg-white border border-[var(--border-color)] rounded-lg p-3 text-black outline-none focus:border-gray-500 transition-colors" placeholder="https://..." />
                         <label className="cursor-pointer bg-blue-600 text-white px-4 py-3 rounded-lg font-bold hover:bg-blue-700 transition">
@@ -839,13 +963,20 @@ const SellerDashboard = () => {
                               formData.append('file', e.target.files[0]);
                               formData.append('type', 'banner');
                               const toast = (await import('react-hot-toast')).default;
+                              const loadingToast = toast.loading('Uploading banner...');
                               try {
                                 const res = await axios.post('/api/v1/stores/upload-asset', formData);
+                                toast.dismiss(loadingToast);
                                 if (res.data.success) {
-                                  setStoreConfig({...storeConfig, bannerUrl: res.data.url});
-                                  toast.success('Banner uploaded');
+                                  setStoreConfig(prev => ({...prev, bannerUrl: res.data.url}));
+                                  toast.success('Banner uploaded successfully');
+                                } else {
+                                  toast.error(res.data.message || 'Banner upload failed');
                                 }
-                              } catch (err) { toast.error('Upload failed'); }
+                              } catch (err) {
+                                toast.dismiss(loadingToast);
+                                toast.error(err.response?.data?.message || err.message || 'Upload failed');
+                              }
                             }
                           }} />
                         </label>

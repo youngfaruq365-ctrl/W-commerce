@@ -6,9 +6,13 @@ const axios = require('axios');
 
 const SMILE_API_KEY = process.env.SMILE_IDENTITY_API_KEY;
 const SMILE_PARTNER_ID = process.env.SMILE_IDENTITY_PARTNER_ID;
-const IS_MOCK = !SMILE_API_KEY || SMILE_API_KEY.includes('REPLACE');
+const NOT_CONFIGURED = !SMILE_API_KEY || SMILE_API_KEY.includes('REPLACE');
+const IS_MOCK = NOT_CONFIGURED && require('../utils/providerConfig').allowMockExternalApis();
 
 async function verifyBVN(bvnNumber, userId) {
+  if (NOT_CONFIGURED && !IS_MOCK) {
+    throw new Error('Identity verification is not configured (SMILE_IDENTITY_API_KEY missing)');
+  }
   // Always hash the BVN before any storage
   const bvnHash = crypto.createHash('sha256').update(bvnNumber + (process.env.BVN_SALT || 'wcommerce')).digest('hex');
 

@@ -20,11 +20,17 @@ router.post('/disputes/resolve', adminController.resolveDispute);
 // KYC/KYB
 router.get('/verifications', adminController.getVerificationRequests);
 router.post('/verifications/process', adminController.processVerification);
+router.put('/verifications/:id/section-status', adminController.processVerificationSection);
 
 // Courier KYC
 router.get('/couriers/pending-kyc', adminController.getPendingCourierKyc);
 router.post('/couriers/:id/kyc-approve', adminController.approveCourierKyc);
 router.post('/couriers/:id/kyc-reject', adminController.rejectCourierKyc);
+router.post('/couriers/:id/:action', (req, res, next) =>
+    req.params.action === 'kyc-approve' || req.params.action === 'approve'
+        ? adminController.approveCourierKyc(req, res, next)
+        : adminController.rejectCourierKyc(req, res, next)
+);
 
 // Bank Transfer Verification
 router.get('/bank-transfers', adminController.getPendingBankTransfers);

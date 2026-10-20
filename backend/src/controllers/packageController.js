@@ -49,7 +49,7 @@ exports.createPackage = async (req, res) => {
         logger.error(`[PackageCtrl] createPackage error: ${err.message}`);
         return res.status(err.statusCode || 500).json({
             success: false,
-            message: err.message || 'Failed to create package.',
+            message: process.env.NODE_ENV === 'production' ? 'Failed to create package.' : err.message,
         });
     }
 };
@@ -119,7 +119,7 @@ exports.recordCustodyTransfer = async (req, res) => {
         logger.error(`[PackageCtrl] recordCustodyTransfer error: ${err.message}`);
         return res.status(err.statusCode || 500).json({
             success: false,
-            message: err.message || 'Failed to record custody transfer.',
+            message: process.env.NODE_ENV === 'production' ? 'Failed to record custody transfer.' : err.message,
         });
     }
 };
@@ -137,7 +137,7 @@ exports.getPackage = async (req, res) => {
         logger.error(`[PackageCtrl] getPackage error: ${err.message}`);
         return res.status(err.statusCode || 500).json({
             success: false,
-            message: err.message || 'Failed to fetch package.',
+            message: process.env.NODE_ENV === 'production' ? 'Failed to fetch package.' : err.message,
         });
     }
 };
@@ -155,7 +155,7 @@ exports.getByBarcode = async (req, res) => {
         logger.error(`[PackageCtrl] getByBarcode error: ${err.message}`);
         return res.status(err.statusCode || 500).json({
             success: false,
-            message: err.message || 'Package not found.',
+            message: process.env.NODE_ENV === 'production' ? 'Package not found.' : err.message,
         });
     }
 };

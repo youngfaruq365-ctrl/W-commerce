@@ -1,12 +1,4 @@
-import axios from 'axios';
-
-// Ensure cookies/JWT are sent
-axios.defaults.withCredentials = true;
-
-const api = axios.create({
-    baseURL: '/api/v1/delivery',
-    withCredentials: true
-});
+import { apiClient } from '@/utils/apiClient';
 
 export const deliveryApi = {
     updateStatus: async (assignmentId, status, idempotencyKey = null) => {
@@ -15,17 +7,17 @@ export const deliveryApi = {
             headers['X-Idempotency-Key'] = idempotencyKey;
         }
         
-        const response = await api.post(`/${assignmentId}/status`, { status }, { headers });
+        const response = await apiClient.post(`/api/v1/delivery/${assignmentId}/status`, { status }, { headers });
         return response.data;
     },
     
     getQueue: async () => {
-        const response = await api.get('/queue');
-        return response.data.data || response.data;
+        const response = await apiClient.get('/api/v1/delivery/queue');
+        return response.data;
     },
 
     getActive: async () => {
-        const response = await api.get('/active');
-        return response.data.data || response.data;
+        const response = await apiClient.get('/api/v1/delivery/active');
+        return response.data;
     }
 };

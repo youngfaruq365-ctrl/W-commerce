@@ -1,6 +1,5 @@
-- [x] Add `layoutId` support to `frontend/src/components/motion/WImageLoader.jsx`
-- [x] Update `frontend/src/components/shared/SmartProductCard.jsx` to pass the `layoutId` prop down
-- [x] Update `frontend/src/pages/ProductDetails.jsx` to receive and apply the `layoutId` to its hero image
-- [x] Update `LuxuryBento` component in `frontend/src/components/storefront/LayoutEngine.jsx` to use new CSS Bento Grid classes
-- [x] Wrap the routes in `frontend/src/App.tsx` with Framer Motion's `<AnimatePresence mode='wait'>` and add page transition animations
-- [x] Add staggered list animations to `frontend/src/pages/Feed.jsx` using framer-motion variants
+- [ ] Agent 1: Core Architecture & Orders (Consolidate legacy orders, migrate DB records)
+- [ ] Agent 2: Payments, Escrow & Currency (NGN defaults, Stripe webhook, Escrow dispute check)
+- [ ] Agent 3: Marketplace, Discovery & UI (Wishlist connection, Category pagination, AI features)
+- [ ] Agent 4: Delivery, Logistics & Notifications (Delivery tracking map, VAPID, deduplicate notifications)
+- [ ] Agent 5: Platform Config & Edge Cases (Duplicate routes, store approval check, Guest Checkout)

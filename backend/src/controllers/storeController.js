@@ -64,6 +64,9 @@ exports.getStoreDetailsById = async (req, res) => {
         });
 
         if (!store) return res.status(404).json({ success: false, message: 'Store not found' });
+        if (store.approvalStatus !== 'APPROVED' && !(req.user && (req.user.role === 'ADMIN' || req.user.id === store.sellerId))) {
+            return res.status(404).json({ success: false, message: 'Store not found' });
+        }
 
         res.json({ success: true, store });
     } catch (error) {
@@ -76,13 +79,61 @@ exports.getStoreDetailsById = async (req, res) => {
 exports.getVerifiedStores = async (req, res) => {
     try {
         const stores = await prisma.store.findMany({
-            where: { isVerified: true },
-            include: { user: { select: { id: true, fullName: true } } },
-            take: 10
+            where: {
+                OR: [
+                    { approvalStatus: 'APPROVED' },
+                    { approvalStatus: 'APPROVED' }
+                ]
+            },
+            select: {
+                id: true,
+                storeName: true,
+                description: true,
+                country: true,
+                logoUrl: true,
+                bannerUrl: true,
+                portfolioSlug: true,
+                approvalStatus: true,
+                isVerified: true,
+                _count: { select: { products: true } }
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 12
+        });
+        res.json({ success: true, data: stores, stores });
+    } catch (error) {
+        logger.error(`Get Verified Stores Error: ${error.message}`);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+};
+
+
+// Public: Get All Public Stores (for Funnel)
+exports.getPublicStores = async (req, res) => {
+    try {
+        const stores = await prisma.store.findMany({
+            where: { approvalStatus: 'APPROVED' },
+            select: {
+                id: true,
+                sellerId: true,
+                storeName: true,
+                category: true,
+                description: true,
+                logoUrl: true,
+                bannerUrl: true,
+                isVerified: true,
+                averageRating: true,
+                totalReviews: true,
+                performanceScore: true,
+                portfolioSlug: true,
+                sellerTier: true,
+                _count: { select: { products: true } }
+            },
+            orderBy: [{ performanceScore: 'desc' }, { averageRating: 'desc' }],
+            take: 20
         });
         res.json({ success: true, stores });
     } catch (error) {
-        logger.error(`Get Verified Stores Error: ${error.message}`);
         res.status(500).json({ success: false, message: 'Server error' });
     }
 };
@@ -93,7 +144,7 @@ exports.searchStores = async (req, res) => {
         const { search, category, verifiedOnly, sort, page = 1, limit = 12 } = req.query;
         const skip = (Number(page) - 1) * Number(limit);
 
-        const where = {};
+        const where = { approvalStatus: 'APPROVED' };
         if (verifiedOnly === 'true') {
             where.isVerified = true;
         }
@@ -169,7 +220,7 @@ const updateStoreProfile = async (req, res) => {
             store = await prisma.store.create({ data: { sellerId, storeName: user ? `${user.fullName}'s Shop` : 'My Store', country: 'Global' } });
         }
         
-        // BUG-SELLER-05: Was using a blocklist (delete restricted fields) â€” any unlisted schema field
+        // BUG-SELLER-05: Was using a blocklist (delete restricted fields) Ã¢â‚¬â€ any unlisted schema field
         // could be overwritten including isVerified, paystackSubaccount, kybStatus (privilege escalation).
         // Replaced with an explicit ALLOWLIST of fields sellers may update.
         const SELLER_EDITABLE_FIELDS = [
@@ -177,7 +228,7 @@ const updateStoreProfile = async (req, res) => {
             'bankName', 'accountNumber', 'accountName', 'routingNumber', 'bankCountry',
             'storeName', 'description', 'country',
             'paymentGatewayType', 'paymentConfig'
-            // paystackSubaccount intentionally removed â€” set only via /setup-paystack
+            // paystackSubaccount intentionally removed Ã¢â‚¬â€ set only via /setup-paystack
             // isVerified, kybStatus, sellerTier intentionally excluded
         ];
 
@@ -201,6 +252,19 @@ const updateStoreProfile = async (req, res) => {
                 }
             } catch (e) {}
             safeData.portfolioConfig = JSON.stringify({ ...currentConfig, ...newConfig });
+        }
+
+         // Handle banner and logo file uploads (from FormData via multer.fields)
+        if (req.files) {
+            const CloudService = require('../services/cloudService');
+            if (req.files.banner && req.files.banner[0]) {
+                try { safeData.bannerUrl = await CloudService.uploadImage(req.files.banner[0]); }
+                catch (e) { if (req.files.banner[0].filename) safeData.bannerUrl = '/uploads/' + req.files.banner[0].filename; }
+            }
+            if (req.files.logo && req.files.logo[0]) {
+                try { safeData.logoUrl = await CloudService.uploadImage(req.files.logo[0]); }
+                catch (e) { if (req.files.logo[0].filename) safeData.logoUrl = '/uploads/' + req.files.logo[0].filename; }
+            }
         }
 
         store = await prisma.store.update({
@@ -485,7 +549,7 @@ exports.getPortfolio = async (req, res) => {
 
         // Check if current user is following
         let isFollowing = false;
-        // BUG-SELLER-01: Use getJwtSecret() â€” raw process.env.JWT_SECRET breaks if secret rotates
+        // BUG-SELLER-01: Use getJwtSecret() Ã¢â‚¬â€ raw process.env.JWT_SECRET breaks if secret rotates
         const authHeader = req.headers.authorization;
         if (authHeader && authHeader.startsWith('Bearer')) {
             const token = authHeader.split(' ')[1];
@@ -530,8 +594,14 @@ exports.toggleFollowStore = async (req, res) => {
         const { storeId } = req.params;
         const buyerId = req.user.id;
 
-        const store = await prisma.store.findUnique({
-            where: { id: storeId },
+        const store = await prisma.store.findFirst({
+            where: {
+                OR: [
+                    { id: storeId },
+                    { portfolioSlug: storeId },
+                    { sellerId: storeId }
+                ]
+            },
             include: { user: true }
         });
 
@@ -572,7 +642,7 @@ exports.toggleFollowStore = async (req, res) => {
         }
     } catch (error) {
         logger.error(`Toggle Follow Error: ${error.message}`);
-        res.status(500).json({ success: false, message: 'Server error' });
+        res.status(500).json({ success: false, message: error.message || 'Server error' });
     }
 };
 
@@ -757,6 +827,11 @@ module.exports.getStoreBySlug = async (req, res) => {
 
         if (!store) return res.status(404).json({ success: false, message: 'Store not found' });
 
+        // Unapproved stores are only visible to their owner and admins
+        if (store.approvalStatus !== 'APPROVED' && !(req.user && (req.user.role === 'ADMIN' || req.user.id === store.sellerId))) {
+            return res.status(404).json({ success: false, message: 'Store not found' });
+        }
+
         // Log Engagement Event
         try {
             await prisma.engagementEvent.create({
@@ -788,7 +863,7 @@ module.exports.getStoreBySlug = async (req, res) => {
 
         // Check if current user is following
         let isFollowing = false;
-        // BUG-SELLER-01: Use getJwtSecret() â€” consistent with authMiddleware
+        // BUG-SELLER-01: Use getJwtSecret() Ã¢â‚¬â€ consistent with authMiddleware
         const authHeader = req.headers.authorization;
         if (authHeader && authHeader.startsWith('Bearer')) {
             const token = authHeader.split(' ')[1];
@@ -814,6 +889,7 @@ module.exports.getStoreBySlug = async (req, res) => {
         const structuredPayload = {
             store: {
                 id: store.id,
+                sellerId: store.sellerId,
                 slug: store.portfolioSlug,
                 name: store.storeName,
                 storeName: store.storeName,
@@ -827,7 +903,8 @@ module.exports.getStoreBySlug = async (req, res) => {
                 country: store.country,
                 averageRating: store.averageRating,
                 totalReviews: store.totalReviews,
-                subscriptionTier: store.sellerTier || store.user.subscriptionTier
+                subscriptionTier: store.user.subscriptionTier,
+                banningRate: store.banningRate ?? 0
             },
             seller: {
                 id: store.user.id,
@@ -840,7 +917,8 @@ module.exports.getStoreBySlug = async (req, res) => {
                 likes: totalLikes,
                 products: store._count.products,
                 rating: store.averageRating,
-                reviews: store.totalReviews
+                reviews: store.totalReviews,
+                banningRate: store.banningRate ?? 0
             },
             products: store.products,
             posts: posts,
@@ -933,4 +1011,28 @@ module.exports.applyStoreTheme = async (req, res) => {
     }
 };
 
+module.exports.getBankDetailsBySellerName = async (req, res) => {
+    try {
+        const { sellerName } = req.params;
+        const store = await prisma.store.findFirst({
+            where: { storeName: sellerName }
+        });
+        
+        if (!store) {
+            return res.status(404).json({ success: false, message: 'Store not found' });
+        }
+        
+        return res.json({
+            success: true,
+            bankDetails: {
+                bankName: store.bankName || null,
+                accountNumber: store.accountNumber || null,
+                accountName: store.accountName || null
+            }
+        });
+    } catch (error) {
+        logger.error(`getBankDetailsBySellerName Error: ${error.message}`);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+};
 

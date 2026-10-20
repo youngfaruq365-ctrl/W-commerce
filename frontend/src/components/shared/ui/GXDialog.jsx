@@ -82,7 +82,7 @@ function GXDialogModal({ config, onClose }) {
       onClick={(e) => e.target === e.currentTarget && handleCancel()}
     >
       <div
-        className={`relative w-full max-w-md premium-glass rounded-3xl overflow-hidden transition-all duration-300 ${
+        className={`relative modal-panel w-full max-w-md premium-glass rounded-3xl overflow-hidden transition-all duration-300 ${
           visible ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-4'
         }`}
       >

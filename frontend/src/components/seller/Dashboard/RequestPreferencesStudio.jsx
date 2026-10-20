@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Settings, CheckCircle, ArrowRight, ArrowLeft, Sparkles, Download, Package, AlertCircle, Users, Star, Link, Truck, Megaphone, Zap, DollarSign } from 'lucide-react';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
+import toast from 'react-hot-toast';
 
 const RequestPreferencesStudio = ({ onSuccess }) => {
   const [step, setStep] = useState('details');
@@ -31,10 +32,11 @@ const RequestPreferencesStudio = ({ onSuccess }) => {
         setProgress(100);
         setStep('success');
       } else {
-        throw new Error(response.data.message);
+        throw new Error(response.data.message || 'Failed to save preferences');
       }
-      setStep('notifications');
-      alert('Error saving preferences');
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.message || 'Error saving preferences');
+      setStep('details');
     } finally {
       setIsSubmitting(false);
     }

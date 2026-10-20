@@ -2,17 +2,11 @@ import React, { useState } from 'react';
 import toast from 'react-hot-toast';
 import { Sparkles, Copy, Check, RefreshCw, Plus, X, FileText } from 'lucide-react';
 import { WButton } from '../../design/components';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 
 const TONES = ['Professional', 'Friendly', 'Luxury', 'Playful'];
 const CATEGORIES = ['Electronics', 'Fashion', 'Home & Kitchen', 'Beauty', 'Sports', 'Books', 'Toys', 'Automotive'];
 
-const MOCK_DESCRIPTIONS = {
-  Professional: (name, features) => `Introducing the ${name} — engineered for those who demand excellence.\n\n${features.slice(0, 3).join(', and ')} combine to deliver a product experience that sets a new standard in its category. Designed with precision and backed by rigorous quality control, this product is the smart choice for discerning customers.\n\n✓ Trusted by thousands of verified buyers\n✓ Premium materials built to last\n✓ Industry-leading performance metrics\n\nInvest in quality. Invest in the ${name}.`,
-  Friendly: (name, features) => `Hey there! 👋 Meet the ${name} — you're going to love it!\n\nHere's what makes it awesome: ${features.slice(0, 3).join(', ')}! We designed this with real people in mind, so it's super easy to use and fits perfectly into your everyday life.\n\nWhether you're a first-timer or a pro, the ${name} has got your back. Thousands of happy customers can't be wrong!\n\n🌟 So go ahead — treat yourself. You deserve it!`,
-  Luxury: (name, features) => `The ${name}. For those who settle for nothing less than extraordinary.\n\nCrafted with the finest attention to detail, this exquisite piece embodies ${features.slice(0, 2).join(' and ')} — hallmarks of true luxury. Every element has been meticulously curated to deliver an experience that transcends the ordinary.\n\nThis is not merely a purchase. It is an acquisition. A statement. A reflection of your refined taste and uncompromising standards.\n\nWelcome to the pinnacle of excellence.`,
-  Playful: (name, features) => `🚀 Whooooa — the ${name} just landed, and it's AMAZING!\n\nOkay okay, let us tell you why you NEED this in your life right now:\n⚡ ${features.slice(0, 3).join('\n⚡ ')}\n\nSeriously though, this thing is SO MUCH FUN to use! Whether you're at home, on the go, or literally anywhere — the ${name} brings the good vibes.\n\nDon't sleep on this one. Your future self will thank you. 🙌\n\n#LevelUp #GameChanger #YouWantThis`,
-};
 
 export default function AIProductDescription() {
   const [productName, setProductName] = useState('');

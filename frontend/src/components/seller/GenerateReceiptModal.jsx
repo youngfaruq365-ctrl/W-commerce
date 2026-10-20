@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useSellerStore } from '../../store/sellerStore';
 import { X, Receipt, CheckCircle, Save } from 'lucide-react';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
+import { PLACEHOLDER_IMAGE } from '@/constants/placeholders';
 
 const GenerateReceiptModal = ({ isOpen, onClose, proof, onSuccess }) => {
   const { profile, updateStoreConfig } = useSellerStore();
@@ -58,7 +59,7 @@ const GenerateReceiptModal = ({ isOpen, onClose, proof, onSuccess }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-white/80 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-md">
       <div className="modal-3d-glass w-full max-w-4xl rounded-2xl overflow-hidden shadow-[0_0_40px_rgba(34,197,94,0.1)] flex flex-col md:flex-row">
         
         {/* Editor Side */}
@@ -176,7 +177,7 @@ const GenerateReceiptModal = ({ isOpen, onClose, proof, onSuccess }) => {
                     <tr key={index} className="border-b border-gray-100 last:border-0">
                       <td className="py-2 text-sm flex items-center gap-2">
                         <img 
-                          src={item.product?.images?.[0]?.url || 'https://placehold.co/100x100/111/333?text=Img'} 
+                          src={item.product?.images?.[0]?.url || PLACEHOLDER_IMAGE} 
                           alt="product" 
                           className="w-8 h-8 object-cover rounded"
                         />

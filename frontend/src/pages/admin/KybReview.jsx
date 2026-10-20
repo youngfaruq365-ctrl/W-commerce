@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { CheckCircle, XCircle, FileText, Search, User, Briefcase } from 'lucide-react';
-import axios from 'axios';
-
+import { apiClient as axios } from '../../utils/apiClient';
 const KybReview = () => {
   const [tab, setTab] = useState('MERCHANTS'); // MERCHANTS or COURIERS
   const [couriers, setCouriers] = useState([]);
@@ -73,6 +72,44 @@ const KybReview = () => {
       }
     } catch (err) {
       toast.error(err.response?.data?.message || 'Network error');
+    }
+  };
+
+  const [selectedMerchant, setSelectedMerchant] = useState(null);
+  const [rejectReason, setRejectReason] = useState('');
+
+  const handleSectionAction = async (merchantId, section, status) => {
+    if (status === 'REJECTED' && !rejectReason) {
+      toast.error('Please provide a rejection reason');
+      return;
+    }
+    
+    try {
+      const res = await axios.put(`/api/v1/admin/verifications/${merchantId}/section-status`, {
+        section,
+        status,
+        reason: status === 'REJECTED' ? rejectReason : null
+      });
+      
+      if (res.data.success) {
+        toast.success(`Section ${section} ${status.toLowerCase()} successfully`);
+        setRejectReason('');
+        // Refresh data
+        fetchMerchants();
+        // Update local selectedMerchant state so modal updates
+        const updatedMerchants = merchants.map(m => {
+          if (m.id === merchantId) {
+            const updatedStatuses = m.sectionStatuses || {};
+            updatedStatuses[section] = status;
+            return { ...m, sectionStatuses: updatedStatuses };
+          }
+          return m;
+        });
+        setMerchants(updatedMerchants);
+        setSelectedMerchant(updatedMerchants.find(m => m.id === merchantId));
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update section');
     }
   };
 
@@ -156,10 +193,13 @@ const KybReview = () => {
                     <td className="p-4 flex gap-2 justify-end">
                       {merchant.status === 'PENDING' && (
                         <>
-                          <button onClick={() => handleMerchantAction(merchant.id, 'APPROVED')} className="p-2 bg-gx-success/10 text-gx-success rounded hover:bg-gx-success/20 transition-colors" title="Approve">
+                          <button onClick={() => setSelectedMerchant(merchant)} className="px-3 py-1 bg-blue-500/20 text-blue-400 rounded font-bold hover:bg-blue-500/30 transition-colors">
+                            Review Sections
+                          </button>
+                          <button onClick={() => handleMerchantAction(merchant.id, 'APPROVED')} className="p-2 bg-gx-success/10 text-gx-success rounded hover:bg-gx-success/20 transition-colors" title="Approve All">
                             <CheckCircle size={18} />
                           </button>
-                          <button onClick={() => handleMerchantAction(merchant.id, 'REJECTED')} className="p-2 bg-gx-gray/10 text-gx-gray rounded hover:bg-gx-gray/20 transition-colors" title="Reject">
+                          <button onClick={() => handleMerchantAction(merchant.id, 'REJECTED')} className="p-2 bg-gx-gray/10 text-gx-gray rounded hover:bg-gx-gray/20 transition-colors" title="Reject All">
                             <XCircle size={18} />
                           </button>
                         </>
@@ -221,6 +261,54 @@ const KybReview = () => {
           </div>
         </div>
       </div>
+
+      {/* Detailed Merchant Review Modal */}
+      {selectedMerchant && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#111] border border-white/10 rounded-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+            <div className="p-6 border-b border-white/10 flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-white">Review Business: {selectedMerchant.user?.store?.storeName}</h2>
+              <button onClick={() => setSelectedMerchant(null)} className="text-gray-400 hover:text-white"><XCircle size={24} /></button>
+            </div>
+            <div className="p-6 overflow-y-auto flex-1 space-y-6 text-gray-300">
+              {['identity', 'business', 'ownership', 'address', 'payout'].map((section) => {
+                const status = selectedMerchant.sectionStatuses?.[section] || 'PENDING';
+                const data = selectedMerchant[`${section}Data`] || {};
+                return (
+                  <div key={section} className="border border-white/10 rounded-lg p-4 bg-white/5">
+                    <div className="flex justify-between items-start mb-4">
+                      <h3 className="text-lg font-bold text-white uppercase">{section}</h3>
+                      <span className={`px-2 py-1 rounded text-xs font-bold ${status === 'PENDING' ? 'bg-yellow-500/20 text-yellow-500' : status === 'APPROVED' ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'}`}>
+                        {status}
+                      </span>
+                    </div>
+                    <div className="bg-black/50 p-4 rounded text-sm font-mono mb-4 overflow-x-auto">
+                      <pre>{JSON.stringify(data, null, 2)}</pre>
+                      {section === 'address' && data.proofOfAddressUrl && (
+                        <div className="mt-2">
+                           <a href={data.proofOfAddressUrl} target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">View Proof of Address Document</a>
+                        </div>
+                      )}
+                    </div>
+                    {status === 'PENDING' && (
+                      <div className="flex flex-col gap-2">
+                         <div className="flex gap-2">
+                           <input type="text" placeholder="Rejection reason (if rejecting)" className="flex-1 bg-black/50 border border-white/10 rounded px-3 py-2 text-sm focus:outline-none focus:border-white/30" onChange={(e) => setRejectReason(e.target.value)} />
+                           <button onClick={() => handleSectionAction(selectedMerchant.id, section, 'REJECTED')} className="px-4 py-2 bg-red-500/20 text-red-500 font-bold rounded hover:bg-red-500/30">Reject</button>
+                           <button onClick={() => handleSectionAction(selectedMerchant.id, section, 'APPROVED')} className="px-4 py-2 bg-green-500/20 text-green-500 font-bold rounded hover:bg-green-500/30">Approve</button>
+                         </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            <div className="p-6 border-t border-white/10 flex justify-end">
+               <button onClick={() => setSelectedMerchant(null)} className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded font-bold">Done</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

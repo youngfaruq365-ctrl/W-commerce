@@ -5,13 +5,30 @@
  const disputeService = require('../services/disputeService');
  const { protect, authorize } = require('../middleware/authMiddleware');
 
+ // Get standardized dispute causes taxonomy & evidence requirements
+ router.get('/causes', (req, res) => {
+     try {
+         const causes = disputeService.getDisputeCauses();
+         res.json({ success: true, causes });
+     } catch (error) {
+         res.status(500).json({ success: false, message: error.message });
+     }
+ });
+
  // Buyer: Create dispute
  router.post('/', protect, async (req, res) => {
      try {
-         const { orderId, reason, description, evidenceUrls } = req.body;
+         const { orderId, reason, description, evidenceUrls, causeCategory, subCause, desiredResolution } = req.body;
          const buyerId = req.user.id;
 
-         const dispute = await disputeService.createDispute(orderId, buyerId, reason, description, evidenceUrls);
+         const dispute = await disputeService.createDispute(
+             orderId,
+             buyerId,
+             reason,
+             description,
+             evidenceUrls,
+             { causeCategory, subCause, desiredResolution }
+         );
          res.json({ success: true, dispute });
      } catch (error) {
          res.status(500).json({ success: false, message: error.message });
@@ -21,11 +38,41 @@
 // Seller: Appeal dispute
 router.post('/appeal', protect, authorize('SELLER', 'ADMIN'), async (req, res) => {
     try {
-        const { reason, notes, evidenceUrls } = req.body;
+        const { disputeId, reason, notes, evidenceUrls } = req.body;
         const sellerId = req.user.id;
-        logger.info(`Seller ${sellerId} appealed dispute with reason: ${reason}`);
-        res.json({ success: true, message: 'Dispute appeal submitted' });
+        if (!reason || !String(reason).trim()) {
+            return res.status(400).json({ success: false, message: 'Appeal reason is required' });
+        }
+
+        const targetDispute = disputeId
+            ? await prisma.dispute.findFirst({ where: { id: disputeId, ...(req.user.role === 'ADMIN' ? {} : { sellerId }) } })
+            : await prisma.dispute.findFirst({ where: { sellerId }, orderBy: { createdAt: 'desc' } });
+
+        if (targetDispute) {
+            await prisma.dispute.update({
+                where: { id: targetDispute.id },
+                data: {
+                    status: 'MEDIATION',
+                    sellerResponse: `APPEAL: ${reason}`,
+                    sellerResponseAt: new Date()
+                }
+            });
+
+            await prisma.disputeMessage.create({
+                data: {
+                    disputeId: targetDispute.id,
+                    senderId: sellerId,
+                    senderType: 'SELLER',
+                    message: `[APPEAL] ${reason}${notes ? ` — ${notes}` : ''}`,
+                    evidenceUrl: Array.isArray(evidenceUrls) && evidenceUrls.length > 0 ? evidenceUrls.join(', ') : null
+                }
+            });
+        }
+
+        logger.info(`Seller ${sellerId} appealed dispute ${targetDispute?.id || 'general'} with reason: ${reason}`);
+        res.json({ success: true, message: 'Dispute appeal submitted', disputeId: targetDispute?.id || null });
     } catch (error) {
+        logger.error(`Appeal Dispute Error: ${error.message}`);
         res.status(500).json({ success: false, message: 'Server error' });
     }
 });
@@ -144,76 +191,28 @@ router.get('/:id', protect, async (req, res) => {
     }
 });
 
-// Seller: Respond to dispute
-router.put('/:id/respond', protect, authorize('SELLER', 'ADMIN'), async (req, res) => {
+// Seller: Respond to dispute (PUT & POST)
+const handleSellerDisputeResponse = async (req, res) => {
     try {
         const { id } = req.params;
-        const { response, message } = req.body;
+        const { response, message, evidenceUrls } = req.body;
         const sellerId = req.user.id;
 
-        const dispute = await prisma.dispute.findUnique({
-            where: { id }
+        const updated = await disputeService.respondToDispute(id, sellerId, {
+            response,
+            message,
+            evidenceUrls
         });
-
-        if (!dispute) {
-            return res.status(404).json({ success: false, message: 'Dispute not found' });
-        }
-
-        if (dispute.sellerId !== sellerId && req.user.role !== 'ADMIN') {
-            return res.status(403).json({ success: false, message: 'Not authorized' });
-        }
-
-        const updateData = {
-            sellerResponse: response,
-            sellerResponseAt: new Date()
-        };
-
-        if (response === 'SELLER_REFUND_APPROVED') {
-            updateData.status = 'RESOLVED_REFUNDED';
-            updateData.resolution = 'Refund approved by seller';
-        } else if (response === 'SELLER_REPLACEMENT') {
-            updateData.status = 'RESOLVED_REPLACEMENT';
-            updateData.resolution = 'Replacement to be shipped';
-        } else if (response === 'SELLER_REJECTED') {
-            updateData.status = 'RESOLVED_REJECTED';
-            updateData.resolution = 'Dispute rejected by seller';
-        } else {
-            updateData.status = 'SELLER_RESPONSE';
-        }
-
-        const updated = await prisma.dispute.update({
-            where: { id },
-            data: updateData
-        });
-
-        if (message) {
-            await prisma.disputeMessage.create({
-                data: {
-                    disputeId: id,
-                    senderId: sellerId,
-                    senderType: 'SELLER',
-                    message
-                }
-            });
-        }
-
-        await prisma.notification.create({
-            data: {
-                userId: dispute.buyerId,
-                title: 'Seller Response to Dispute',
-                body: `The seller has responded to your dispute. Please check the details.`,
-                type: 'DISPUTE'
-            }
-        });
-
-        logger.info(`Dispute responded: ${id} by seller ${sellerId}, response: ${response}`);
 
         res.json({ success: true, dispute: updated });
     } catch (error) {
         logger.error(`Respond to Dispute Error: ${error.message}`);
-        res.status(500).json({ success: false, message: 'Server error' });
+        res.status(500).json({ success: false, message: error.message || 'Server error' });
     }
-});
+};
+
+router.put('/:id/respond', protect, authorize('SELLER', 'ADMIN'), handleSellerDisputeResponse);
+router.post('/:id/respond', protect, authorize('SELLER', 'ADMIN'), handleSellerDisputeResponse);
 
 // Buyer: Respond to seller
 router.put('/:id/buyer-respond', protect, async (req, res) => {

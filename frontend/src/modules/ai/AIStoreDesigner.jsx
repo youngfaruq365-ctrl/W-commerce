@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import toast from 'react-hot-toast';
 import { Sparkles, RefreshCw, Check, Palette, Type, Wand2, ChevronRight } from 'lucide-react';
 import { WButton } from '../../design/components';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 
 const STYLES = [
   { id: 'minimal', label: 'Minimal', desc: 'Clean, whitespace, subtle', bg: 'from-gray-700 to-gray-900', accent: '#E5E5E5' },

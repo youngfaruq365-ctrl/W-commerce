@@ -1,0 +1,18 @@
+{
+  "watch": ["src", "server.cjs"],
+  "ext": "js,cjs,mjs,json",
+  "ignore": [
+    "storage/*",
+    "storage/**/*",
+    "uploads/*",
+    "uploads/**/*",
+    "logs/*",
+    "logs/**/*",
+    "node_modules/*",
+    "src/tests/*",
+    "src/tests/**/*",
+    "scratch/*",
+    "scratch/**/*",
+    "*.log"
+  ]
+}

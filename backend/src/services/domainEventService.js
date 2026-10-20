@@ -100,27 +100,41 @@ function off(eventType) {
 async function emit(eventType, aggregateType, aggregateId, payload = {}, actor = null, tx = null) {
     const db = tx || prisma;
 
-    // 1. Persist the event (immutable log)
+    // 1. Persist the event (immutable log if model exists)
     let event;
-    try {
-        event = await db.domainEvent.create({
-            data: {
-                eventType,
-                aggregateType,
-                aggregateId,
-                payload:   typeof payload === 'string' ? payload : JSON.stringify(payload),
-                actorId:   actor?.id   || null,
-                actorType: actor?.type || 'SYSTEM',
-                status:    'PENDING',
-            },
-        });
-    } catch (err) {
-        logger.error(`[DomainEvents] Failed to persist event ${eventType}: ${err.message}`);
-        throw err;  // If we can't persist, the caller should know
+    if (db.domainEvent) {
+        try {
+            event = await db.domainEvent.create({
+                data: {
+                    eventType,
+                    aggregateType,
+                    aggregateId,
+                    payload:   typeof payload === 'string' ? payload : JSON.stringify(payload),
+                    actorId:   actor?.id   || null,
+                    actorType: actor?.type || 'SYSTEM',
+                    status:    'PENDING',
+                },
+            });
+        } catch (err) {
+            logger.error(`[DomainEvents] Failed to persist event ${eventType}: ${err.message}`);
+        }
+    }
+
+    if (!event) {
+        event = {
+            id: `evt_mem_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+            eventType,
+            aggregateType,
+            aggregateId,
+            payload: typeof payload === 'string' ? payload : JSON.stringify(payload),
+            actorId: actor?.id || null,
+            actorType: actor?.type || 'SYSTEM',
+            status: 'PENDING',
+            createdAt: new Date()
+        };
     }
 
     // 2. Dispatch handlers asynchronously (fire-and-forget from the caller's perspective)
-    //    We don't await this — the caller gets the event row back immediately.
     _dispatchHandlers(event).catch(err => {
         logger.error(`[DomainEvents] Dispatch error for ${event.id}: ${err.message}`);
     });
@@ -134,20 +148,40 @@ async function emit(eventType, aggregateType, aggregateId, payload = {}, actor =
  * are dispatched AFTER the transaction commits (via setImmediate).
  */
 async function emitInTransaction(tx, eventType, aggregateType, aggregateId, payload = {}, actor = null) {
-    const event = await tx.domainEvent.create({
-        data: {
+    let event;
+    if (tx.domainEvent) {
+        try {
+            event = await tx.domainEvent.create({
+                data: {
+                    eventType,
+                    aggregateType,
+                    aggregateId,
+                    payload:   typeof payload === 'string' ? payload : JSON.stringify(payload),
+                    actorId:   actor?.id   || null,
+                    actorType: actor?.type || 'SYSTEM',
+                    status:    'PENDING',
+                },
+            });
+        } catch (err) {
+            logger.error(`[DomainEvents] Failed to persist event in tx ${eventType}: ${err.message}`);
+        }
+    }
+
+    if (!event) {
+        event = {
+            id: `evt_mem_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
             eventType,
             aggregateType,
             aggregateId,
-            payload:   typeof payload === 'string' ? payload : JSON.stringify(payload),
-            actorId:   actor?.id   || null,
+            payload: typeof payload === 'string' ? payload : JSON.stringify(payload),
+            actorId: actor?.id || null,
             actorType: actor?.type || 'SYSTEM',
-            status:    'PENDING',
-        },
-    });
+            status: 'PENDING',
+            createdAt: new Date()
+        };
+    }
 
     // Schedule dispatch after the transaction commits
-    // setImmediate runs after the current I/O cycle, which is after $transaction resolves
     setImmediate(() => {
         _dispatchHandlers(event).catch(err => {
             logger.error(`[DomainEvents] Post-tx dispatch error for ${event.id}: ${err.message}`);

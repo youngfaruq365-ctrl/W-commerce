@@ -102,22 +102,33 @@ exports.createFlashDeal = async (req, res) => {
             targetRegion
         });
 
-        const flashDeal = await prisma.flashDeal.create({
-            data: {
+        const flashDealData = {
+            campaignId: campaign?.id || null,
+            discount: numericDiscount,
+            promoType,
+            promoTitle: promoTitle || product.title,
+            bannerImage: bannerImage || product.images?.[0]?.url || null,
+            startDate: startsAt,
+            endDate: endsAt,
+            maxStock: maxStock ? Number(maxStock) : null,
+            isActive: startsAt <= new Date() && endsAt > new Date(),
+            isFeatured: Boolean(isFeatured),
+            targetRegion,
+            priority: Number(priority || 0)
+        };
+
+        const flashDeal = await prisma.flashDeal.upsert({
+            where: {
+                sellerId_productId: {
+                    sellerId,
+                    productId
+                }
+            },
+            update: flashDealData,
+            create: {
                 productId,
                 sellerId,
-                campaignId: campaign?.id || null,
-                discount: numericDiscount,
-                promoType,
-                promoTitle: promoTitle || product.title,
-                bannerImage: bannerImage || product.images?.[0]?.url || null,
-                startDate: startsAt,
-                endDate: endsAt,
-                maxStock: maxStock ? Number(maxStock) : null,
-                isActive: startsAt <= new Date() && endsAt > new Date(),
-                isFeatured: Boolean(isFeatured),
-                targetRegion,
-                priority: Number(priority || 0)
+                ...flashDealData
             },
             include: {
                 product: {

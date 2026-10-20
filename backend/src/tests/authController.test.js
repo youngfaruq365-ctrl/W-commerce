@@ -1,6 +1,6 @@
 // Set required env vars BEFORE any module is loaded
-process.env.JWT_SECRET = 'test_jwt_secret_that_is_long_enough_for_testing_purposes_only';
-process.env.NODE_ENV = 'test';
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test_jwt_secret_that_is_long_enough_for_testing_purposes_only';
+process.env.NODE_ENV = process.env.NODE_ENV || 'test';
 
 const request = require('supertest');
 const express = require('express');

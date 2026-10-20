@@ -1,69 +1,137 @@
-# ─── Dependencies ─────────────────────────────────────────────────────────────
-node_modules/
-
-# ─── Build outputs ─────────────────────────────────────────────────────────────
-dist/
-dist-ssr/
-dev-dist/
-*.local
-
-# ─── Environment & Secrets — NEVER COMMIT THESE ───────────────────────────────
-.env
-.env.*
-!.env.example
-!.env.development
-*.pem
-*.key
-*.cert
-*.p12
-*.pfx
-*credentials*.csv
-*accessKeys*.csv
-*secret*.txt
-*recovery_code*.txt
-client_secret*.json
-
-# ─── Database files ────────────────────────────────────────────────────────────
-*.db
-*.db-journal
-*.db-shm
-*.db-wal
-prisma/dev.db
-prisma/migrations/*.sql.bak
-
-# ─── Logs ─────────────────────────────────────────────────────────────────────
-logs/
+# Logs
+logs
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-build_log.txt
-tsc_log*.txt
-eslint_log.txt
+lerna-debug.log*
 
-# ─── Uploads & local storage ──────────────────────────────────────────────────
-backend/storage/uploads/
+node_modules
+dist
+dist-ssr
+*.local
 
-# ─── OS & editor files ────────────────────────────────────────────────────────
-.DS_Store
-Thumbs.db
+# Editor directories and files
 .vscode/*
 !.vscode/extensions.json
-!.vscode/settings.json
-.idea/
+.idea
+.DS_Store
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
 
-# ─── Test & debug artifacts ───────────────────────────────────────────────────
-coverage/
-.nyc_output/
-backend/*.json
-!backend/package.json
+# ─── SECRETS — NEVER COMMIT ──────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
 
-# ─── Temp & scratch ───────────────────────────────────────────────────────────
-temp_portfolio/
-*.crdownload
+# ─── DEBUG & SCRATCH SCRIPTS ──────────────────────────────────────────────────
+backend/debug.log
+backend/server.log
+backend/test_*.js
+backend/check_*.js
+backend/find_*.js
+backend/fix_*.js
+backend/fix*.cjs
+backend/count_*.js
+backend/list_*.js
+backend/scan-imports.cjs
+backend/seed_*.js
+backend/sync_*.js
+backend/update_*.js
+backend/verify-test-user.js
+backend/approve_stores.cjs
+backend/clear_passkeys.cjs
+backend/reset_buyer_pwd.cjs
+backend/unlock_account.cjs
+backend/backfill_*.js
+backend/testPrisma.js
+backend/testQuery.js
+backend/testSessions*.js
+backend/scratch_*.js
+backend/issues.json
+backend/issues2.json
+backend/fakunle_search_test.json
+backend/test_products.json
+backend/server.backup.cjs
+backend/src/fetch_verifications.cjs
+backend/src/fix_users.js
+backend/src/update_kyc.cjs
+
+# Root debug/temp files
+fix_app*.js
+fix_jsx*.js
+extract.js
+process_html.js
+revert_funnel.js
+delete_line.js
+debug_browser.cjs
+extracted_html.txt
+build_log.txt
+eslint_log.txt
+tsc_log*.txt
+files.txt
+backend_todos.csv
+frontend_todos.csv
+test.mp3
+
+# Storage uploads (user-uploaded content — not source code)
+backend/storage/uploads/
+storage/uploads/
+
+# SQLite dev databases
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Archived dead code & one-off scripts (moved out of the build, kept for reference)
+_archive/
+
+# Root scratch and temporary files
+/restore_schema.cjs
+/revert_contains.cjs
+/revert_sqlite.cjs
+/project_structure.txt
+/scratch/
+/temp_portfolio/
+
+# Backend temporary and test scripts
+backend/temp.js
+backend/test-*.js
+backend/test*.js
+backend/test*.cjs
+backend/verify_user.cjs
+backend/wipe.js
+
+# Frontend temporary tooling scripts
+frontend/extract_apis.cjs
+frontend/group_mappings.cjs
+frontend/mapping.json
+frontend/patch_layout_config.py
+frontend/scan-imports.cjs
+frontend/src/components/seller/Dashboard/*.py
+# Internal scratch folders and public upload dumps
+backend/scratch/
+backend/scripts/
+public/uploads/
+scratch/
+scripts/generateBannerStyles.js
+database/prisma/prisma/
+database/prisma/migrations/1791012104111_init_postgres/
+# Root one-off scripts
+/backend/append.js
+/backend/assign_*.cjs
+/backend/check_*.cjs
+/backend/check_*.mjs
+/backend/find_*.cjs
+/backend/fix-*.js
+/backend/read_sessions.js
+/backend/reset_user.cjs
+/backend/missing-await.json
+
+# External temporary projects/assets
+aws-cds-solution/

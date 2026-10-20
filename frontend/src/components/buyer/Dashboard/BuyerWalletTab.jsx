@@ -1,6 +1,6 @@
 import React from 'react';
 import { ShieldAlert, Wallet, RefreshCcw } from 'lucide-react';
-import { useBuyerStore } from '../../../../store/buyerStore';
+import { useBuyerStore } from '../../../store/buyerStore';
 
 const BuyerWalletTab = ({ onTopUp, onWithdraw }) => {
   const { wallet, walletTransactions = [] } = useBuyerStore();
@@ -46,11 +46,11 @@ const BuyerWalletTab = ({ onTopUp, onWithdraw }) => {
           <div key={tx.id} className="premium-glass p-5 rounded-xl border border-[var(--border-color)] flex justify-between items-center hover:bg-[var(--bg-tertiary)] transition-colors">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-full flex items-center justify-center bg-gray-500/20 text-gray-500">
-                {tx.type === 'CREDIT' ? <RefreshCcw size={20} /> : <Wallet size={20} />}
+                {tx.direction === 'CREDIT' ? <RefreshCcw size={20} /> : <Wallet size={20} />}
               </div>
               <div>
                 <p className="font-bold text-black capitalize">
-                  {(tx.referenceType || '').toLowerCase()} — {tx.type}
+                  {tx.referenceType ? tx.referenceType.toLowerCase() : (tx.direction === 'CREDIT' ? 'Deposit' : 'Withdrawal')} — {tx.direction}
                 </p>
                 <p className="text-sm text-[var(--text-muted)] mt-1">
                   {new Date(tx.createdAt).toLocaleString()}
@@ -58,8 +58,8 @@ const BuyerWalletTab = ({ onTopUp, onWithdraw }) => {
               </div>
             </div>
             <div className="text-right">
-              <p className={`font-extrabold text-lg ${tx.type === 'CREDIT' ? 'text-gray-500' : 'text-black'}`}>
-                {tx.type === 'CREDIT' ? '+' : '-'}NGN {parseFloat(tx.amount).toFixed(2)}
+              <p className={`font-extrabold text-lg ${tx.direction === 'CREDIT' ? 'text-gray-500' : 'text-black'}`}>
+                {tx.direction === 'CREDIT' ? '+' : '-'}NGN {parseFloat(tx.amount).toFixed(2)}
               </p>
               <p className="text-xs text-[var(--text-muted)] mt-1">{tx.description || tx.referenceId}</p>
             </div>

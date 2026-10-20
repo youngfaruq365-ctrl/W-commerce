@@ -29,12 +29,12 @@ const BottomNav = () => {
     },
   ];
 
-  if (['/login', '/signup'].includes(location.pathname) || location.pathname.startsWith('/messages')) return null;
+  if (['/login', '/signup', '/payai'].includes(location.pathname) || location.pathname.startsWith('/messages')) return null;
 
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 md:hidden w-[92%] max-w-[400px] pointer-events-none animate-slide-up">
+    <div className="fixed bottom-2 left-1/2 -translate-x-1/2 z-50 md:hidden w-[92%] max-w-[400px] pointer-events-none animate-slide-up">
       <nav
-        className="relative bg-transparent rounded-full px-2 py-2 flex justify-around items-center pointer-events-auto"
+        className="relative neu-panel rounded-full px-2 py-2 flex justify-around items-center pointer-events-auto"
       >
         {navItems.map((item) => {
           const isActive =
@@ -51,7 +51,7 @@ const BottomNav = () => {
             >
               {/* Active tab: filled pill */}
               {isActive ? (
-                <div className="flex items-center justify-center bg-[var(--text-main)] text-[var(--bg-primary)] px-4 py-2.5 rounded-full shadow-md transition-all duration-300">
+                <div className="flex items-center justify-center neu-card-pressed text-[#006cff] px-4 py-2.5 rounded-full shadow-md transition-all duration-300">
                   <Icon size={20} strokeWidth={2.5} />
                   <span className="ml-2 text-xs font-bold tracking-wide hidden sm:block">{item.name}</span>
                 </div>

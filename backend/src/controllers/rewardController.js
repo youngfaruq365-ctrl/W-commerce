@@ -24,7 +24,7 @@ exports.grantReward = async (req, res) => {
         res.json({ success: true, ...result });
     } catch (error) {
         logger.error(`Reward grant error: ${error.message}`);
-        res.status(error.statusCode || 500).json({ success: false, message: error.message });
+        res.status(error.statusCode || 500).json({ success: false, message: process.env.NODE_ENV === 'production' ? 'An error occurred' : error.message });
     }
 };
 
@@ -34,6 +34,6 @@ exports.upsertRule = async (req, res) => {
         res.json({ success: true, rule });
     } catch (error) {
         logger.error(`Reward rule error: ${error.message}`);
-        res.status(error.statusCode || 500).json({ success: false, message: error.message });
+        res.status(error.statusCode || 500).json({ success: false, message: process.env.NODE_ENV === 'production' ? 'An error occurred' : error.message });
     }
 };

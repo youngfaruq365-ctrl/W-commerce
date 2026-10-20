@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 import toast from 'react-hot-toast';
 import { WIcon } from '../../components/visual/WIcon';
 
@@ -68,7 +68,7 @@ const ProductDetails = () => {
     
     setAddingToCart(true);
     try {
-      await axios.post(`${API_URL}/api/v1/cart`, { productId: id, quantity: 1 }, {
+      await axios.post('/api/v1/cart/add', { productId: id, quantity: 1 }, {
         headers: { Authorization: `Bearer ${token}` }
       });
       toast.success('Added to cart!');
@@ -107,24 +107,41 @@ const ProductDetails = () => {
       <div className="max-w-7xl mx-auto px-6 py-12 flex flex-col lg:flex-row gap-16">
         {/* Gallery */}
         <div className="lg:w-1/2 flex flex-col gap-6">
-          <div className="aspect-square bg-gray-50 rounded-3xl overflow-hidden relative group">
-            <img 
-              src={images[activeImage]} 
-              alt={product.name}
-              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-            />
-            {product.stockQuantity < 5 && (
-              <div className="absolute top-4 left-4 bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-widest shadow-md">
-                Only {product.stockQuantity} left
+          <div 
+            className="h-[50vh] w-full bg-gray-50 rounded-3xl overflow-x-auto overflow-y-hidden snap-x snap-mandatory flex scrollbar-hide relative group"
+            onScroll={(e) => {
+              const idx = Math.round(e.currentTarget.scrollLeft / e.currentTarget.clientWidth);
+              if (idx !== activeImage) setActiveImage(idx);
+            }}
+          >
+            {images.map((img, idx) => (
+              <div key={idx} className="w-full h-full flex-shrink-0 snap-center relative">
+                <img 
+                  src={img} 
+                  alt={`${product.name} - image ${idx + 1}`}
+                  className="w-full h-full object-cover"
+                />
+                {product.stockQuantity < 5 && idx === 0 && (
+                  <div className="absolute top-4 left-4 bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-widest shadow-md z-10">
+                    Only {product.stockQuantity} left
+                  </div>
+                )}
               </div>
-            )}
+            ))}
           </div>
           {images.length > 1 && (
             <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
               {images.map((img, idx) => (
                 <button 
                   key={idx} 
-                  onClick={() => setActiveImage(idx)}
+                  onClick={() => {
+                    setActiveImage(idx);
+                    // Optionally scroll the top container to the image
+                    const container = document.querySelector('.snap-mandatory');
+                    if (container) {
+                      container.scrollTo({ left: idx * container.clientWidth, behavior: 'smooth' });
+                    }
+                  }}
                   className={`flex-shrink-0 w-20 h-20 rounded-xl overflow-hidden border-2 transition-all ${activeImage === idx ? 'border-slate-800 opacity-100' : 'border-transparent opacity-60 hover:opacity-100'}`}
                 >
                   <img src={img} className="w-full h-full object-cover" />
@@ -145,7 +162,7 @@ const ProductDetails = () => {
           </div>
 
           <h1 className="text-4xl sm:text-5xl font-extrabold text-gray-900 leading-tight mb-4">{product.name}</h1>
-          <div className="text-3xl font-bold text-slate-800 mb-8">${product.price?.toLocaleString()}</div>
+          <div className="text-3xl font-bold text-slate-800 mb-8">₦{product.price?.toLocaleString()}</div>
           
           <div className="prose prose-slate mb-10">
             <p className="text-gray-600 leading-relaxed text-lg">{product.description}</p>
@@ -189,7 +206,7 @@ const ProductDetails = () => {
                   <img src={item.imageUrl || 'https://via.placeholder.com/300'} alt={item.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
                 </div>
                 <h3 className="font-semibold text-gray-900 truncate group-hover:text-slate-700 transition-colors">{item.name}</h3>
-                <p className="font-bold text-slate-800">${item.price?.toLocaleString()}</p>
+                <p className="font-bold text-slate-800">₦{item.price?.toLocaleString()}</p>
               </div>
             ))}
           </div>

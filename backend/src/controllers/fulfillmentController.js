@@ -25,7 +25,7 @@ const logger             = require('../utils/logger');
 function sendError(res, err) {
     const status = err.statusCode || 500;
     logger.error(`[FulfillmentCtrl] ${err.message}`);
-    return res.status(status).json({ success: false, message: err.message });
+    return res.status(status).json({ success: false, message: process.env.NODE_ENV === 'production' ? 'An error occurred' : err.message });
 }
 
 function getFulfillmentOrderId(req) {
@@ -43,7 +43,11 @@ exports.listMyOrders = async (req, res) => {
 
         const where = { sellerId, ...(status ? { status } : {}) };
 
-        const [orders, total] = await Promise.all([
+        const store = await prisma.store.findUnique({
+            where: { sellerId }
+        });
+
+        const [orders, total, legacyOrders] = await Promise.all([
             prisma.fulfillmentOrder.findMany({
                 where,
                 orderBy: { createdAt: 'desc' },
@@ -51,16 +55,44 @@ exports.listMyOrders = async (req, res) => {
                 take,
                 include: {
                     items:   { include: { product: { select: { id: true, title: true, images: { take: 1 } } } } },
-                    buyer:   { select: { id: true, fullName: true } },
+                    buyer:   { select: { id: true, fullName: true, email: true } },
                     package: { select: { id: true, barcode: true, status: true } },
+                    marketplaceOrder: { select: { shippingSnapshot: true } }
                 },
             }),
             prisma.fulfillmentOrder.count({ where }),
+            store ? prisma.order.findMany({
+                where: {
+                    items: { some: { product: { storeId: store.id } } },
+                    ...(status ? { status } : {})
+                },
+                include: {
+                    buyer: { select: { fullName: true, email: true } },
+                    items: { include: { product: { include: { images: true } } } }
+                },
+                orderBy: { createdAt: 'desc' }
+            }) : Promise.resolve([])
         ]);
+
+        function mapFulfillmentToLegacy(fo) {
+            return {
+                ...fo,
+                shippingAddress: fo.marketplaceOrder?.shippingSnapshot || null,
+                status: fo.status === 'DELIVERED' ? 'DELIVERED' : fo.status,
+                items: fo.items.map(item => ({
+                    ...item,
+                    product: item.product
+                }))
+            };
+        }
+
+        const mergedOrders = [...legacyOrders, ...orders.map(mapFulfillmentToLegacy)]
+            .sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
 
         return res.json({
             success: true,
-            data:    orders,
+            data:    mergedOrders,
+            orders:  mergedOrders, // for frontend backwards compatibility
             meta:    { total, page: Number(page), limit: take, pages: Math.ceil(total / take) },
         });
     } catch (err) {

@@ -7,6 +7,8 @@ exports.getPromotions = async (req, res) => {
         const nearestFlashSale = await prisma.product.findFirst({
             where: {
                 isFlashSale: true,
+                isArchived: false,
+                store: { approvalStatus: 'APPROVED' },
                 flashEndsAt: {
                     gt: new Date()
                 }
@@ -56,7 +58,7 @@ exports.getPromotions = async (req, res) => {
         // 3. Get highly rated products for featured deals
         const featuredDeals = await prisma.product.findMany({
             take: 5,
-            where: { rating: { gte: 4.5 } },
+            where: { rating: { gte: 4.5 }, isArchived: false, store: { approvalStatus: 'APPROVED' } },
             include: { images: { where: { isPrimary: true }, take: 1 } },
             orderBy: { viewCount: 'desc' }
         });

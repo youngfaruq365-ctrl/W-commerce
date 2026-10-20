@@ -2,24 +2,30 @@ import React, { useEffect } from 'react';
 import { useCourierStore } from '../../store/courierStore';
 import { useTrackingStore } from '../../store/trackingStore';
 import { useOfferStore } from '../../store/offerStore';
+import { useDeliveryStore } from '../../store/deliveryStore';
 import { geolocationService } from '../../services/realtime/geolocationService';
 import { realtimeClient } from '../../services/realtime/socketClient';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Power, TrendingUp, Navigation, Loader2, MapPin, Package, Clock, X, Check } from 'lucide-react';
+import { Power, TrendingUp, Navigation, Loader2, MapPin, Package, Clock, X, Check, Star, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
+import NotificationBell from '../../components/shared/NotificationBell';
+import { PLACEHOLDER_MAP } from '@/constants/placeholders';
 
 const CourierDashboard = () => {
-    const { profile, availability, setAvailability, earnings, fetchProfile, fetchEarnings, profileLoading } = useCourierStore();
+    const { profile, availability, setAvailability, earnings, fetchProfile, fetchEarnings, profileLoading, dashboard, fetchDashboard } = useCourierStore();
     const { gpsStatus } = useTrackingStore();
     const { currentOffer, timeRemaining, setOffer, acceptOffer, rejectOffer } = useOfferStore();
+    const { queue, fetchQueue } = useDeliveryStore();
     const navigate = useNavigate();
     const isOnline = availability === 'ONLINE';
 
     useEffect(() => {
         fetchProfile();
         fetchEarnings();
-    }, [fetchProfile, fetchEarnings]);
+        fetchDashboard();
+        fetchQueue();
+    }, [fetchProfile, fetchEarnings, fetchDashboard, fetchQueue]);
 
     useEffect(() => {
         const setupPush = async () => {
@@ -29,6 +35,12 @@ const CourierDashboard = () => {
                     if (permission === 'granted') {
                         const swRegistration = await navigator.serviceWorker.register('/sw.js');
                         const vapidPublicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+                        
+                        if (!vapidPublicKey) {
+                            console.warn('VITE_VAPID_PUBLIC_KEY is not set. Push notifications disabled.');
+                            return;
+                        }
+
                         const urlBase64ToUint8Array = (base64String) => {
                             const padding = '='.repeat((4 - base64String.length % 4) % 4);
                             const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
@@ -44,13 +56,13 @@ const CourierDashboard = () => {
                             applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
                         });
                         try {
-                            await api.post('/api/v1/user/subscribe-push', subscription);
+                            console.log('Push subscription successful', subscription);
                         } catch {
                             console.warn('Failed to subscribe to push');
                         }
                     }
-                } catch (error) {
-                    // console.error('Push setup failed:', error);
+                } catch (error) { 
+                    console.warn('Failed to setup push notifications:', error); 
                 }
             }
         };
@@ -59,7 +71,6 @@ const CourierDashboard = () => {
 
     useEffect(() => {
         const handleOffer = (offer) => {
-            // console.log("Received offer:", offer);
             setOffer(offer);
         };
         realtimeClient.on('delivery:offer', handleOffer);
@@ -70,187 +81,258 @@ const CourierDashboard = () => {
         const newStatus = isOnline ? 'OFFLINE' : 'ONLINE';
         try {
             await setAvailability(newStatus);
-            
             if (newStatus === 'ONLINE') {
                 geolocationService.startTracking();
+                fetchQueue(true);
             } else {
                 geolocationService.stopTracking();
             }
         } catch (error) {
             toast.error('Failed to update availability. Please try again.');
-            await fetchProfile(); // Sync local state back with server
+            await fetchProfile();
         }
     };
 
     if (profileLoading && !profile) {
         return (
             <div className="flex-1 flex items-center justify-center min-h-[50vh]">
-                <Loader2 className="animate-spin text-green-500" size={40} />
+                <Loader2 className="animate-spin text-emerald-500" size={40} />
             </div>
         );
     }
 
+    const isPro = profile?.user?.subscriptionTier === 'COURIER_PRO';
+
     return (
-        <div className="p-4 space-y-6 bg-[var(--bg-primary)] min-h-screen">
-            <header className="pt-6 pb-2">
-                <h1 className="text-3xl font-black tracking-tight text-[var(--text-main)]">Hello, {profile?.user?.fullName?.split(' ')[0] || 'Courier'}</h1>
-                <p className="text-[var(--text-muted)] text-sm mt-1">Ready to ride today?</p>
+        <div className="w-full max-w-[1180px] mx-auto p-4 md:p-8 space-y-8 min-h-screen">
+            {/* Header */}
+            <header className="flex justify-between items-end">
+                <div>
+                    <h1 className="text-4xl font-black tracking-tighter text-[var(--text-main)] flex items-center gap-2">
+                        Courier OS
+                    </h1>
+                    <p className="text-[var(--text-muted)] font-medium text-sm mt-1">
+                        Welcome back, {profile?.user?.fullName?.split(' ')[0] || 'Rider'}
+                    </p>
+                </div>
+                <div className="flex items-center gap-4">
+                    <NotificationBell />
+                </div>
             </header>
 
-            {/* Huge Status Toggle */}
-            <motion.div 
-                whileTap={{ scale: 0.95 }}
-                onClick={toggleStatus}
-                className={`relative overflow-hidden rounded-3xl p-8 flex flex-col items-center justify-center cursor-pointer shadow-2xl transition-all duration-500 ${
-                    isOnline 
-                    ? 'bg-gradient-to-br from-green-600 to-emerald-800 shadow-green-500/30' 
-                    : 'bg-[var(--bg-secondary)] border border-[var(--border-color)] shadow-sm'
-                }`}
-            >
-                <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-4 transition-all duration-500 ${
-                    isOnline ? 'bg-white/20 text-white' : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]'
-                }`}>
-                    <Power size={40} />
+            {/* Stats Grid */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="neu-card p-6 flex flex-col items-center text-center justify-center relative overflow-hidden">
+                    <h3 className="text-[11px] font-black tracking-widest uppercase text-[var(--text-muted)] mb-2">Today's Jobs</h3>
+                    <p className="text-3xl font-black text-[var(--text-main)]">{(dashboard?.deliveriesCompleted || 0) + (dashboard?.pending?.length || 0)}</p>
                 </div>
-                <h2 className={`text-2xl font-bold tracking-widest uppercase ${isOnline ? 'text-white' : 'text-[var(--text-muted)]'}`}>
-                    {isOnline ? 'You are Online' : 'Go Online'}
-                </h2>
                 
-                {/* Geolocation Status UI */}
-                {isOnline ? (
-                    <div className="mt-4 text-center">
-                        {gpsStatus === 'ACTIVE' && (
-                            <span className="inline-flex items-center text-xs font-semibold px-3 py-1 bg-green-500/20 text-green-100 rounded-full backdrop-blur-md border border-green-500/30">
-                                <span className="w-2 h-2 rounded-full bg-green-400 mr-2 animate-pulse"></span>
-                                GPS ACTIVE
-                            </span>
-                        )}
-                        {gpsStatus === 'POOR_SIGNAL' && (
-                            <span className="inline-flex items-center text-xs font-semibold px-3 py-1 bg-yellow-500/20 text-yellow-100 rounded-full backdrop-blur-md border border-yellow-500/30">
-                                ⚠ POOR GPS SIGNAL
-                            </span>
-                        )}
-                        {gpsStatus === 'LOST_SIGNAL' && (
-                            <span className="inline-flex items-center text-xs font-semibold px-3 py-1 bg-red-500/20 text-red-100 rounded-full backdrop-blur-md border border-red-500/30">
-                                ⚠ GPS SIGNAL LOST
-                            </span>
-                        )}
-                        {gpsStatus === 'DENIED' && (
-                            <span className="inline-flex items-center text-xs font-semibold px-3 py-1 bg-red-500/20 text-red-100 rounded-full backdrop-blur-md border border-red-500/30">
-                                ⚠ LOCATION PERMISSION DENIED
-                            </span>
-                        )}
-                        {(gpsStatus === 'CONNECTING' || gpsStatus === 'OFFLINE') && (
-                            <span className="inline-flex items-center text-xs font-semibold px-3 py-1 bg-white/10 text-white/70 rounded-full backdrop-blur-md border border-white/20">
-                                <Loader2 size={12} className="mr-2 animate-spin" />
-                                CONNECTING GPS...
-                            </span>
-                        )}
-                    </div>
-                ) : (
-                    <p className="mt-2 text-sm text-center text-[var(--text-muted)]">
-                        Tap to start receiving orders
-                    </p>
-                )}
-                
-                {isOnline && (
-                    <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 pointer-events-none mix-blend-overlay"></div>
-                )}
-            </motion.div>
+                <div className="neu-card p-6 flex flex-col items-center text-center justify-center">
+                    <h3 className="text-[11px] font-black tracking-widest uppercase text-[var(--text-muted)] mb-2">Earnings</h3>
+                    <p className="text-3xl font-black text-blue-600">&#8358;{(dashboard?.earningsToday || earnings.today || 0).toLocaleString()}</p>
+                </div>
 
-            {/* Quick Stats */}
-            <div className="grid grid-cols-2 gap-4">
-                <motion.div 
-                    whileHover={{ scale: 1.02 }}
-                    className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-3xl p-5 shadow-lg relative overflow-hidden"
+                <div className="neu-card p-6 flex flex-col items-center text-center justify-center">
+                    <h3 className="text-[11px] font-black tracking-widest uppercase text-[var(--text-muted)] mb-2">Distance</h3>
+                    <p className="text-3xl font-black text-purple-600">{Math.round((dashboard?.deliveriesCompleted || 0) * 3.75)} km</p>
+                </div>
+
+                <div 
+                    onClick={toggleStatus}
+                    className={`neu-card p-6 flex flex-col items-center text-center justify-center cursor-pointer transition-colors ${isOnline ? 'neu-card-pressed' : ''}`}
                 >
-                    <div className="absolute -right-6 -top-6 w-24 h-24 bg-green-500/10 rounded-full blur-2xl pointer-events-none"></div>
-                    <div className="flex items-center justify-between mb-3">
-                        <span className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Today's Pay</span>
-                        <div className="p-2 bg-green-500/10 text-green-500 rounded-lg"><TrendingUp size={16} /></div>
+                    <h3 className="text-[11px] font-black tracking-widest uppercase text-[var(--text-muted)] mb-2">Status</h3>
+                    <div className="flex items-center gap-2">
+                        <div className={`w-3 h-3 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-gray-400'}`}></div>
+                        <p className={`text-xl font-black ${isOnline ? 'text-emerald-500' : 'text-gray-500'}`}>
+                            {isOnline ? 'Online' : 'Offline'}
+                        </p>
                     </div>
-                    <div className="text-3xl font-black text-[var(--text-main)] font-mono tracking-tight">₦{earnings.today || '0'}</div>
-                </motion.div>
-                <motion.div 
-                    whileHover={{ scale: 1.02 }}
-                    onClick={() => navigate('/courier/active')}
-                    className="bg-gradient-to-br from-blue-600 to-indigo-700 border border-blue-500/50 rounded-3xl p-5 cursor-pointer shadow-lg shadow-blue-900/20 relative overflow-hidden text-white"
-                >
-                    <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
-                    <div className="flex items-center justify-between mb-3">
-                        <span className="text-xs font-bold uppercase tracking-wider text-blue-100">Active</span>
-                        <div className="p-2 bg-white/20 rounded-lg backdrop-blur-md"><Navigation size={16} /></div>
-                    </div>
-                    <div className="text-lg font-bold leading-tight mt-1">Tap to view<br/>delivery</div>
-                </motion.div>
+                </div>
             </div>
 
-            {/* Offer Modal */}
-            <AnimatePresence>
-                {currentOffer && (
-                    <motion.div 
-                        initial={{ opacity: 0, y: '100%' }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: '100%' }}
-                        className="fixed inset-x-0 bottom-0 z-50 p-4 pb-8"
-                    >
-                        <div className="bg-[var(--bg-secondary)] rounded-3xl shadow-2xl border border-[var(--border-color)] overflow-hidden">
-                            {/* Progress bar for timer */}
-                            <div className="h-2 bg-[var(--bg-tertiary)] w-full">
-                                <motion.div 
-                                    className={`h-full ${timeRemaining < 15 ? 'bg-red-500' : 'bg-green-500'}`}
-                                    initial={{ width: '100%' }}
-                                    animate={{ width: `${(timeRemaining / 60) * 100}%` }}
-                                    transition={{ duration: 1, ease: "linear" }}
-                                />
-                            </div>
-                            
-                            <div className="p-6 text-center space-y-4">
-                                <div className="mx-auto w-16 h-16 bg-blue-500/20 text-blue-400 rounded-full flex items-center justify-center mb-2">
-                                    <Package size={32} />
-                                </div>
-                                <h3 className="text-xl font-bold text-[var(--text-main)]">New Delivery Offer</h3>
-                                
-                                <div className="flex items-center justify-center text-[var(--text-muted)]">
-                                    <Clock size={16} className="mr-2" />
-                                    <span className="font-mono text-xl">{timeRemaining}s</span>
-                                </div>
-
-                                <div className="bg-[var(--bg-tertiary)] rounded-2xl p-4 flex flex-col gap-2 text-sm text-[var(--text-muted)]">
-                                    {currentOffer.assignment?.stops?.map((stop, i) => (
-                                        <div key={i} className="flex items-center gap-3 text-left">
-                                            <MapPin size={16} className={stop.type === 'PICKUP' ? 'text-blue-400' : 'text-green-400'} />
-                                            <span className="truncate flex-1">{stop.address || `Stop ${i+1}`}</span>
-                                        </div>
-                                    ))}
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-4 mt-6">
-                                    <button 
-                                        onClick={() => rejectOffer(currentOffer.id)}
-                                        className="py-4 rounded-xl font-bold uppercase tracking-wider bg-[var(--bg-tertiary)] text-[var(--text-main)] border border-[var(--border-color)] flex items-center justify-center gap-2 hover:bg-[var(--bg-secondary)]"
-                                    >
-                                        <X size={20} /> Reject
-                                    </button>
-                                    <button 
-                                        onClick={async () => {
-                                            try {
-                                                await acceptOffer(currentOffer.id);
-                                                navigate('/courier/active');
-                                            } catch (error) {
-                                                toast.error("Failed to accept offer");
-                                            }
-                                        }}
-                                        className="py-4 rounded-xl font-bold uppercase tracking-wider bg-green-600 text-white flex items-center justify-center gap-2"
-                                    >
-                                        <Check size={20} /> Accept
-                                    </button>
-                                </div>
-                            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
+               {/* Nearby delivery requests */}
+               <div className="neu-panel p-6 flex flex-col h-[500px]">
+                  <div className="flex justify-between items-center mb-6">
+                     <h3 className="text-xl font-black">Nearby Requests</h3>
+                     <span className="text-xs font-bold text-emerald-500 uppercase tracking-wider flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span> Live
+                     </span>
+                  </div>
+                  <div className="flex-1 overflow-y-auto hide-scrollbar space-y-4 pr-2">
+                     {/* If there is an offer, show it first */}
+                     {currentOffer && (
+                        <div className="p-4 rounded-xl border-2 border-emerald-500/50 bg-emerald-500/5 hover:bg-emerald-500/10 transition-colors">
+                           <div className="flex justify-between items-start mb-2">
+                              <div>
+                                 <p className="font-bold text-lg text-emerald-600">New Delivery Offer</p>
+                                 <p className="text-xs font-bold text-emerald-500/80 uppercase tracking-wider">{timeRemaining}s remaining</p>
+                              </div>
+                              <p className="font-black text-xl text-[var(--text-main)]">&#8358;{currentOffer.amount || '1,200'}</p>
+                           </div>
+                           <div className="space-y-2 mt-4 mb-4">
+                               {currentOffer.assignment?.stops?.map((stop, i) => (
+                                   <div key={i} className="flex items-center gap-3 text-sm">
+                                       <div className={`w-2 h-2 rounded-full ${stop.type === 'PICKUP' ? 'bg-blue-500' : 'bg-rose-500'}`}></div>
+                                       <span className="truncate flex-1 font-medium">{stop.address || `Stop ${i+1}`}</span>
+                                   </div>
+                               ))}
+                           </div>
+                           <div className="flex gap-2 mt-2">
+                              <button onClick={() => acceptOffer(currentOffer.id)} className="flex-1 neu-button bg-emerald-500 !text-white !border-none text-sm py-2">Accept</button>
+                              <button onClick={() => rejectOffer(currentOffer.id)} className="flex-1 neu-button text-sm py-2">Reject</button>
+                           </div>
                         </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+                     )}
+
+                     {/* Actual requests from queue */}
+                     {!isOnline ? (
+                         <div className="flex flex-col items-center justify-center py-12 text-[var(--text-muted)] opacity-70">
+                             <Power size={32} className="mb-2 text-gray-400" />
+                             <p className="font-bold text-sm">Go online to see nearby requests</p>
+                         </div>
+                     ) : queue.length === 0 ? (
+                         <div className="flex flex-col items-center justify-center py-12 text-[var(--text-muted)] opacity-70">
+                             <Package size={32} className="mb-2 text-gray-400" />
+                             <p className="font-bold text-sm">No nearby requests right now</p>
+                         </div>
+                     ) : (
+                         queue.slice(0, 5).map(assignment => {
+                            const order = assignment.order || {};
+                            let pricing = {};
+                            try { pricing = JSON.parse(assignment.pricingSnapshot || "{}"); } catch (e) {}
+                            
+                            const fee = parseFloat(assignment.customerDeliveryFee || order.shippingCost || 0);
+                            const payout = pricing.deliverRate || (fee * 0.8).toFixed(2);
+                            const pickupLocation = pricing.pickupLocation || order.store?.storeName || order.storeName || 'Seller Location';
+                            const dropoffAddress = order.shippingAddress || 'Customer Address';
+
+                            return (
+                               <div key={assignment.id} className="flex flex-col p-4 rounded-xl hover:bg-[var(--bg-secondary)] transition-colors border border-[var(--border-color)]">
+                                  <div className="flex justify-between items-start mb-2">
+                                     <div>
+                                        <p className="font-bold text-sm">{order.orderType === 'FREIGHT' ? 'Freight Delivery' : 'Package Delivery'}</p>
+                                        <p className="text-xs text-[var(--text-muted)] mt-0.5">Order #{order.id?.substring(0, 6)}</p>
+                                     </div>
+                                     <p className="font-black text-sm">&#8358;{parseFloat(payout).toLocaleString()}</p>
+                                  </div>
+                                  <div className="mt-2 text-xs font-medium text-[var(--text-muted)] flex items-center gap-2">
+                                     <MapPin size={12} className="text-blue-500 min-w-3" />
+                                     <span className="truncate">{pickupLocation} &rarr; {dropoffAddress}</span>
+                                  </div>
+                               </div>
+                            );
+                         })
+                     )}
+                  </div>
+               </div>
+
+               {/* Live Route Map */}
+               <div className="neu-panel p-6 flex flex-col h-[500px]">
+                  <div className="flex justify-between items-center mb-6">
+                     <h3 className="text-xl font-black">Live Route</h3>
+                     <button
+                        className="text-xs font-bold text-blue-500 uppercase tracking-wider hover:underline"
+                        onClick={() => navigate('/courier/map')}
+                     >
+                        Open Map
+                     </button>
+                  </div>
+
+                  {/* overflow:clip lets child content be visually clipped without blocking pointer-events */}
+                  <div
+                     className="flex-1 rounded-xl relative border border-[var(--border-color)]"
+                     style={{ overflow: 'clip' }}
+                  >
+                     {/* Background map image */}
+                     <img
+                        src={PLACEHOLDER_MAP}
+                        alt="Map Route"
+                        className="absolute inset-0 w-full h-full object-cover grayscale opacity-70"
+                     />
+                     {/* Dark overlay */}
+                     <div className="absolute inset-0 bg-black/30" />
+
+                     {/* SVG Route lines using viewBox so coordinates are percentage-based */}
+                     <svg
+                        className="absolute inset-0 w-full h-full pointer-events-none z-10"
+                        viewBox="0 0 100 100"
+                        preserveAspectRatio="none"
+                     >
+                        {/* Ghost path */}
+                        <path
+                           d="M 12 80 Q 45 25 88 52"
+                           stroke="rgba(255,255,255,0.15)"
+                           strokeWidth="1.8"
+                           strokeLinecap="round"
+                           fill="none"
+                           vectorEffect="non-scaling-stroke"
+                        />
+                        {/* Animated active route */}
+                        <motion.path
+                           d="M 12 80 Q 45 25 88 52"
+                           stroke="#006cff"
+                           strokeWidth="1.8"
+                           strokeLinecap="round"
+                           fill="none"
+                           strokeDasharray="4 4"
+                           vectorEffect="non-scaling-stroke"
+                           animate={{ strokeDashoffset: [0, -8] }}
+                           transition={{ repeat: Infinity, duration: 0.8, ease: 'linear' }}
+                        />
+                     </svg>
+
+                     {/* Pickup marker — bottom-left */}
+                     <motion.div
+                        className="absolute w-4 h-4 bg-white rounded-full z-20 cursor-pointer"
+                        style={{ bottom: '18%', left: '10%' }}
+                        whileHover={{ scale: 1.7, boxShadow: '0 0 18px rgba(255,255,255,0.95)' }}
+                     >
+                        <div className="absolute inset-0 bg-white rounded-full animate-ping opacity-70" />
+                     </motion.div>
+
+                     {/* Dropoff marker — right side */}
+                     <motion.div
+                        className="absolute w-5 h-5 bg-emerald-400 border-2 border-white rounded-full z-20 cursor-pointer"
+                        style={{ top: '40%', right: '10%' }}
+                        whileHover={{ scale: 1.7, boxShadow: '0 0 18px rgba(52,211,153,0.95)' }}
+                     />
+
+                     {/* Floating navigation pin — clickable, navigates to full map */}
+                     <motion.div
+                        className="absolute z-30 cursor-pointer"
+                        style={{ top: '38%', left: '44%', transform: 'translate(-50%, -50%)' }}
+                        animate={{ y: [0, -8, 0] }}
+                        transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                        whileHover={{ scale: 1.12 }}
+                        whileTap={{ scale: 0.9 }}
+                        onClick={() => navigate('/courier/map')}
+                     >
+                        <div className="relative">
+                           <div className="absolute -inset-3 bg-blue-500/40 rounded-full blur-md animate-pulse" />
+                           <div className="w-14 h-14 bg-black rounded-full shadow-2xl flex items-center justify-center border-4 border-white relative z-10 hover:border-blue-400 transition-colors">
+                              <Navigation
+                                 size={24}
+                                 className="text-white fill-white"
+                                 style={{ transform: 'rotate(45deg)' }}
+                              />
+                           </div>
+                        </div>
+                     </motion.div>
+
+                     {/* Bottom CTA — also navigates to full map */}
+                     <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20">
+                        <button
+                           onClick={() => navigate('/courier/map')}
+                           className="bg-black/70 backdrop-blur-sm text-white text-xs font-bold px-4 py-1.5 rounded-full border border-white/20 hover:bg-blue-600 transition-colors whitespace-nowrap"
+                        >
+                           Open Full Map &rarr;
+                        </button>
+                     </div>
+                  </div>
+               </div>
+            </div>
         </div>
     );
 };

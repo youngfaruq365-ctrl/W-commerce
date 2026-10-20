@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useCourierStore } from '../../store/courierStore';
 import { realtimeClient } from '../../services/realtime/socketClient';
-import { Wallet, TrendingUp, History, ArrowUpRight, Loader2, MapPin, CheckCircle, Package, Calendar, ChevronRight, Activity } from 'lucide-react';
+import { Wallet, TrendingUp, History, ArrowUpRight, Loader2, MapPin, CheckCircle, Package, Calendar, ChevronRight, Activity, Zap, CreditCard } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 const CourierEarnings = () => {
     const { earnings, earningHistory, earningsLoading, fetchEarnings } = useCourierStore();
@@ -27,57 +28,80 @@ const CourierEarnings = () => {
                 realtimeClient.socket.off('delivery:status', handleStatusUpdate);
             }
         };
-    }, []);
+    }, [fetchEarnings]);
 
     const formatDate = (dateString) => {
         const d = new Date(dateString);
         return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', ' + d.toLocaleDateString();
     };
 
-    // Mock chart data for week
-    const chartData = [
-        { day: 'Mon', value: 12000 },
-        { day: 'Tue', value: 18000 },
-        { day: 'Wed', value: 15000 },
-        { day: 'Thu', value: 24000 },
-        { day: 'Fri', value: 32000 },
-        { day: 'Sat', value: 28000 },
-        { day: 'Sun', value: 19000 },
-    ];
-    const maxChartValue = Math.max(...chartData.map(d => d.value));
+    // Generate chart data from earningHistory (current week)
+    const chartData = React.useMemo(() => {
+        const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        const data = days.map(day => ({ day, value: 0 }));
+        
+        if (earningHistory && earningHistory.length > 0) {
+            // Only consider earnings from the last 7 days
+            const now = new Date();
+            const weekAgo = new Date();
+            weekAgo.setDate(now.getDate() - 7);
+            
+            earningHistory.forEach(item => {
+                const d = new Date(item.createdAt);
+                if (d >= weekAgo) {
+                    let dayIndex = d.getDay() - 1; // 0 is Sunday, so Sunday-1 = -1
+                    if (dayIndex === -1) dayIndex = 6; // Make Sunday the last element
+                    data[dayIndex].value += item.amount;
+                }
+            });
+        }
+        return data;
+    }, [earningHistory]);
+
+    const maxChartValue = Math.max(...chartData.map(d => d.value), 1000); // at least 1000 to prevent divide by 0
 
     return (
-        <div className="p-4 space-y-6 pb-24 min-h-screen bg-[var(--bg-primary)]">
-            <header className="pt-6 pb-4 border-b border-[var(--border-color)] flex justify-between items-center sticky top-0 bg-[var(--bg-primary)]/80 backdrop-blur-lg z-10">
+        <div className="p-4 space-y-6 pb-24 min-h-screen bg-[var(--bg-primary)] relative overflow-hidden">
+            {/* Background glowing orbs (Removed) */}
+            <header className="pt-6 pb-4 flex justify-between items-center sticky top-0 bg-[var(--bg-primary)]/60 backdrop-blur-2xl z-20 border-b border-[var(--border-color)]">
                 <div>
-                    <h1 className="text-3xl font-black tracking-tight text-[var(--text-main)] flex items-center">
+                    <h1 className="text-4xl font-black tracking-tighter text-[var(--text-main)] flex items-center gap-2">
                         Earnings
-                        {earningsLoading && <Loader2 size={18} className="ml-3 text-[var(--accent-primary)] animate-spin" />}
+                        {earningsLoading && <Loader2 size={18} className="text-[var(--accent-primary)] animate-spin" />}
                     </h1>
-                    <p className="text-[var(--text-muted)] text-sm mt-1">Track your income & analytics</p>
+                    <p className="text-[var(--text-muted)] text-sm mt-1 font-medium">Track your income & analytics</p>
                 </div>
             </header>
 
+            {/* Premium Credit Card Style Balance */}
             <motion.div 
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-gradient-to-br from-[var(--bg-secondary)] to-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-3xl p-6 shadow-xl relative overflow-hidden group"
+                className="relative bg-gradient-to-br from-indigo-900 via-blue-900 to-slate-900 rounded-[2.5rem] p-8 shadow-[0_20px_50px_-12px_rgba(30,58,138,0.5)] overflow-hidden group text-white border border-white/10"
             >
-                <div className="absolute -right-10 -top-10 w-48 h-48 bg-[var(--accent-primary)] opacity-10 rounded-full blur-3xl pointer-events-none group-hover:opacity-20 transition-opacity duration-500"></div>
-                <div className="absolute -left-10 -bottom-10 w-48 h-48 bg-blue-500 opacity-10 rounded-full blur-3xl pointer-events-none group-hover:opacity-20 transition-opacity duration-500"></div>
+                <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20 mix-blend-overlay pointer-events-none"></div>
+                <div className="absolute -right-20 -top-20 w-64 h-64 bg-blue-500/30 rounded-full blur-3xl pointer-events-none group-hover:bg-blue-400/40 transition-colors duration-700"></div>
+                <div className="absolute -left-20 -bottom-20 w-64 h-64 bg-[var(--accent-primary)]/30 rounded-full blur-3xl pointer-events-none group-hover:bg-[var(--accent-primary)]/40 transition-colors duration-700"></div>
                 
-                <div className="flex items-center text-[var(--text-muted)] mb-3">
-                    <Wallet size={18} className="mr-2 text-[var(--accent-primary)]" />
-                    <span className="text-xs font-bold uppercase tracking-widest">Available Balance</span>
-                </div>
-                <div className="text-5xl font-black text-[var(--text-main)] font-mono tracking-tight mb-2">
-                    ₦{earnings.balance?.toLocaleString() || '0'}
+                <div className="relative z-10 flex items-center justify-between mb-4">
+                    <div className="flex items-center text-blue-200">
+                        <Wallet size={20} className="mr-2" />
+                        <span className="text-xs font-black uppercase tracking-widest">Available Balance</span>
+                    </div>
+                    <CreditCard size={24} className="text-white/30" />
                 </div>
                 
-                <button className="mt-8 w-full bg-gradient-to-r from-[var(--accent-primary)] to-blue-600 hover:from-[var(--accent-primary)] hover:to-blue-500 text-white font-bold py-4 rounded-2xl transition-all shadow-lg hover:shadow-[var(--accent-primary)]/20 flex items-center justify-center group/btn">
-                    Withdraw Funds 
-                    <ArrowUpRight size={20} className="ml-2 group-hover/btn:translate-x-1 group-hover/btn:-translate-y-1 transition-transform" />
-                </button>
+                <div className="relative z-10 text-5xl md:text-6xl font-black font-mono tracking-tighter mb-8 drop-shadow-lg">
+                    <span className="text-blue-300">₦</span>{earnings.balance?.toLocaleString() || '0'}
+                </div>
+                
+                <motion.div 
+                    className="relative z-10 w-full bg-white/10 text-white font-black py-4 rounded-2xl flex items-center justify-center overflow-hidden border border-white/20"
+                >
+                    <span className="relative z-10 flex items-center tracking-widest uppercase">
+                        Weekly Earn 
+                    </span>
+                </motion.div>
             </motion.div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -85,25 +109,27 @@ const CourierEarnings = () => {
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.1 }}
-                    className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-3xl p-5 shadow-lg hover:shadow-xl transition-shadow"
+                    className="bg-white/40 dark:bg-black/40 backdrop-blur-xl border border-white/20 dark:border-white/10 rounded-[2rem] p-6 shadow-xl relative overflow-hidden group"
                 >
-                    <div className="flex items-center justify-between mb-3">
-                        <div className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Today</div>
-                        <div className="p-2 bg-green-500/10 text-green-500 rounded-lg"><TrendingUp size={16} /></div>
+                    <div className="absolute -right-8 -top-8 w-24 h-24 bg-emerald-500/20 rounded-full blur-2xl pointer-events-none group-hover:scale-150 transition-transform duration-700"></div>
+                    <div className="flex items-center justify-between mb-4 relative z-10">
+                        <div className="text-xs font-black text-[var(--text-muted)] uppercase tracking-widest">Today</div>
+                        <div className="p-2.5 bg-emerald-500/10 text-emerald-500 rounded-xl shadow-inner"><TrendingUp size={16} /></div>
                     </div>
-                    <div className="text-2xl font-black text-[var(--text-main)] font-mono">₦{earnings.today?.toLocaleString() || '0'}</div>
+                    <div className="text-3xl font-black text-[var(--text-main)] font-mono tracking-tighter relative z-10">₦{earnings.today?.toLocaleString() || '0'}</div>
                 </motion.div>
                 <motion.div 
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.2 }}
-                    className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-3xl p-5 shadow-lg hover:shadow-xl transition-shadow"
+                    className="bg-white/40 dark:bg-black/40 backdrop-blur-xl border border-white/20 dark:border-white/10 rounded-[2rem] p-6 shadow-xl relative overflow-hidden group"
                 >
-                    <div className="flex items-center justify-between mb-3">
-                        <div className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">This Week</div>
-                        <div className="p-2 bg-blue-500/10 text-blue-500 rounded-lg"><Calendar size={16} /></div>
+                    <div className="absolute -right-8 -top-8 w-24 h-24 bg-blue-500/20 rounded-full blur-2xl pointer-events-none group-hover:scale-150 transition-transform duration-700"></div>
+                    <div className="flex items-center justify-between mb-4 relative z-10">
+                        <div className="text-xs font-black text-[var(--text-muted)] uppercase tracking-widest">This Week</div>
+                        <div className="p-2.5 bg-blue-500/10 text-blue-500 rounded-xl shadow-inner"><Calendar size={16} /></div>
                     </div>
-                    <div className="text-2xl font-black text-[var(--text-main)] font-mono">₦{earnings.thisWeek?.toLocaleString() || '0'}</div>
+                    <div className="text-3xl font-black text-[var(--text-main)] font-mono tracking-tighter relative z-10">₦{earnings.thisWeek?.toLocaleString() || '0'}</div>
                 </motion.div>
             </div>
 
@@ -111,31 +137,62 @@ const CourierEarnings = () => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3 }}
-                className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-3xl p-6 shadow-lg"
+                className="bg-white/40 dark:bg-black/40 backdrop-blur-xl border border-white/20 dark:border-white/10 rounded-[2.5rem] p-8 shadow-xl"
             >
-                <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-[var(--text-main)] font-bold text-lg flex items-center">
-                        <Activity size={18} className="mr-2 text-[var(--accent-primary)]" /> Analytics
+                <div className="flex items-center justify-between mb-8">
+                    <h3 className="text-[var(--text-main)] font-black text-xl flex items-center tracking-tight">
+                        <Activity size={20} className="mr-2 text-[var(--accent-primary)]" /> Analytics
                     </h3>
                 </div>
-                <div className="flex items-end justify-between h-40 gap-2">
-                    {chartData.map((data, index) => (
-                        <div key={data.day} className="flex flex-col items-center flex-1 group">
-                            <div className="w-full relative h-full flex flex-col justify-end">
-                                <div className="absolute bottom-full mb-2 opacity-0 group-hover:opacity-100 transition-opacity bg-[var(--bg-tertiary)] text-[var(--text-main)] text-[10px] py-1 px-2 rounded font-bold shadow-lg whitespace-nowrap z-10 left-1/2 -translate-x-1/2">
-                                    ₦{data.value.toLocaleString()}
-                                </div>
-                                <motion.div 
-                                    initial={{ height: 0 }}
-                                    animate={{ height: `${(data.value / maxChartValue) * 100}%` }}
-                                    transition={{ duration: 1, delay: 0.2 + (index * 0.1), ease: "easeOut" }}
-                                    className="w-full bg-gradient-to-t from-[var(--accent-primary)]/50 to-[var(--accent-primary)] rounded-t-lg group-hover:opacity-80 transition-opacity"
-                                />
-                            </div>
-                            <span className="text-[10px] font-bold text-[var(--text-muted)] mt-2 uppercase">{data.day}</span>
-                        </div>
-                    ))}
-                </div>
+                <motion.div 
+                    initial={{ opacity: 0, scaleY: 0.8, transformOrigin: 'bottom' }}
+                    animate={{ opacity: 1, scaleY: 1 }}
+                    transition={{ duration: 1, delay: 0.4 }}
+                    className="h-48 w-full mt-2 -ml-2"
+                >
+                    <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                            <defs>
+                                <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4}/>
+                                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                                </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border-color)" opacity={0.6} />
+                            <XAxis 
+                                dataKey="day" 
+                                axisLine={false} 
+                                tickLine={false} 
+                                tick={{ fill: 'var(--text-muted)', fontSize: 10, fontWeight: 900, textTransform: 'uppercase' }} 
+                                dy={10}
+                            />
+                            <Tooltip 
+                                cursor={{ stroke: 'var(--text-muted)', strokeWidth: 1, strokeDasharray: '4 4' }}
+                                contentStyle={{ 
+                                    backgroundColor: 'var(--bg-primary)', 
+                                    border: '1px solid var(--border-color)', 
+                                    borderRadius: '12px',
+                                    fontWeight: '900',
+                                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
+                                }}
+                                itemStyle={{ color: '#3b82f6' }}
+                                formatter={(value) => [`₦${value.toLocaleString()}`, 'Earned']}
+                                labelStyle={{ color: 'var(--text-main)' }}
+                            />
+                            <Area 
+                                type="monotone" 
+                                dataKey="value" 
+                                stroke="#3b82f6" 
+                                strokeWidth={4}
+                                fillOpacity={1}
+                                fill="url(#colorValue)"
+                                dot={{ fill: 'var(--bg-primary)', stroke: '#3b82f6', strokeWidth: 3, r: 6 }}
+                                activeDot={{ r: 8, fill: '#3b82f6', stroke: 'var(--bg-primary)', strokeWidth: 3 }}
+                                isAnimationActive={false}
+                            />
+                        </AreaChart>
+                    </ResponsiveContainer>
+                </motion.div>
             </motion.div>
 
             <motion.div
@@ -143,14 +200,14 @@ const CourierEarnings = () => {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.4 }}
             >
-                <h3 className="text-[var(--text-main)] font-bold text-lg mb-4 flex items-center px-2">
-                    <History size={18} className="mr-2 text-[var(--text-muted)]" /> Recent Trips
+                <h3 className="text-[var(--text-main)] font-black text-xl mb-6 flex items-center px-2 tracking-tight">
+                    <History size={20} className="mr-2 text-[var(--text-muted)]" /> Recent Trips
                 </h3>
-                <div className="space-y-3">
+                <div className="space-y-4">
                     {earningHistory.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-12 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-3xl border-dashed">
-                            <History size={40} className="text-[var(--text-muted)] opacity-50 mb-3" />
-                            <div className="text-[var(--text-muted)] font-medium text-sm">No recent earnings</div>
+                        <div className="flex flex-col items-center justify-center py-16 bg-white/40 dark:bg-black/40 backdrop-blur-xl border border-white/20 dark:border-white/10 rounded-[2.5rem] border-dashed">
+                            <History size={48} className="text-[var(--text-muted)] opacity-50 mb-4" />
+                            <div className="text-[var(--text-muted)] font-bold text-sm tracking-wide">No recent earnings</div>
                         </div>
                     ) : (
                         earningHistory.map((earning, idx) => (
@@ -160,23 +217,23 @@ const CourierEarnings = () => {
                                 transition={{ delay: 0.3 + (idx * 0.1) }}
                                 key={earning.id} 
                                 onClick={() => setSelectedEarning(earning)}
-                                className="group flex justify-between items-center p-5 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-2xl cursor-pointer active:scale-95 transition-all shadow-sm hover:shadow-md"
+                                className="group flex justify-between items-center p-6 bg-white/40 dark:bg-black/40 backdrop-blur-md hover:bg-white/60 dark:hover:bg-black/60 border border-white/20 dark:border-white/10 rounded-[2rem] cursor-pointer active:scale-[0.98] transition-all shadow-sm hover:shadow-lg"
                             >
                                 <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] flex items-center justify-center group-hover:scale-110 transition-transform shadow-inner">
-                                        <Package size={20} className="text-[var(--accent-primary)]" />
+                                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[var(--accent-primary)]/10 to-[var(--accent-primary)]/30 border border-[var(--accent-primary)]/20 flex items-center justify-center group-hover:scale-110 group-hover:rotate-6 transition-all shadow-inner">
+                                        <Package size={24} className="text-[var(--accent-primary)]" />
                                     </div>
                                     <div>
-                                        <p className="text-[var(--text-main)] font-bold">{earning.description || `Delivery #${earning.assignmentId?.slice(-6) || 'N/A'}`}</p>
-                                        <p className="text-xs text-[var(--text-muted)] font-medium mt-1">{formatDate(earning.createdAt)}</p>
+                                        <p className="text-[var(--text-main)] font-black text-lg tracking-tight">{earning.description || `Delivery #${earning.assignmentId?.slice(-6) || 'N/A'}`}</p>
+                                        <p className="text-xs text-[var(--text-muted)] font-bold tracking-wide mt-1">{formatDate(earning.createdAt)}</p>
                                     </div>
                                 </div>
-                                <div className="text-right flex items-center gap-3">
+                                <div className="text-right flex items-center gap-4">
                                     <div>
-                                        <p className="text-green-500 font-black font-mono text-lg">+₦{earning.amount.toLocaleString()}</p>
-                                        <p className="text-[10px] text-green-500/70 font-bold uppercase tracking-wider mt-1 flex justify-end items-center"><CheckCircle size={10} className="mr-1"/> {earning.status}</p>
+                                        <p className="text-emerald-500 font-black font-mono text-xl tracking-tighter">+₦{earning.amount.toLocaleString()}</p>
+                                        <p className="text-[10px] text-emerald-500/70 font-black uppercase tracking-widest mt-1 flex justify-end items-center"><CheckCircle size={10} className="mr-1"/> {earning.status}</p>
                                     </div>
-                                    <ChevronRight size={18} className="text-[var(--text-muted)] group-hover:translate-x-1 transition-transform" />
+                                    <ChevronRight size={20} className="text-[var(--text-muted)] group-hover:translate-x-1 group-hover:text-[var(--text-main)] transition-all" />
                                 </div>
                             </motion.div>
                         ))
@@ -187,7 +244,7 @@ const CourierEarnings = () => {
             {/* Earning Breakdown Modal */}
             <AnimatePresence>
                 {selectedEarning && (
-                    <>
+                    <div key="earning-modal">
                         <motion.div 
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
@@ -196,73 +253,45 @@ const CourierEarnings = () => {
                             className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
                         />
                         <motion.div 
-                            initial={{ opacity: 0, y: '100%' }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: '100%' }}
-                            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-                            className="fixed inset-x-0 bottom-0 z-50 p-4 pb-8"
+                            initial={{ opacity: 0, y: '100%', scale: 0.9 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: '100%', scale: 0.9 }}
+                            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                            className="fixed inset-x-4 bottom-8 z-50 bg-[var(--bg-secondary)]/90 backdrop-blur-2xl rounded-[2.5rem] shadow-[0_0_50px_rgba(0,0,0,0.3)] border border-white/10 overflow-hidden"
                         >
-                            <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-[2rem] p-8 shadow-2xl relative overflow-hidden">
-                                <div className="absolute top-0 inset-x-0 h-2 bg-gradient-to-r from-[var(--accent-primary)] to-blue-500"></div>
-                                <div className="flex justify-between items-start mb-8 pt-2">
-                                    <div>
-                                        <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-widest font-black mb-2">Earning Breakdown</div>
-                                        <h3 className="text-4xl font-black text-[var(--text-main)] tracking-tight">₦{selectedEarning.amount.toLocaleString()}</h3>
-                                        <p className="text-xs text-[var(--text-muted)] font-mono mt-2 bg-[var(--bg-tertiary)] inline-block px-2 py-1 rounded">Ref: {selectedEarning.reference}</p>
-                                    </div>
-                                    <button 
-                                        onClick={() => setSelectedEarning(null)}
-                                        className="w-10 h-10 bg-[var(--bg-tertiary)] rounded-full text-[var(--text-main)] hover:bg-[var(--border-color)] transition-colors flex items-center justify-center"
-                                    >
-                                        ✕
-                                    </button>
-                                </div>
-
-                                <div className="space-y-4 bg-[var(--bg-primary)] p-5 rounded-2xl border border-[var(--border-color)]">
-                                    {selectedEarning.assignment?.pricingSnapshot && (
-                                        <>
-                                            {(() => {
-                                                try {
-                                                    const snap = JSON.parse(selectedEarning.assignment.pricingSnapshot);
-                                                    return (
-                                                        <>
-                                                            <div className="flex justify-between items-center pb-3 border-b border-[var(--border-color)] border-dashed">
-                                                                <span className="text-[var(--text-muted)] font-medium flex items-center"><MapPin size={14} className="mr-2"/> Distance</span>
-                                                                <span className="font-mono text-[var(--text-main)] font-bold">{snap.distanceKm || 0} km</span>
-                                                            </div>
-                                                            <div className="flex justify-between items-center pb-3 border-b border-[var(--border-color)] border-dashed">
-                                                                <span className="text-[var(--text-muted)] font-medium">Base Fee</span>
-                                                                <span className="font-mono text-[var(--text-main)] font-bold">₦{snap.baseFee}</span>
-                                                            </div>
-                                                            <div className="flex justify-between items-center pb-3 border-b border-[var(--border-color)] border-dashed">
-                                                                <span className="text-[var(--text-muted)] font-medium">Distance Fee</span>
-                                                                <span className="font-mono text-[var(--text-main)] font-bold">₦{((snap.perKm || 0) * (snap.distanceKm || 0)).toLocaleString()}</span>
-                                                            </div>
-                                                        </>
-                                                    );
-                                                } catch(e) {
-                                                    return null;
-                                                }
-                                            })()}
-                                        </>
-                                    )}
-                                    <div className="flex justify-between items-center pt-2">
-                                        <span className="font-black text-[var(--text-main)] text-lg">Total Earning</span>
-                                        <span className="font-mono font-black text-green-500 text-xl">₦{selectedEarning.amount.toLocaleString()}</span>
-                                    </div>
-                                    <div className="flex justify-between items-center pt-2 mt-4 bg-green-500/10 p-3 rounded-xl">
-                                        <span className="text-[var(--text-muted)] font-bold text-xs uppercase">Status</span>
-                                        <span className="font-black text-green-500 uppercase text-xs flex items-center tracking-wider">
-                                            <CheckCircle size={14} className="mr-1" /> {selectedEarning.status}
-                                        </span>
+                            <div className="p-8">
+                                <div className="w-16 h-2 bg-white/20 rounded-full mx-auto mb-8" />
+                                <div className="flex items-center justify-between mb-8">
+                                    <h3 className="text-2xl font-black text-[var(--text-main)] tracking-tight">Trip Details</h3>
+                                    <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-2xl shadow-inner">
+                                        <CheckCircle size={24} />
                                     </div>
                                 </div>
-                                <button className="w-full mt-6 bg-[var(--bg-tertiary)] hover:bg-[var(--border-color)] text-[var(--text-main)] font-bold py-4 rounded-xl transition-colors">
-                                    Download Receipt
+                                
+                                <div className="space-y-6">
+                                    <div className="flex justify-between items-center py-4 border-b border-white/10">
+                                        <span className="text-sm font-bold text-[var(--text-muted)] tracking-wide uppercase">Amount Earned</span>
+                                        <span className="text-2xl font-black font-mono text-emerald-500">+₦{selectedEarning.amount.toLocaleString()}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center py-4 border-b border-white/10">
+                                        <span className="text-sm font-bold text-[var(--text-muted)] tracking-wide uppercase">Date & Time</span>
+                                        <span className="text-sm font-bold text-[var(--text-main)]">{formatDate(selectedEarning.createdAt)}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center py-4 border-b border-white/10">
+                                        <span className="text-sm font-bold text-[var(--text-muted)] tracking-wide uppercase">Delivery ID</span>
+                                        <span className="text-sm font-black font-mono text-[var(--text-main)] bg-white/5 px-2 py-1 rounded-md">{selectedEarning.assignmentId?.slice(-6) || 'N/A'}</span>
+                                    </div>
+                                </div>
+                                
+                                <button 
+                                    onClick={() => setSelectedEarning(null)}
+                                    className="mt-10 w-full bg-white/10 hover:bg-white/20 text-[var(--text-main)] font-black tracking-widest uppercase py-4 rounded-2xl transition-colors border border-white/10"
+                                >
+                                    Close
                                 </button>
                             </div>
                         </motion.div>
-                    </>
+                    </div>
                 )}
             </AnimatePresence>
         </div>

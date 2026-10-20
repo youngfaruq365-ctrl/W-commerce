@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 import toast from 'react-hot-toast';
 import { WIcon } from '../../components/visual/WIcon';
-
-const API_URL = import.meta.env.VITE_API_URL || `${window.location.origin}`;
+import { apiClient } from '../../utils/apiClient';
 
 const SessionManagement = () => {
   const [sessions, setSessions] = useState([]);
@@ -13,17 +11,10 @@ const SessionManagement = () => {
     fetchSessions();
   }, []);
 
-  const getAuthToken = () => {
-    return document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1] || '';
-  };
-
   const fetchSessions = async () => {
     try {
       setLoading(true);
-      const token = getAuthToken();
-      const resp = await axios.get(`${API_URL}/api/v1/auth/sessions`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const resp = await apiClient.get('/api/v1/auth/sessions');
       setSessions(resp.data.sessions || []);
     } catch(err) {
       toast.error('Failed to load sessions');
@@ -34,10 +25,7 @@ const SessionManagement = () => {
 
   const revokeSession = async (id) => {
     try {
-      const token = getAuthToken();
-      await axios.delete(`${API_URL}/api/v1/auth/sessions/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await apiClient.delete(`/api/v1/auth/sessions/${id}`);
       toast.success('Session revoked successfully');
       setSessions(prev => prev.filter(s => s.id !== id));
     } catch(err) {

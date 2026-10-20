@@ -37,6 +37,7 @@ exports.getSellerProfile = async (req, res) => {
                         category: true,
                         averageRating: true,
                         isVerified: true,
+                        approvalStatus: true,
                         portfolioLayout: true,
                         createdAt: true,
                         _count: {
@@ -65,6 +66,11 @@ exports.getSellerProfile = async (req, res) => {
         // Must be a seller or admin
         if (user.role !== 'SELLER' && user.role !== 'ADMIN') {
             return res.status(404).json({ success: false, message: 'Seller not found.' });
+        }
+
+        // Unapproved stores (and their products) are not public
+        if (user.store && user.store.approvalStatus !== 'APPROVED') {
+            user.store = null;
         }
 
         // Get follower count
@@ -193,6 +199,19 @@ exports.sellerOnboarding = async (req, res) => {
                 });
             }
         });
+
+        try {
+            const notificationV2Service = require('../services/notificationV2Service');
+            const socketService = require('../services/socketService');
+            await notificationV2Service.notifyAdmins({
+                type: 'STORE_APPROVAL_REQUIRED',
+                title: 'Seller Onboarding Submitted',
+                body: `Seller "${businessName}" has submitted their store onboarding. Store requires admin approval.`,
+                linkUrl: '/admin/kyb'
+            });
+            const io = socketService.getIO();
+            if (io) io.to('role:ADMIN').emit('admin_dashboard_update');
+        } catch(e) {}
 
         res.json({ success: true, message: 'Application submitted successfully' });
     } catch (error) {

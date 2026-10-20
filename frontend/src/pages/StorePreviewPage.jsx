@@ -27,7 +27,7 @@ export const StorePreviewPage = () => {
   }
 
   return (
-    <div className="w-screen h-screen overflow-hidden">
+    <div className="w-full h-screen overflow-hidden">
       <StorePreviewOS 
         store={store} 
         onBack={() => window.close()} 

@@ -10,6 +10,7 @@ class MarketplaceNotificationEngine {
         body,
         type = 'INFO',
         linkUrl = null,
+        data = null,
         orderId = null,
         buyerNotificationType = null,
         channels = ['in_app']
@@ -25,7 +26,8 @@ class MarketplaceNotificationEngine {
                         title,
                         body,
                         type,
-                        linkUrl
+                        linkUrl,
+                        data: data ? (typeof data === 'string' ? data : JSON.stringify(data)) : null
                     }
                 }));
             }

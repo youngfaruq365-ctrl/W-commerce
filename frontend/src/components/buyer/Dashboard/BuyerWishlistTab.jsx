@@ -1,6 +1,7 @@
 import React from 'react';
 import { Heart, ShoppingBag } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { PLACEHOLDER_IMAGE } from '@/constants/placeholders';
 
 const BuyerWishlistTab = ({ wishlist = [], onRemove, onAddToCart }) => {
   const navigate = useNavigate();
@@ -35,7 +36,7 @@ const BuyerWishlistTab = ({ wishlist = [], onRemove, onAddToCart }) => {
             <div key={item.id || productId} className="premium-glass rounded-xl border border-[var(--border-color)] overflow-hidden group hover:border-[var(--accent-gray)] transition-all">
               <div className="h-48 relative bg-white">
                 <img
-                  src={item.product?.images?.[0]?.url || 'https://placehold.co/400x300/111/333?text=No+Image'}
+                  src={item.product?.images?.[0]?.url || PLACEHOLDER_IMAGE}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   alt="product"
                   loading="lazy"

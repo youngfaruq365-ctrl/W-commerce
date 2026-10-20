@@ -1,5 +1,5 @@
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 
 const API_URL = import.meta.env.VITE_API_URL || `${import.meta.env.VITE_API_URL || window.location.origin}`;
 

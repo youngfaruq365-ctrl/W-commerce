@@ -5,9 +5,9 @@ const AiInsightsModal = ({ isOpen, onClose, data }) => {
   if (!isOpen || !data) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-md animate-fade-in" onClick={onClose}>
       <div 
-        className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.5)] p-6"
+        className="modal-panel relative w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.5)] p-6"
         onClick={e => e.stopPropagation()}
       >
         

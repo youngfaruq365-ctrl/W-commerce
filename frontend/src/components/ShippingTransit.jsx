@@ -121,7 +121,7 @@ export default function ShippingTransit({ trigger, onComplete, product }) {
               </div>
 
               {/* Front Driver Cabin Cockpit Node */}
-              <div className="w-12 h-14 bg-[var(--accent-gray)] rounded-r-xl rounded-bl-xs relative border-b-2 border-gray-400 900 shadow-[inset_0_2px_5px_rgba(255,255,255,0.3)]">
+              <div className="w-12 h-14 bg-[var(--accent-gray)] rounded-r-xl rounded-bl-xs relative border-b-2 border-gray-900 shadow-[inset_0_2px_5px_rgba(255,255,255,0.3)]">
                 {/* Windshield */}
                 <div className="absolute top-2 right-1 w-6 h-5 bg-sky-100/80 rounded-tr-md rounded-bl-xs border-r border-t border-white/50 backdrop-blur-sm" />
                 {/* Headlight */}

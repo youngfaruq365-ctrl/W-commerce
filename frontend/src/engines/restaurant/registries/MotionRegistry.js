@@ -1,5 +1,5 @@
 export const getMotionVariants = (level) => {
-  // Level 1: $6-$8 (Essential - Lightweight)
+  // Level 1: ₦6-₦8 (Essential - Lightweight)
   if (level === 1) {
     return {
       page: { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 }, transition: { duration: 0.2 } },
@@ -9,7 +9,7 @@ export const getMotionVariants = (level) => {
     };
   }
   
-  // Level 2: $9-$12 (Plus)
+  // Level 2: ₦9-₦12 (Plus)
   if (level === 2) {
     return {
       page: { initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -10 }, transition: { duration: 0.3 } },
@@ -19,7 +19,7 @@ export const getMotionVariants = (level) => {
     };
   }
 
-  // Level 3: $15 (Pro)
+  // Level 3: ₦15 (Pro)
   if (level === 3) {
     return {
       page: { initial: { opacity: 0, scale: 0.98 }, animate: { opacity: 1, scale: 1 }, exit: { opacity: 0, scale: 0.98 }, transition: { duration: 0.4, ease: "easeOut" } },
@@ -29,7 +29,7 @@ export const getMotionVariants = (level) => {
     };
   }
 
-  // Level 4: $19 (Studio)
+  // Level 4: ₦19 (Studio)
   if (level === 4) {
     return {
       page: { initial: { opacity: 0, y: 40, filter: "blur(4px)" }, animate: { opacity: 1, y: 0, filter: "blur(0px)" }, exit: { opacity: 0, y: -40, filter: "blur(4px)" }, transition: { duration: 0.5, ease: "circOut" } },
@@ -39,7 +39,7 @@ export const getMotionVariants = (level) => {
     };
   }
 
-  // Level 5: $25 (Signature - Cinematic)
+  // Level 5: ₦25 (Signature - Cinematic)
   return {
     page: { 
       initial: { opacity: 0, scale: 1.05, filter: "blur(10px)" }, 

@@ -18,7 +18,7 @@ export const ProductCardEssential = ({ product }) => {
         {product.badge && <div className="absolute top-2 left-2 bg-black text-white text-xs font-bold px-2 py-0.5 rounded">{product.badge}</div>}
       </div>
       <div className="font-bold text-sm mb-1 truncate">{product.name}</div>
-      <div className="font-black">${product.price}</div>
+      <div className="font-black">₦{product.price}</div>
     </div>
   );
 };
@@ -28,13 +28,13 @@ export const ProductCardPlus = ({ product }) => {
   const { addToCart, addToWishlist, wishlist, setActivePage, setActiveProduct } = usePreview();
   const isWishlisted = wishlist.some(w => w.id === product.id);
   return (
-    <div className="group cursor-pointer" onClick={() => { setActiveProduct(product); setActivePage('product'); }}>
-      <div className="relative aspect-square bg-gray-100 rounded-[var(--s-radius,8px)] overflow-hidden mb-3">
+    <div className="group cursor-pointer neu-card p-2" onClick={() => { setActiveProduct(product); setActivePage('product'); }}>
+      <div className="relative aspect-square rounded-[var(--s-radius,8px)] overflow-hidden mb-3">
         <WImageLoader src={product.image} alt={product.name} className="absolute inset-0 w-full h-full group-hover:scale-105 transition-transform duration-700" />
         {product.badge && <div className="absolute top-2 left-2 bg-[var(--s-primary,#000)] text-[var(--s-bg,#fff)] text-xs font-bold px-2 py-0.5 rounded-full">{product.badge}</div>}
         {/* Quick add on hover */}
         <div className="absolute inset-x-0 bottom-0 p-3 flex gap-2 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300">
-          <button onClick={e => { e.stopPropagation(); addToCart(product); }} className="flex-1 bg-black text-white text-xs font-bold py-2 rounded-lg">
+          <button onClick={e => { e.stopPropagation(); addToCart(product); }} className="flex-1 neu-button-primary text-xs py-2">
             Quick Add
           </button>
           <button onClick={e => { e.stopPropagation(); addToWishlist(product); }} className={`w-8 h-8 rounded-lg flex items-center justify-center ${isWishlisted ? 'bg-red-500 text-white' : 'bg-white text-black'}`}>
@@ -44,7 +44,7 @@ export const ProductCardPlus = ({ product }) => {
       </div>
       <div className="flex justify-between items-start gap-2">
         <div className="font-bold text-sm truncate">{product.name}</div>
-        <div className="font-black flex-shrink-0">${product.price}</div>
+        <div className="font-black flex-shrink-0">₦{product.price}</div>
       </div>
       <div className="flex items-center gap-1 mt-1">
         <Star size={11} className="fill-amber-400 text-amber-400" />
@@ -91,8 +91,8 @@ export const ProductCardPro = ({ product }) => {
           <div className="flex items-center gap-1"><Star size={11} className="fill-amber-400 text-amber-400" /><span className="text-xs opacity-50">{product.rating}</span></div>
         </div>
         <div className="text-right">
-          <div className="font-black">${product.price}</div>
-          {product.originalPrice > product.price && <div className="text-xs line-through opacity-40">${product.originalPrice}</div>}
+          <div className="font-black">₦{product.price}</div>
+          {product.originalPrice > product.price && <div className="text-xs line-through opacity-40">₦{product.originalPrice}</div>}
         </div>
       </div>
     </div>
@@ -114,7 +114,7 @@ export const ProductCardStudio = ({ product }) => {
         <div className="absolute bottom-0 left-0 right-0 p-5">
           <motion.div initial={{ y: 20, opacity: 0 }} whileInView={{ y: 0, opacity: 1 }} viewport={{ once: true }}>
             <div className="text-white font-bold truncate mb-1">{product.name}</div>
-            <div className="text-white/60 text-sm">${product.price}</div>
+            <div className="text-white/60 text-sm">₦{product.price}</div>
           </motion.div>
         </div>
         <button onClick={e => { e.stopPropagation(); addToWishlist(product); }}
@@ -142,9 +142,13 @@ export const ProductCardSignature = ({ product }) => {
         <motion.div className="absolute inset-0 flex flex-col justify-end p-6 opacity-0 group-hover:opacity-100 translate-y-4 group-hover:translate-y-0 transition-all duration-500">
           <div className="text-white font-black text-xl mb-2">{product.name}</div>
           <div className="flex gap-3">
-            <button onClick={e => { e.stopPropagation(); addToCart(product); }}
-              className="flex-1 bg-white text-black font-bold py-3 rounded-xl hover:bg-opacity-90 transition-all">
-              Add to Cart
+            <button onClick={product.stock <= 0 ? null : e => { e.stopPropagation(); addToCart(product); }}
+              className={`flex-1 font-bold py-3 rounded-xl transition-all ${
+                product.stock <= 0 
+                  ? 'bg-gray-400 text-white cursor-not-allowed opacity-70' 
+                  : 'bg-white text-black hover:bg-opacity-90'
+              }`}>
+              {product.stock <= 0 ? 'Sold Out' : 'Add to Cart'}
             </button>
             <button onClick={e => { e.stopPropagation(); addToWishlist(product); }}
               className={`w-12 h-12 rounded-xl flex items-center justify-center ${isWishlisted ? 'bg-red-500 text-white' : 'bg-white/20 text-white border border-white/30'}`}>

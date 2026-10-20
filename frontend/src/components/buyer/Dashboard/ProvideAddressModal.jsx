@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, MapPin, Loader2 } from 'lucide-react';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 import toast from 'react-hot-toast';
 import { useBuyerStore } from '../../../store/buyerStore';
 
@@ -42,12 +42,12 @@ const ProvideAddressModal = ({ isOpen, onClose, orderId }) => {
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-md">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
-          className="bg-white dark:bg-[#1a1a1a] rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl border border-[var(--border-color)]"
+          className="modal-panel premium-glass dark:bg-[#1a1a1a] rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border border-[var(--border-color)]"
         >
           <div className="p-6 border-b border-[var(--border-color)] flex justify-between items-center bg-gray-50 dark:bg-[#111]">
             <h2 className="text-xl font-bold flex items-center gap-2">

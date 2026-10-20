@@ -5,6 +5,13 @@ const qrcodeRegionId = "html5qr-code-full-region";
 
 const QRScanner = ({ onScanSuccess, onScanError }) => {
     const scannerRef = useRef(null);
+    const successRef = useRef(onScanSuccess);
+    const errorRef = useRef(onScanError);
+
+    useEffect(() => {
+        successRef.current = onScanSuccess;
+        errorRef.current = onScanError;
+    }, [onScanSuccess, onScanError]);
 
     useEffect(() => {
         if (!scannerRef.current) {
@@ -14,7 +21,16 @@ const QRScanner = ({ onScanSuccess, onScanError }) => {
                 false
             );
 
-            scannerRef.current.render(onScanSuccess, onScanError);
+            scannerRef.current.render(
+                (text, result) => {
+                    if (import.meta.env.DEV) console.log("[QRScanner] Successfully scanned:", text);
+                    successRef.current?.(text, result);
+                },
+                (error) => {
+                    // html5-qrcode calls this constantly when no QR code is in frame
+                    errorRef.current?.(error);
+                }
+            );
         }
 
         return () => {
@@ -25,7 +41,7 @@ const QRScanner = ({ onScanSuccess, onScanError }) => {
                 scannerRef.current = null;
             }
         };
-    }, [onScanSuccess, onScanError]);
+    }, []);
 
     return (
         <div className="w-full">

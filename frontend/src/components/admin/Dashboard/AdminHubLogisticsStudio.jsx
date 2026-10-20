@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 import { Megaphone, CheckCircle, ArrowRight, ArrowLeft, Sparkles, Download, Package, AlertCircle, Users, Settings, Star, Link, Truck, Zap, DollarSign } from 'lucide-react';
 
 const AdminHubLogisticsStudio = ({ onSuccess }) => {
@@ -7,6 +7,7 @@ const AdminHubLogisticsStudio = ({ onSuccess }) => {
   const [progress, setProgress] = useState(0);
   const [progressText, setProgressText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [details, setDetails] = useState('');
 
   const startProcess = async () => {
     setStep('processing');
@@ -15,7 +16,7 @@ const AdminHubLogisticsStudio = ({ onSuccess }) => {
     setProgressText('Initializing...');
     
     try {
-      const res = await axios.post('/api/v1/admin/hub/action', {});
+      const res = await axios.post('/api/v1/admin-studio/hub/action', { details });
       setProgress(100);
       setProgressText('Complete');
       setIsSubmitting(false);
@@ -57,7 +58,7 @@ const AdminHubLogisticsStudio = ({ onSuccess }) => {
           <div className="mt-8 space-y-4 text-left">
             <div>
               <label className="block text-sm font-bold text-gray-800 mb-1">Additional Details</label>
-              <textarea className="w-full bg-gray-50 border border-[var(--border-color)] rounded-xl p-3 text-black focus:border-[#00b873] outline-none h-32" placeholder="Provide any necessary information here..."></textarea>
+              <textarea value={details} onChange={(e) => setDetails(e.target.value)} className="w-full bg-gray-50 border border-[var(--border-color)] rounded-xl p-3 text-black focus:border-[#00b873] outline-none h-32" placeholder="Provide any necessary information here..."></textarea>
             </div>
           </div>
           

@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { MapPin, Plus, Edit3, Trash2, Star, Check, Home, Briefcase, MoreHorizontal, Phone, User, AlertTriangle, RefreshCw } from 'lucide-react';
-import axios from 'axios';
+import { apiClient } from '@/utils/apiClient';
 import { useAuthStore } from '../../store/authStore';
-
-const apiClient = axios.create({ withCredentials: true });
 
 const WButton = ({ children, variant = 'primary', size = 'md', fullWidth, icon, onClick, disabled, className = '' }) => {
   const base = "inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none";
@@ -119,7 +117,7 @@ export default function SavedAddresses() {
   const setDefault = async (id) => {
     setActionLoading(true);
     try {
-      await apiClient.patch(`/api/v1/user/address/${id}/default`);
+      await apiClient.put(`/api/v1/user/address/${id}/default`);
       toast.success('Default address updated');
       fetchAddresses();
     } catch (err) {

@@ -44,7 +44,7 @@ const PortfolioCartModal = ({ store }) => {
 
       {/* Modal Overlay */}
       {isOpen && (
-        <div className="fixed inset-0 bg-white/80 backdrop-blur-sm z-[100] flex justify-end">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-md z-[100] flex justify-end">
           {/* Modal Content */}
           <div className="w-full max-w-md bg-[var(--bg-secondary)] border-l border-[var(--accent-gray)] shadow-[0_0_10px_var(--accent-gray-dim)] h-full flex flex-col shadow-[0_0_50px_rgba(0,0,0,0.8)] animate-[slideInRight_0.3s_ease-out]">
             <div className="p-6 border-b border-[var(--accent-gray)] shadow-[0_2px_10px_var(--accent-gray-dim)] flex justify-between items-center bg-white/40">
@@ -74,7 +74,7 @@ const PortfolioCartModal = ({ store }) => {
                       </div>
                       <div className="flex justify-between items-end mt-2">
                         <span className="font-bold text-[var(--accent-gray)]"> ₦{Number(item.price).toFixed(2)}</span>
-                        <div className="flex items-center gap-3 bg-white rounded-lg p-1 border border-[var(--accent-gray)] shadow-[0_0_10px_var(--accent-gray-dim)]">
+                        <div className="flex items-center gap-3 premium-glass rounded-3xl p-1 border border-[var(--accent-gray)] shadow-[0_0_10px_var(--accent-gray-dim)]">
                           <button onClick={() => updateQuantity(item.productId, item.quantity - 1, item.variants)} disabled={item.quantity <= 1} className="w-6 h-6 rounded text-black hover:bg-[var(--bg-secondary)] disabled:opacity-50 flex items-center justify-center">-</button>
                           <span className="w-4 text-center font-bold text-sm">{item.quantity}</span>
                           <button onClick={() => updateQuantity(item.productId, item.quantity + 1, item.variants)} className="w-6 h-6 rounded text-black hover:bg-[var(--bg-secondary)] flex items-center justify-center">+</button>

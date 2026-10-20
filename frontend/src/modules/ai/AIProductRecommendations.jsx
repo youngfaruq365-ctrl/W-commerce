@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { RefreshCw, Star, ShoppingCart, Heart, Sparkles, Tag, X, Plus, TrendingUp, Users, Package } from 'lucide-react';
 import { WButton, WCard, WBadge, WSkeleton } from '../../design/components';
-import axios from 'axios';
+import { apiClient as axios } from '@/utils/apiClient';
 
 const PRODUCTS = [
   { id: 1, name: 'Sony WH-1000XM5 Headphones', price: 279.99, originalPrice: 349.99, rating: 4.9, reviews: 12400, category: 'Electronics', badge: 'Best Seller' },
@@ -48,8 +48,8 @@ function ProductCard({ product, idx }) {
         </div>
         <div className="flex items-center justify-between mt-2.5">
           <div>
-            <span className="text-white font-bold text-sm">${product.price}</span>
-            {product.originalPrice && <span className="text-[var(--text-faint)] text-xs line-through ml-1">${product.originalPrice}</span>}
+            <span className="text-white font-bold text-sm">₦{product.price}</span>
+            {product.originalPrice && <span className="text-[var(--text-faint)] text-xs line-through ml-1">₦{product.originalPrice}</span>}
           </div>
           <button onClick={() => toast('Feature coming soon', { icon: '🚀' })}  className="w-7 h-7 rounded-lg bg-[var(--accent-gray-dim)] hover:bg-[var(--text-main)] flex items-center justify-center transition-all group/btn">
             <ShoppingCart size={13} className="text-[var(--text-main)] group-hover/btn:text-[var(--bg-primary)] transition-colors" />

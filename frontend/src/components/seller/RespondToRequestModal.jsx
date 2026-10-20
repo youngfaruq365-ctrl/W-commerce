@@ -28,7 +28,7 @@ const RespondToRequestModal = ({ isOpen, onClose, request }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-white/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-md z-[100] flex items-center justify-center p-4">
       <div className="modal-3d-glass rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b border-gray-200 sticky top-0 bg-[#0a0a0a] z-50 rounded-t-2xl">
           <div>
@@ -43,7 +43,7 @@ const RespondToRequestModal = ({ isOpen, onClose, request }) => {
         <div className="overflow-y-auto p-6 flex-1">
         <form onSubmit={handleSubmit} className="space-y-6">
           {error && (
-            <div className="bg-gray-400 500/10 border border-gray-400 500/50 text-gray-700 500 p-4 rounded-xl text-sm font-bold flex items-center gap-2">
+            <div className="bg-gray-500/10 border border-gray-500/50 text-gray-500 p-4 rounded-xl text-sm font-bold flex items-center gap-2">
               <AlertCircle size={18} />
               {error}
             </div>
@@ -53,7 +53,7 @@ const RespondToRequestModal = ({ isOpen, onClose, request }) => {
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-2">Target Price Context</label>
               <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-4">
-                <p className="text-gray-800 text-sm">Target price requested by buyer: <strong className="text-black text-lg"> ₦{request.targetPrice}</strong> for <strong className="text-black">{request.quantity} {request.unit}</strong>.</p>
+                <p className="text-gray-800 text-sm">Target price requested by buyer: <strong className="text-black text-lg"> ₦{request.budget}</strong> for <strong className="text-black">{request.quantity} {request.unit}</strong>.</p>
               </div>
             </div>
 
@@ -68,7 +68,7 @@ const RespondToRequestModal = ({ isOpen, onClose, request }) => {
                   value={formData.price}
                   onChange={(e) => setFormData({...formData, price: e.target.value})}
                   className="w-full bg-white border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-black focus:outline-none focus:border-gray-500 transition-colors"
-                  placeholder={request.targetPrice}
+                  placeholder={request.budget}
                 />
               </div>
             </div>
