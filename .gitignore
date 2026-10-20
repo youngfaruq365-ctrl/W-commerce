@@ -135,3 +135,7 @@ database/prisma/migrations/1791012104111_init_postgres/
 
 # External temporary projects/assets
 aws-cds-solution/
+
+# Archives
+*.zip
+*.tar.gz

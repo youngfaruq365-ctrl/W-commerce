@@ -1,8 +1,24 @@
-import { AdMob, RewardAdPluginEvents } from '@capacitor-community/admob';
 import { trackAdRevenue } from './revenueCatService';
 
 // Test Ad Unit ID for Android Rewarded Video
 const REWARDED_AD_UNIT_ID = 'ca-app-pub-3940256099942544/5224354917';
+
+// Lazy loader for native Capacitor AdMob plugin
+let nativeAdMobPromise = null;
+const getNativeAdMob = async () => {
+  if (typeof window === 'undefined' || !window.Capacitor || !window.Capacitor.isNativePlatform()) {
+    return null;
+  }
+  if (!nativeAdMobPromise) {
+    nativeAdMobPromise = import('@capacitor-community/admob')
+      .then((m) => ({ AdMob: m.AdMob, RewardAdPluginEvents: m.RewardAdPluginEvents }))
+      .catch((err) => {
+        console.warn('AdMob native plugin could not be loaded:', err);
+        return null;
+      });
+  }
+  return nativeAdMobPromise;
+};
 
 const simulateAdModal = (title, duration = 3000) => {
   return new Promise((resolve) => {
@@ -57,10 +73,12 @@ const simulateAdModal = (title, duration = 3000) => {
 };
 
 export const initializeAdMob = async () => {
+  const native = await getNativeAdMob();
+  if (!native) return;
   try {
-    await AdMob.initialize({
+    await native.AdMob.initialize({
       requestTrackingAuthorization: true,
-      testingDevices: ['2077ef9a63d2b398840261c8221a0c9b'], // Add test device IDs if needed
+      testingDevices: ['2077ef9a63d2b398840261c8221a0c9b'],
       initializeForTesting: true,
     });
     console.log("AdMob initialized successfully.");
@@ -81,7 +99,15 @@ export const showRewardedAd = async (onRewardEarned) => {
     return;
   }
 
+  const native = await getNativeAdMob();
+  if (!native) {
+    await simulateAdModal('Sponsor Message', 3000);
+    if (onRewardEarned) onRewardEarned({ type: 'simulated', amount: 1 });
+    return;
+  }
+
   try {
+    const { AdMob, RewardAdPluginEvents } = native;
     const options = {
       adId: REWARDED_AD_UNIT_ID,
       isTesting: true,
@@ -91,14 +117,13 @@ export const showRewardedAd = async (onRewardEarned) => {
     await AdMob.prepareRewardVideoAd(options);
 
     // Listen for reward
-    const rewardListener = AdMob.addListener(RewardAdPluginEvents.Rewarded, (rewardItem) => {
+    AdMob.addListener(RewardAdPluginEvents.Rewarded, (rewardItem) => {
       console.log('Reward earned:', rewardItem);
       if (onRewardEarned) onRewardEarned(rewardItem);
     });
 
     // Listen for paid event (Impression-level ad revenue)
-    // Option B: Manually send to RevenueCat
-    const paidListener = AdMob.addListener(RewardAdPluginEvents.AdItemPaid, (info) => {
+    AdMob.addListener(RewardAdPluginEvents.AdItemPaid, (info) => {
       console.log('AdMob Impression Paid:', info);
       trackAdRevenue({ value: info.value, currency: info.currencyCode });
     });
@@ -123,7 +148,15 @@ export const showInterstitialAd = async (onDismissed) => {
     return;
   }
 
+  const native = await getNativeAdMob();
+  if (!native) {
+    await simulateAdModal('Welcome to our Store', 2000);
+    if (onDismissed) onDismissed();
+    return;
+  }
+
   try {
+    const { AdMob } = native;
     const INTERSTITIAL_AD_UNIT_ID = 'ca-app-pub-3940256099942544/1033173712'; // Test Unit ID
     const options = {
       adId: INTERSTITIAL_AD_UNIT_ID,
@@ -133,12 +166,12 @@ export const showInterstitialAd = async (onDismissed) => {
     await AdMob.prepareInterstitial(options);
     
     // Listen for paid event (Impression-level ad revenue)
-    const paidListener = AdMob.addListener('interstitialAdItemPaid', (info) => {
+    AdMob.addListener('interstitialAdItemPaid', (info) => {
       console.log('AdMob Impression Paid (Interstitial):', info);
       trackAdRevenue({ value: info.value, currency: info.currencyCode });
     });
 
-    const dismissListener = AdMob.addListener('interstitialAdDismissed', () => {
+    AdMob.addListener('interstitialAdDismissed', () => {
       if (onDismissed) onDismissed();
     });
 
