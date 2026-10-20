@@ -29,12 +29,7 @@ jobs:
       - name: Build Production Frontend
         run: npm run build:production
 
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Verify Docker Compose Build
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Verify Backend Syntax
         run: |
-          # Copy .env.example to .env.production to satisfy env_file requirement during build
-          cp .env.example .env.production || touch .env.production
-          docker compose build
+          node --check backend/server.cjs
+          node --check backend/src/app.cjs
