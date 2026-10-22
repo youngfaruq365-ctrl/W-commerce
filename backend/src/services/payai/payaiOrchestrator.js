@@ -295,6 +295,18 @@ class PayAIOrchestrator {
       assistantResponse = `I encountered an issue executing that request: ${err.message}. Please try again or refine your query.`;
     }
 
+    // Ensure all markdown images in assistant response use image URLs instead of raw video URLs
+    if (assistantResponse && typeof assistantResponse === 'string' && assistantResponse.includes('![')) {
+      assistantResponse = assistantResponse.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (fullMatch, alt, url) => {
+        const cleanUrl = (url || '').trim();
+        if (isVideoUrl(cleanUrl)) {
+          const imgUrl = convertVideoToImageUrl(cleanUrl) || resolveBackendProductImage({ title: alt }, '');
+          if (imgUrl) return `![${alt}](${imgUrl})`;
+        }
+        return fullMatch;
+      });
+    }
+
     // 3. Save assistant message and tool outputs
     const assistantMessage = await prisma.payAIMessage.create({
       data: {
