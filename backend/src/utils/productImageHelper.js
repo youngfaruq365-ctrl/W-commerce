@@ -4,15 +4,20 @@ const FALLBACK_SMARTWATCH_ID = 'photo-1523275335684-37898b6baf30';
 
 function isVideoUrl(url) {
   if (!url || typeof url !== 'string') return false;
-  return /\.(mp4|mov|webm|ogg|m4v)(\?|$)/i.test(url) || url.includes('/video/upload/');
+  if (/\.(jpg|jpeg|png|webp|gif|svg|avif)(\?.*)?$/i.test(url)) return false;
+  return /\.(mp4|mov|webm|ogg|m4v)(\?|$)/i.test(url) || (url.includes('/video/upload/') && !url.includes('/video/upload/so_')) || url.startsWith('data:video/');
 }
 
 function convertVideoToImageUrl(url) {
-  if (!url || !isVideoUrl(url)) return url;
+  if (!url) return url;
+  if (/\.(jpg|jpeg|png|webp|gif|svg|avif)(\?.*)?$/i.test(url)) return url;
+  if (!isVideoUrl(url)) return url;
   if (url.includes('res.cloudinary.com') && url.includes('/video/upload/')) {
-    return url
-      .replace('/video/upload/', '/video/upload/so_0/')
-      .replace(/\.(mp4|mov|webm|ogg|m4v)(\?.*)?$/i, '.jpg');
+    let clean = url;
+    if (!clean.includes('/video/upload/so_0/')) {
+      clean = clean.replace('/video/upload/', '/video/upload/so_0/');
+    }
+    return clean.replace(/\.(mp4|mov|webm|ogg|m4v)(\?.*)?$/i, '.jpg');
   }
   return null; // caller should use category fallback
 }

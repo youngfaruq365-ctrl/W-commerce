@@ -154,9 +154,9 @@ class PayAIOrchestrator {
                   `${idx + 1}. "${it.title}" | Price: ${it.currency === 'NGN' || (!it.isExternal && it.provider === 'w-commerce') ? '₦' + Number(it.price).toLocaleString() + ' NGN' : '$' + it.price + ' USD'} | Seller: ${it.seller?.name || it.provider || 'W-Commerce'} | Stock: ${it.stock ?? 'Available'} | Negotiable: ${it.canNegotiate ? 'Yes' : 'No'} | ImageUrl: ${safeImageUrl(it)} (ID: ${it.id || it.productId})`
                 ).join('\n');
             }
-          } else if (parsed.productId || parsed.item?.productId || parsed.offer?.id) {
+          } else if (parsed.selectedProduct?.id || parsed.selectedProduct?.productId || parsed.productId || parsed.item?.productId || parsed.item?.id || parsed.product?.id || parsed.offer?.id) {
             if (!lastSessionProductId) {
-              lastSessionProductId = parsed.productId || parsed.item?.productId || parsed.offer?.id;
+              lastSessionProductId = parsed.selectedProduct?.id || parsed.selectedProduct?.productId || parsed.productId || parsed.item?.productId || parsed.item?.id || parsed.product?.id || parsed.offer?.id;
             }
           }
         } catch (_) {}
@@ -852,16 +852,32 @@ class PayAIOrchestrator {
 
         // 1. Check if buyer specifically named a product in their message or productQuery
         const explicitQuery = toolArgs.productQuery || (() => {
-          const forMatch = (buyerMessage || '').match(/\bfor\s+(.+?)\s+(?:can\s+i|can\s+you|could\s+i|i\s+can|will\s+you|would\s+you|how\s+about|i\s+want|is\s+it|what\s+is)\b/i);
-          const afterForMatch = (buyerMessage || '').match(/(?:pay|offer|give|buy|get|discount|take|bargain)\s+[0-9]+[a-z0-9]*\s+(?:for|on)\s+(.+?)(?:$|[?.,!])/i);
+          const quoteMatch = (buyerMessage || '').match(/["“']([^"”']{2,80})["”']/);
+          if (quoteMatch) return quoteMatch[1];
+          const textCleanedOfListing = (buyerMessage || '')
+            .replace(/\(listed\s+at[^)]*\)/gi, '')
+            .replace(/listed\s+at\s+[^.?!,]+/gi, '');
+          const forMatch = textCleanedOfListing.match(/\bfor\s+(.+?)\s+(?:can\s+i|can\s+you|could\s+i|i\s+can|will\s+you|would\s+you|how\s+about|i\s+want|is\s+it|what\s+is)\b/i);
+          const afterForMatch = textCleanedOfListing.match(/(?:pay|offer|give|buy|get|discount|take|bargain)\s+[0-9]+[a-z0-9]*\s+(?:for|on)\s+(.+?)(?:$|[?.,!])/i);
           return (forMatch && forMatch[1]) || (afterForMatch && afterForMatch[1]) || null;
         })();
 
         if (explicitQuery) {
-          const cleanQuery = explicitQuery.replace(/\b(?:₦|\$|ngn|usd|[0-9]+naira|[0-9]+ngn)\b/gi, '').trim();
+          const cleanQuery = explicitQuery
+            .replace(/["“”'()]/g, '')
+            .replace(/\(listed\s+at[^)]*\)/gi, '')
+            .replace(/\b(?:listed\s+at|price|discount|ngn|usd|naira|₦|\$|[0-9]+)\b/gi, '')
+            .trim();
           if (cleanQuery.length >= 3) {
             const direct = await prisma.product.findFirst({
-              where: { title: { contains: cleanQuery }, isArchived: false },
+              where: {
+                isArchived: false,
+                OR: [
+                  { title: { equals: cleanQuery } },
+                  { normalizedTitle: { equals: cleanQuery.toLowerCase() } },
+                  { title: { contains: cleanQuery } }
+                ]
+              },
               include: { store: true }
             });
             if (direct) {
@@ -878,15 +894,6 @@ class PayAIOrchestrator {
                 });
                 if (tokenMatch) {
                   targetProductId = tokenMatch.id;
-                } else {
-                  const orMatch = await prisma.product.findFirst({
-                    where: {
-                      OR: words.map(w => ({ title: { contains: w } })),
-                      isArchived: false
-                    },
-                    include: { store: true }
-                  });
-                  if (orMatch) targetProductId = orMatch.id;
                 }
               }
             }
@@ -3764,17 +3771,40 @@ class PayAIOrchestrator {
         }
       }
 
-      // Check if buyer explicitly named a product (e.g. "for Chocolate Biscuits 200g can i pay...")
-      const forMatch = text.match(/\bfor\s+(.+?)\s+(?:can\s+i|can\s+you|could\s+i|i\s+can|will\s+you|would\s+you|how\s+about|i\s+want|is\s+it|what\s+is)\b/i);
-      const afterForMatch = text.match(/(?:pay|offer|give|buy|get|discount|take|bargain)\s+[0-9]+[a-z0-9]*\s+(?:for|on)\s+(.+?)(?:$|[?.,!])/i);
-      const extractedProductQuery = (forMatch && forMatch[1]) || (afterForMatch && afterForMatch[1]) || null;
+      // Check if buyer explicitly named a product (e.g. "for 'fried rice and chicken'", "for Chocolate Biscuits 200g can i pay...")
+      let extractedProductQuery = null;
+      const quoteMatch = text.match(/["“']([^"”']{2,80})["”']/);
+      const forQuoteMatch = text.match(/\bfor\s+["“']([^"”']+)["”']/i);
+      if (forQuoteMatch) {
+        extractedProductQuery = forQuoteMatch[1].trim();
+      } else if (quoteMatch) {
+        extractedProductQuery = quoteMatch[1].trim();
+      } else {
+        const textCleanedOfListing = text
+          .replace(/\(listed\s+at[^)]*\)/gi, '')
+          .replace(/listed\s+at\s+[^.?!,]+/gi, '');
+        const forMatch = textCleanedOfListing.match(/\bfor\s+(.+?)\s+(?:can\s+i|can\s+you|could\s+i|i\s+can|will\s+you|would\s+you|how\s+about|i\s+want|is\s+it|what\s+is)\b/i);
+        const afterForMatch = textCleanedOfListing.match(/(?:pay|offer|give|buy|get|discount|take|bargain)\s+[0-9]+[a-z0-9]*\s+(?:for|on)\s+(.+?)(?:$|[?.,!])/i);
+        extractedProductQuery = (forMatch && forMatch[1]) || (afterForMatch && afterForMatch[1]) || null;
+      }
 
       const isExplicitExternal = lower.includes('aliexpress') || lower.includes('ebay') || lower.includes('amazon') || lower.includes('asos');
       const provider = isExplicitExternal
         ? (lower.includes('aliexpress') ? 'aliexpress' : (lower.includes('ebay') ? 'ebay' : 'amazon'))
         : 'w-commerce';
 
-      const resolvedProductId = contextData?.productId || (uuidMatch ? uuidMatch[0] : (isExplicitExternal ? 'amz-b0bdhwdr12' : (contextData?.lastSessionProductId || 'demo-cavetto-watch')));
+      let resolvedProductId = contextData?.productId || (uuidMatch ? uuidMatch[0] : (isExplicitExternal ? 'amz-b0bdhwdr12' : (contextData?.lastSessionProductId || 'demo-cavetto-watch')));
+
+      if (extractedProductQuery && Array.isArray(contextData?.previousProducts)) {
+        const cleanEq = extractedProductQuery.toLowerCase().trim();
+        const matchedPrev = contextData.previousProducts.find(p => {
+          const t = (p.title || '').toLowerCase();
+          return t === cleanEq || t.includes(cleanEq) || cleanEq.includes(t);
+        });
+        if (matchedPrev?.id || matchedPrev?.productId) {
+          resolvedProductId = matchedPrev.id || matchedPrev.productId;
+        }
+      }
 
       return {
         toolName: 'request_seller_negotiation',
