@@ -4531,7 +4531,8 @@ class PayAIOrchestrator {
           itemsSection = `\n### 🛍️ Items in This Shipment:\n` +
             result.items.slice(0, 3).map(it => {
               const pDisplay = it.currency === 'NGN' ? `₦${Number(it.price || 0).toLocaleString()} NGN` : `$${it.price} USD`;
-              const imgPart = it.imageUrl ? `![${it.title}](${it.imageUrl})\n\n` : '';
+              const itImg = safeImageUrl(it) || it.imageUrl;
+              const imgPart = itImg ? `![${it.title}](${itImg})\n\n` : '';
               return `${imgPart}• **${it.title}** (Qty: ${it.quantity || 1}) — **${pDisplay}**`;
             }).join('\n\n') + '\n';
         }
@@ -4586,7 +4587,8 @@ class PayAIOrchestrator {
         if (result.isCombo || (result.items && result.items.length > 1)) {
           const itemSummary = (result.items || [result.item]).map(it => {
             const pDisplay = it.currency === 'NGN' ? `₦${Number(it.price || 0).toLocaleString()} NGN` : `$${it.price} USD`;
-            const imgPart = it.imageUrl ? `\n  ![${it.title}](${it.imageUrl})` : '';
+            const itImg = safeImageUrl(it) || it.imageUrl;
+            const imgPart = itImg ? `\n  ![${it.title}](${itImg})` : '';
             return `• **${it.title}** (Qty: ${it.quantity || 1}) — **${pDisplay}**${imgPart}`;
           }).join('\n\n');
           const totalComboPrice = (result.items || [result.item]).reduce((sum, it) => sum + (Number(it.price || 0) * (it.quantity || 1)), 0);
@@ -4600,7 +4602,8 @@ class PayAIOrchestrator {
         const it = result.item;
         const priceDisplay = it.currency === 'NGN' ? `₦${Number(it.price).toLocaleString()} NGN` : `$${it.price} USD`;
         const totalDisplay = it.currency === 'NGN' ? `₦${(Number(it.price) * it.quantity).toLocaleString()} NGN` : `$${it.price * it.quantity} USD`;
-        const imgPart = it.imageUrl ? `\n\n![${it.title}](${it.imageUrl})` : '';
+        const itImg = safeImageUrl(it) || it.imageUrl;
+        const imgPart = itImg ? `\n\n![${it.title}](${itImg})` : '';
 
         return `🛒 **Successfully Added to Your Cart!**\n\n` +
           `• **Product:** **${it.title}**\n` +
@@ -4653,7 +4656,8 @@ class PayAIOrchestrator {
         }
 
         const itemsList = (result.items || []).map((it, idx) => {
-          const img = it.imageUrl ? `![${it.title}](${it.imageUrl})\n` : '';
+          const itImg = safeImageUrl(it) || it.imageUrl;
+          const img = itImg ? `![${it.title}](${itImg})\n` : '';
           return `${idx + 1}. ${img}**${it.title}** — **₦${Number(it.price).toLocaleString()} NGN** (Seller: ${it.storeName || 'Verified Seller'})\n   *In stock: ${it.stock} units*`;
         }).join('\n\n');
 
