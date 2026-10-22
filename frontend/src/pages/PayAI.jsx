@@ -13,7 +13,7 @@ import { apiClient } from '../utils/apiClient';
 import { useAuthStore } from '../store/authStore';
 import { useCartStore } from '../store/cartStore';
 import { getSocket, identifyUser } from '../lib/socketClient';
-import { decodeHtml, resolveProductImage } from '../utils/imageHelpers';
+import { decodeHtml, resolveProductImage, isVideoUrl, convertVideoToImageUrl } from '../utils/imageHelpers';
 import { PLACEHOLDER_IMAGE } from '../constants/placeholders';
 
 // Supporting Modular Components
@@ -25,9 +25,11 @@ import ExternalStoreShowcaseModal from '../components/payai/ExternalStoreShowcas
 import AILazyResponseSkeleton from '../components/payai/AILazyResponseSkeleton';
 import StoreLogoAvatar from '../components/payai/StoreLogoAvatar';
 import TopUpModal from '../components/buyer/TopUpModal';
+import OfficialReceiptCard, { parseReceiptData } from '../components/payai/OfficialReceiptCard';
 import { useWalletStore } from '../store/walletStore';
 
 const QUICK_PROMPTS = [
+  { label: '💳 Pay with PayPal', text: 'Can I pay using PayPal?' },
   { label: '💰 Check Wallet Balance', text: 'How much am I having in my wallet?' },
   { label: '📸 Warehouse Photo & Voice Note', text: 'Can you share a live warehouse photo and seller voice note confirming the product condition before I buy?' },
   { label: '🔍 Find Tech & Gadgets', text: 'Search verified electronics, smartphones, and computers with high seller ratings' },
@@ -135,9 +137,10 @@ function extractAmountFromText(text) {
 // Helper: Check if content discusses payment, wallet, or checkout actions
 function hasPaymentOrCheckoutIntent(content) {
   if (!content || typeof content !== 'string') return false;
-  // Exclude wallet balance inquiries & reports from triggering checkout cards
+  // Exclude wallet balance inquiries, receipts, and order confirmations from triggering checkout cards
   if (/Available\s+Balance|Your\s+W-Commerce\s+Wallet\s+Balance|in\s+my\s+wallet|how\s+much.*wallet|check.*wallet/i.test(content)) return false;
-  return /confirm\s*&\s*pay|pay\s+from\s+wallet|pay\s+with\s+wallet|deduction\s+from\s+(?:your\s+)?wallet|proceed\s+to\s+secure\s+checkout|ready\s+to\s+complete\s+your\s+order|choose\s+your\s+preferred\s+payment\s+method|secure\s+checkout\s+link\s+is\s+ready|authorize\s+the\s+payment|authorize\s+the\s+deduction|action\s+card\s+below|click\s+(?:the\s+blue\s+)?secure\s+checkout|finalize\s+your\s+order|complete\s+(?:this|your)\s+(?:purchase|order)|ready\s+to\s+pay|ready\s+to\s+place\s+your\s+order|buttons?\s+(?:are\s+)?(?:active|highlighted)\s+below/i.test(content);
+  if (/Official\s+Purchase\s+Receipt|Order\s+Summary:|Payment\s+Authorized\s+&\s+Escrow\s+Locked|Order\s+Confirmed|Order\s+Delivered|PAID_IN_ESCROW/i.test(content)) return false;
+  return /confirm\s*&\s*pay|pay\s+from\s+wallet|pay\s+with\s+wallet|deduction\s+from\s+(?:your\s+)?wallet|proceed\s+to\s+secure\s+checkout|ready\s+to\s+complete\s+your\s+order|choose\s+your\s+preferred\s+payment\s+method|secure\s+checkout\s+link\s+is\s+ready|authorize\s+the\s+payment|authorize\s+the\s+deduction|action\s+card\s+below|click\s+(?:the\s+blue\s+)?secure\s+checkout|finalize\s+your\s+order|complete\s+(?:this|your)\s+(?:purchase|order)|ready\s+to\s+pay|ready\s+to\s+place\s+your\s+order|buttons?\s+(?:are\s+)?(?:active|highlighted)\s+below|checkout\s+controls\s+are\s+ready|interactive\s+checkout\s+controls/i.test(content);
 }
 
 // Rich inline markdown renderer for chat responses with interactive action button conversion
@@ -179,22 +182,24 @@ function MarkdownContent({ content, onAction, isSending = false }) {
     return parts.map((part, pIdx) => {
       if (!part) return null;
 
-      // Markdown Image: ![alt](url)
+      // Markdown Image or Video: ![alt](url)
       const imgMatch = part.match(/^!\[([^\]]*)\]\(([^)]*)\)$/);
       if (imgMatch) {
-        const alt = imgMatch[1] || 'Product Image';
+        const alt = imgMatch[1] || 'Product Media';
         const src = imgMatch[2]?.trim() || '';
         if (!src) return null;
+
+        const effectiveSrc = isVideoUrl(src) ? (convertVideoToImageUrl(src) || resolveProductImage(null, alt)) : src;
         return (
-          <span key={pIdx} className="block my-2 max-w-sm rounded-xl overflow-hidden border border-slate-200 dark:border-zinc-700/60 shadow-sm bg-slate-50 dark:bg-zinc-800/50">
+          <span key={pIdx} className="block my-2 max-w-sm rounded-xl overflow-hidden border border-slate-200 dark:border-zinc-700/60 shadow-sm bg-slate-50 dark:bg-zinc-800/50 group">
             <img
-              src={src}
+              src={effectiveSrc}
               alt={alt}
               loading="lazy"
-              className="w-full h-44 object-cover hover:scale-105 transition-transform duration-300"
+              className="w-full h-44 object-cover group-hover:scale-105 transition-transform duration-300"
               onError={(e) => {
                 e.currentTarget.onerror = null;
-                e.currentTarget.src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=800&q=80';
+                e.currentTarget.src = convertVideoToImageUrl(src) || resolveProductImage(null, alt);
               }}
             />
             {alt && (
@@ -423,23 +428,24 @@ function MarkdownContent({ content, onAction, isSending = false }) {
       return;
     }
 
-    // Standalone Image Line: ![alt](url)
+    // Standalone Image or Video Line: ![alt](url)
     const imgLineMatch = trimmed.match(/^!\[([^\]]*)\]\(([^)]*)\)$/);
     if (imgLineMatch) {
       flushLists();
-      const alt = imgLineMatch[1] || 'Product Image';
+      const alt = imgLineMatch[1] || 'Product Media';
       const src = imgLineMatch[2]?.trim() || '';
       if (src) {
+        const effectiveSrc = isVideoUrl(src) ? (convertVideoToImageUrl(src) || resolveProductImage(null, alt)) : src;
         elements.push(
           <div key={`img-${keyIdx++}`} className="my-2 max-w-sm rounded-xl overflow-hidden border border-slate-200 dark:border-zinc-700/60 shadow-sm bg-slate-50 dark:bg-zinc-800/50 group">
             <img
-              src={src}
+              src={effectiveSrc}
               alt={alt}
               loading="lazy"
               className="w-full h-44 object-cover group-hover:scale-105 transition-transform duration-300"
               onError={(e) => {
                 e.currentTarget.onerror = null;
-                e.currentTarget.src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=800&q=80';
+                e.currentTarget.src = convertVideoToImageUrl(src) || resolveProductImage(null, alt);
               }}
             />
             {alt && (
@@ -846,9 +852,29 @@ export default function PayAI() {
   };
 
   // Format local price helper based on destination currency & guaranteed rate
-  const formatLocalPrice = (usdAmount, destCode = destinationCountry) => {
-    const dest = DESTINATIONS.find(d => d.code === destCode) || DESTINATIONS[0];
-    const converted = Number(usdAmount) * dest.rate;
+  const formatLocalPrice = (amount, currencyOrDest = destinationCountry, destCode = destinationCountry) => {
+    if (!amount && amount !== 0) return '₦0';
+    const num = Number(amount) || 0;
+    const curr = (typeof currencyOrDest === 'string' ? currencyOrDest : '').toUpperCase();
+
+    // If price is explicitly in Naira (or passed currency is NGN), DO NOT multiply by 1480!
+    if (curr === 'NGN' || curr === '₦' || curr === 'NAIRA') {
+      return `₦${Math.round(num).toLocaleString()}`;
+    }
+
+    if (curr === 'GHS' || curr === 'GH₵') return `GH₵${num.toFixed(2)}`;
+    if (curr === 'KES') return `KSh${Math.round(num).toLocaleString()}`;
+    if (curr === 'GBP' || curr === '£') return `£${num.toFixed(2)}`;
+
+    // If destination code (e.g. 'NG', 'GH', 'KE') is passed or USD
+    const dest = DESTINATIONS.find(d => d.code === currencyOrDest) || DESTINATIONS.find(d => d.code === destCode) || DESTINATIONS[0];
+
+    // Guard against accidental double conversion if the amount is already in Naira magnitude (>= 500) and target is NGN
+    if (dest.currency === 'NGN' && num >= 500 && curr !== 'USD') {
+      return `₦${Math.round(num).toLocaleString()}`;
+    }
+
+    const converted = num * (dest.rate || 1);
     if (dest.currency === 'NGN') return `₦${Math.round(converted).toLocaleString()}`;
     if (dest.currency === 'GHS') return `GH₵${converted.toFixed(2)}`;
     if (dest.currency === 'KES') return `KSh${converted.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
@@ -1884,6 +1910,20 @@ export default function PayAI() {
       return;
     }
 
+    // Handle PayPal Checkout trigger
+    if (lower.includes('paypal') || lower.includes('pay pal')) {
+      const defaultNGN = 18000;
+      const defaultUSD = Number((defaultNGN / 1480).toFixed(2));
+      handleProceedToCheckout({
+        total: defaultUSD,
+        totalNGN: defaultNGN,
+        productTitle: 'W-Commerce Order',
+        storeName: 'Verified Merchant',
+        items: cart?.items || []
+      });
+      return;
+    }
+
     // Handle Cart / Checkout navigation
     if (lower.includes('checkout') || lower.includes('proceed') || lower.includes('pay') || lower.includes('view cart') || url === '/cart' || url === '/checkout') {
       navigate('/cart');
@@ -1910,8 +1950,16 @@ export default function PayAI() {
 
   // Proceed to Cart Drawer / PayPal Checkout Modal
   const handleProceedToCheckout = (quoteData = null) => {
-    if (quoteData && (quoteData.total || quoteData.totalLandedUSD)) {
-      setCheckoutQuote(quoteData);
+    if (quoteData) {
+      const totalNGN = Number(quoteData.totalNGN || quoteData.amountNGN || 0);
+      const totalUSD = Number(quoteData.total || quoteData.totalLandedUSD || quoteData.amountUSD || (totalNGN > 0 ? (totalNGN / 1480).toFixed(2) : 12.16));
+      setCheckoutQuote({
+        ...quoteData,
+        sessionId: quoteData.sessionId || sessionId,
+        total: totalUSD,
+        totalNGN: totalNGN > 0 ? totalNGN : Math.round(totalUSD * 1480),
+        items: quoteData.items || cart?.items || []
+      });
       setIsCartDrawerOpen(false);
       setIsPayPalModalOpen(true);
     } else {
@@ -1920,33 +1968,101 @@ export default function PayAI() {
   };
 
   // Order Completed via PayPal or Wallet
-  const handleOrderCompleted = (completedOrder) => {
-    setIsPayPalModalOpen(false);
-    setIsCartDrawerOpen(false);
+  const handleOrderCompleted = (completedOrder, options = {}) => {
+    const keepModalOpen = options?.keepModalOpen === true;
+    if (!keepModalOpen) {
+      setIsPayPalModalOpen(false);
+      setIsCartDrawerOpen(false);
+    }
+
+    // 1. Immediately clear cart in local state and global store
+    setCart(prev => ({ ...prev, items: [] }));
+    try {
+      const cartStore = useCartStore?.getState?.();
+      if (cartStore?.clearCart) cartStore.clearCart();
+    } catch (_) {}
     fetchCart();
     fetchAppCart && fetchAppCart();
     refreshWalletStore && refreshWalletStore();
 
-    const orderAmt = Number(completedOrder?.grandTotal || completedOrder?.amount || checkoutQuote?.total || 0);
+    if (!completedOrder) return;
 
+    const orderAmt = Number(completedOrder?.grandTotal || completedOrder?.amount || checkoutQuote?.total || 12.16);
+    const orderNum = completedOrder?.orderNumber || `W-INT-${Date.now().toString().slice(-6)}`;
+    const trackNum = completedOrder?.trackingNumber || `DHL-EXP-${Math.floor(10000000 + Math.random() * 90000000)}`;
+    const payoutNgn = completedOrder?.sellerPayoutNGN || completedOrder?.sellerPayoutNgn || Math.round(orderAmt * 1480);
+    const carrier = completedOrder?.carrier || 'DHL Express International';
+    const itemTitle = completedOrder?.itemTitle || checkoutQuote?.productTitle || 'W-Commerce PayAI Verified Order';
+
+    // 2. Add Official AI Purchase Receipt into the Chat
+    const receiptContent = completedOrder?.receiptMessage?.content || (
+      `🧾 **Official Purchase Receipt & Escrow Guarantee**\n\n` +
+      `Thank you! Your payment via **PayPal** has been verified and securely locked in the W-Commerce Escrow Vault.\n\n` +
+      `📦 **Order Summary:**\n` +
+      `- **Order Number:** \`${orderNum}\`\n` +
+      `- **Payment Method:** PayPal (USD)\n` +
+      `- **Amount Paid:** **$${orderAmt.toFixed(2)} USD**\n` +
+      `- **Seller Payout:** **₦${Number(payoutNgn).toLocaleString()} NGN** (Exchange rate: 1480 NGN/USD)\n` +
+      `- **Escrow Status:** **PAID_IN_ESCROW** (100% Buyer Protection active) 🛡️\n` +
+      `- **Fulfillment Status:** **CONFIRMED & QUEUED FOR DISPATCH** ⚡\n` +
+      `- **Carrier:** **${carrier}**\n` +
+      `- **Tracking Number:** \`${trackNum}\`\n\n` +
+      `Funds will remain safely locked in escrow until you confirm delivery of your package. You can track this delivery anytime in the **Live Tracking** tab or ask me: *"Track order ${orderNum}"*!`
+    );
+
+    setMessages(prev => {
+      const alreadyHas = prev.some(m => m.content?.includes(orderNum));
+      if (alreadyHas) return prev;
+      return [
+        ...prev,
+        {
+          id: completedOrder?.receiptMessage?.id || `receipt-${Date.now()}`,
+          role: 'assistant',
+          content: receiptContent,
+          toolResults: {
+            isReceipt: true,
+            orderNumber: orderNum,
+            orderId: completedOrder?.orderId,
+            trackingNumber: trackNum,
+            carrier,
+            amountUSD: orderAmt,
+            sellerPayoutNGN: payoutNgn,
+            exchangeRate: 1480,
+            fulfillmentStatus: 'CONFIRMED & QUEUED FOR DISPATCH',
+            paymentMethod: 'PayPal (USD)',
+            itemTitle
+          },
+          createdAt: new Date().toISOString()
+        }
+      ];
+    });
+
+    // 3. Update Shipments / Tracking
     setShipments(prev => [
       {
         id: completedOrder?.orderId || `ord-${Date.now()}`,
-        orderNumber: completedOrder?.orderNumber || `W-INT-${Date.now().toString().slice(-6)}`,
-        trackingNumber: completedOrder?.trackingNumber || `DHL-EXP-${Math.floor(10000000 + Math.random() * 90000000)}`,
-        carrier: completedOrder?.carrier || 'DHL Express International',
+        orderNumber: orderNum,
+        trackingNumber: trackNum,
+        carrier,
         status: 'PAID',
-        fulfillmentStatus: completedOrder?.fulfillmentStatus || 'CONFIRMED',
-        itemTitle: 'W-Commerce PayAI Verified Order',
+        fulfillmentStatus: 'CONFIRMED',
+        itemTitle,
         origin: 'Lagos Mainland Fulfillment Vault • Bay 4',
         destination: `${DESTINATIONS.find(d => d.code === destinationCountry)?.name || 'Lagos, Nigeria'}`,
         eta: 'In 2-4 Business Days',
         grandTotal: orderAmt,
-        sellerPayoutNGN: completedOrder?.sellerPayoutNGN || completedOrder?.sellerPayoutNgn || null
+        sellerPayoutNGN: payoutNgn,
+        checkpoints: [
+          { status: 'PAID', label: 'Payment verified & escrow held', timestamp: new Date().toISOString() },
+          { status: 'CONFIRMED', label: 'Order confirmed and queued for fulfillment', timestamp: new Date().toISOString() }
+        ]
       },
-      ...prev
+      ...prev.filter(s => s.orderNumber !== orderNum)
     ]);
-    switchTab('tracking', 1);
+
+    if (options?.switchTab) {
+      switchTab('tracking', 1);
+    }
   };
 
   // Helper: Parse Tool Result Offers from AI message
@@ -2613,6 +2729,7 @@ export default function PayAI() {
                       const cartItem = cartData?.item || getToolCartItem(msg);
                       const checkoutGuidance = getCheckoutGuidance(msg);
                       const walletInquiry = getWalletInquiryData(msg);
+                      const receiptData = !isUser ? parseReceiptData(msg) : null;
 
                       return (
                         <motion.div
@@ -2631,9 +2748,11 @@ export default function PayAI() {
                             <div className={`w-9 h-9 rounded-xl ${
                               msg.isSellerReply
                                 ? 'bg-purple-600 text-white shadow-md'
+                                : receiptData
+                                ? 'neu-card text-emerald-500 border border-emerald-500/30'
                                 : 'neu-card text-[#006cff] border border-white/70 dark:border-white/10'
                             } flex items-center justify-center shrink-0 mt-0.5`}>
-                              {msg.isSellerReply ? <Store size={15} /> : <Sparkles size={15} />}
+                              {msg.isSellerReply ? <Store size={15} /> : receiptData ? <ShieldCheck size={16} /> : <Sparkles size={15} />}
                             </div>
                           )}
 
@@ -2656,11 +2775,13 @@ export default function PayAI() {
                                   ? 'neu-card bg-[var(--bg-primary)] text-[var(--text-main)] font-medium px-5 py-3.5 rounded-3xl rounded-tr-lg border border-[#006cff]/20 shadow-sm'
                                   : msg.isSellerReply
                                   ? 'neu-card p-4 rounded-3xl border border-purple-500/25'
+                                  : receiptData
+                                  ? 'w-full'
                                   : 'neu-card p-4 sm:p-5 rounded-3xl rounded-tl-lg text-[var(--text-main)] w-full border border-white/60 dark:border-white/[0.06] shadow-sm'
                               }`}
                             >
                               {/* One-time Drop Flare Light Sweep when AI response lands */}
-                              {!isUser && (
+                              {!isUser && !receiptData && (
                                 <motion.div
                                   initial={{ x: '-120%', opacity: 0.8 }}
                                   animate={{ x: '220%', opacity: 0 }}
@@ -2670,6 +2791,17 @@ export default function PayAI() {
                               )}
                               {isUser ? (
                                 <div className="whitespace-pre-wrap break-words">{msg.content}</div>
+                              ) : receiptData ? (
+                                <OfficialReceiptCard
+                                  message={msg}
+                                  onTrackOrder={(trackingCode, orderNumber) => {
+                                    setTrackingSearchCode(trackingCode || orderNumber);
+                                    switchTab('tracking', 1);
+                                  }}
+                                  onAskAI={(prompt) => {
+                                    handleSendMessage(prompt);
+                                  }}
+                                />
                               ) : (
                                 <MarkdownContent content={msg.content} onAction={handleChatAction} isSending={isSending} />
                               )}
@@ -3191,16 +3323,23 @@ export default function PayAI() {
                                 </div>
 
                                 <div className="space-y-2">
-                                  {items.map((it, itemIdx) => (
+                                  {items.map((it, itemIdx) => {
+                                      const itemImg = it.imageUrl || it.image || '';
+                                      const resolvedImg = resolveProductImage(itemImg, it.title || '', it.category || '');
+                                      return (
                                     <div key={it.id || it.productId || itemIdx} className="flex items-center gap-3 p-3 rounded-2xl neu-card-pressed">
                                       <img
-                                        src={it.imageUrl || 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?auto=format&fit=crop&w=400&q=80'}
-                                        alt={it.title}
+                                        src={resolvedImg}
+                                        alt={it.title || 'Product'}
                                         className="w-11 h-11 rounded-xl object-cover border border-[var(--border-subtle)] shrink-0"
+                                        onError={(e) => {
+                                          e.currentTarget.onerror = null;
+                                          e.currentTarget.src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=200&q=80';
+                                        }}
                                       />
                                       <div className="min-w-0 flex-1">
                                         <div className="flex items-center justify-between gap-2">
-                                          <h4 className="text-xs font-bold text-[var(--text-main)] truncate">{it.title}</h4>
+                                          <h4 className="text-xs font-bold text-[var(--text-main)] truncate">{it.title || 'W-Commerce Item'}</h4>
                                           <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 shrink-0">
                                             {it.currency === 'USD' ? `$${Number(it.price).toFixed(2)}` : `₦${Number(it.price || 0).toLocaleString()}`}
                                           </span>
@@ -3214,7 +3353,8 @@ export default function PayAI() {
                                         </p>
                                       </div>
                                     </div>
-                                  ))}
+                                      );
+                                    })}
                                 </div>
 
                                 <div className="flex items-center gap-2.5 flex-wrap pt-1">
@@ -3340,32 +3480,55 @@ export default function PayAI() {
 
                             {/* Standalone Interactive Payment & Escrow Card for Checkout/Wallet Intent */}
                             {!deal && !warehouseInsp && !cartItem && !walletInquiry && !isUser && (hasPaymentOrCheckoutIntent(msg.content) || checkoutGuidance) && (() => {
+                              // Never render a checkout card for completed orders or official receipts
+                              const isOrderReceiptOrCompletion =
+                                /Official\s+Purchase\s+Receipt|Order\s+Summary:|Order\s+Confirmed|Payment\s+Authorized|PAID_IN_ESCROW|Order\s+Confirmed\s+Delivered/i.test(msg.content) ||
+                                (typeof msg.toolResults === 'string' && (msg.toolResults.includes('"isReceipt"') || msg.toolResults.includes('"status":"VERIFIED"')));
+                              if (isOrderReceiptOrCompletion) return null;
+
                               const rawProductMatch = msg.content.match(/\*\*([A-Za-z0-9\s-]{3,40})\*\*/);
-                              const genericBlacklist = ['Escrow', 'Payment', 'Safe', 'Security', 'Protection', 'Wallet', 'Paystack', 'Monnify', 'W-Commerce', 'Rest easy'];
+                              const genericBlacklist = ['Escrow', 'Payment', 'Safe', 'Security', 'Protection', 'Wallet', 'Paystack', 'Monnify', 'W-Commerce', 'Rest easy', 'PayPal', 'Paypal', 'Order'];
                               const validExtractedProduct = rawProductMatch && !genericBlacklist.includes(rawProductMatch[1]?.trim())
                                 ? rawProductMatch[1].trim()
                                 : null;
                               const displayProductTitle = checkoutGuidance?.productTitle || validExtractedProduct;
+                              const isPayPal = Boolean(checkoutGuidance?.isPayPalCheckout || /paypal|pay\s*pal/i.test(msg.content));
+                              const rawExtractedNGN = extractAmountFromText(msg.content)?.numeric;
+                              const totalNGNAmt = Number(checkoutGuidance?.amountNGN || rawExtractedNGN || 18000);
+                              const totalUSDAmt = checkoutGuidance?.amountUSD || Number((totalNGNAmt / 1480).toFixed(2));
+
                               return (
                               <div className="w-full mt-3 p-5 rounded-3xl neu-card border border-[var(--border-subtle)] space-y-3.5">
                                 <div className="flex items-center justify-between gap-2 flex-wrap">
                                   <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full flex items-center gap-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                                      <ShieldCheck size={11} /> Escrow Protected Checkout
+                                    <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full flex items-center gap-1 ${
+                                      isPayPal
+                                        ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                                        : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                                    }`}>
+                                      <ShieldCheck size={11} /> {isPayPal ? 'PayPal Escrow Protected Checkout' : 'Escrow Protected Checkout'}
                                     </span>
                                   </div>
-                                  {(checkoutGuidance?.amountNGN || extractAmountFromText(msg.content)) && (
-                                    <div className="text-right">
-                                      <div className="text-base font-black text-[var(--text-main)]">
-                                        {checkoutGuidance?.amountNGN ? `₦${Number(checkoutGuidance.amountNGN).toLocaleString()} NGN` : extractAmountFromText(msg.content)?.formatted}
-                                      </div>
+                                  <div className="text-right">
+                                    <div className="text-base font-black text-[var(--text-main)]">
+                                      {isPayPal ? `$${totalUSDAmt} USD` : `₦${Number(totalNGNAmt).toLocaleString()} NGN`}
                                     </div>
-                                  )}
+                                    {isPayPal && (
+                                      <div className="text-[10px] font-medium text-[var(--text-muted)]">
+                                        ≈ ₦{Number(totalNGNAmt).toLocaleString()} NGN
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
 
                                 {displayProductTitle && (
                                   <div className="text-xs font-bold text-[var(--text-main)] flex items-center gap-2 px-3 py-2 rounded-xl neu-card-pressed">
-                                    <Package size={13} className="text-[#006cff] shrink-0" />
+                                    <img
+                                      src={resolveProductImage(checkoutGuidance?.imageUrl || '', displayProductTitle, checkoutGuidance?.category || '')}
+                                      alt={displayProductTitle}
+                                      className="w-8 h-8 rounded-lg object-cover shrink-0"
+                                      onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=200&q=80'; }}
+                                    />
                                     <span className="truncate">{displayProductTitle}</span>
                                     {checkoutGuidance?.storeName && (
                                       <span className="text-[10px] text-[var(--text-muted)] shrink-0">• {checkoutGuidance.storeName}</span>
@@ -3374,57 +3537,60 @@ export default function PayAI() {
                                 )}
 
                                 <p className="text-[11px] font-medium text-[var(--text-muted)] leading-snug">
-                                  Pay via <strong>Paystack</strong>, <strong>Monnify</strong>, or <strong>W-Commerce Wallet</strong>. Funds stay locked in Escrow until delivery is confirmed.
+                                  {isPayPal ? (
+                                    <>Pay via <strong className="text-amber-600 dark:text-amber-400">PayPal (USD)</strong>, <strong>W-Commerce Wallet</strong>, or <strong>Paystack</strong>. Funds stay locked in Escrow until delivery is confirmed.</>
+                                  ) : (
+                                    <>Pay via <strong>Paystack</strong>, <strong>Monnify</strong>, or <strong>W-Commerce Wallet</strong>. Funds stay locked in Escrow until delivery is confirmed.</>
+                                  )}
                                 </p>
 
                                 <div className="flex items-center gap-2.5 flex-wrap pt-1">
+                                  {/* PayPal Checkout Button */}
                                   <button
                                     type="button"
-                                    onClick={() => handleChatAction({
-                                      label: 'Proceed to Secure Checkout',
-                                      url: '#'
-                                    })}
-                                    className="flex-1 min-w-[140px] py-2.5 px-4 rounded-xl bg-[#006cff] hover:bg-[#0057d9] text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-[0_6px_16px_rgba(0,108,255,0.25)] cursor-pointer transition-all"
+                                    onClick={() => {
+                                      handleProceedToCheckout({
+                                        total: totalUSDAmt,
+                                        totalNGN: totalNGNAmt,
+                                        productTitle: displayProductTitle || 'W-Commerce Order',
+                                        storeName: checkoutGuidance?.storeName || 'Verified Merchant',
+                                        items: cart?.items || []
+                                      });
+                                    }}
+                                    className={`flex-1 min-w-[150px] py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                                      isPayPal
+                                        ? 'bg-[#ffc439] hover:bg-[#f4b628] text-[#003087] font-black shadow-[0_6px_16px_rgba(255,196,57,0.35)]'
+                                        : 'bg-[#0070ba] hover:bg-[#003087] text-white shadow-[0_6px_16px_rgba(0,112,186,0.25)]'
+                                    }`}
                                   >
-                                    <Lock size={12} className="shrink-0" />
-                                    <span>Secure Checkout</span>
+                                    <CreditCard size={13} className="shrink-0" />
+                                    <span>Pay with PayPal (${totalUSDAmt})</span>
                                   </button>
 
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      const extracted = checkoutGuidance?.amountNGN
-                                        ? { formatted: `₦${Number(checkoutGuidance.amountNGN).toLocaleString()} NGN` }
-                                        : extractAmountFromText(msg.content);
                                       handleChatAction({
-                                        label: extracted ? `Confirm & Pay ${extracted.formatted} from Wallet` : 'Confirm & Pay from Wallet',
+                                        label: `Confirm & Pay ₦${Number(totalNGNAmt).toLocaleString()} NGN from Wallet`,
                                         url: '#'
                                       });
                                     }}
                                     className="flex-1 min-w-[140px] py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-[0_6px_16px_rgba(16,185,129,0.25)] cursor-pointer transition-all"
                                   >
                                     <Wallet size={12} className="shrink-0" />
-                                    <span>
-                                      {checkoutGuidance?.amountNGN
-                                        ? `Pay ₦${Number(checkoutGuidance.amountNGN).toLocaleString()} from Wallet`
-                                        : extractAmountFromText(msg.content)
-                                        ? `Pay ${extractAmountFromText(msg.content).formatted} from Wallet`
-                                        : 'Pay with Wallet'}
-                                    </span>
+                                    <span>Pay ₦{Number(totalNGNAmt).toLocaleString()} from Wallet</span>
                                   </button>
 
                                   <button
                                     type="button"
-                                    onClick={() => {
-                                      handleChatAction({
-                                        label: 'Add to Cart',
-                                        url: '#'
-                                      });
-                                    }}
-                                    className="py-2.5 px-4 rounded-xl neu-button text-[var(--text-main)] text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all"
+                                    onClick={() => handleChatAction({
+                                      label: 'Proceed to Secure Checkout',
+                                      url: '#'
+                                    })}
+                                    className="py-2.5 px-4 rounded-xl neu-button text-[var(--text-main)] hover:text-[#006cff] text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all"
                                   >
-                                    <ShoppingBag size={12} />
-                                    <span>Add to Cart</span>
+                                    <Lock size={12} className="shrink-0" />
+                                    <span>Paystack / Monnify</span>
                                   </button>
                                 </div>
                               </div>

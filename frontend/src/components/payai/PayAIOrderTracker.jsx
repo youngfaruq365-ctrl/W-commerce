@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { apiClient } from '../../utils/apiClient';
+import { resolveProductImage } from '../../utils/imageHelpers';
 
 // 7 Standard Milestones
 const MILESTONES = [
@@ -64,6 +65,29 @@ export default function PayAIOrderTracker({
       ...prev,
       [orderId]: !prev[orderId]
     }));
+  };
+
+  // Helper to safely format item price avoiding double FX conversion on Naira prices
+  const formatItemPrice = (price, currency = 'NGN') => {
+    const raw = Number(price) || 0;
+    const curr = (currency || 'NGN').toUpperCase();
+
+    // If already in Naira (or numeric value >= 500 which indicates NGN)
+    if (curr === 'NGN' || curr === '₦' || curr === 'NAIRA' || (raw >= 500 && curr !== 'USD')) {
+      return `₦${Math.round(raw).toLocaleString()} NGN`;
+    }
+
+    if (curr === 'USD' || curr === '$') {
+      if (formatLocalPrice) return formatLocalPrice(raw, 'USD');
+      return `$${raw.toFixed(2)} USD`;
+    }
+
+    if (curr === 'GHS') return `GH₵${raw.toFixed(2)}`;
+    if (curr === 'KES') return `KSh${Math.round(raw).toLocaleString()}`;
+    if (curr === 'GBP') return `£${raw.toFixed(2)}`;
+
+    if (formatLocalPrice) return formatLocalPrice(raw, curr);
+    return `₦${Math.round(raw).toLocaleString()} NGN`;
   };
 
   const getStepProgressIndex = (status) => {
@@ -305,8 +329,8 @@ export default function PayAIOrderTracker({
           </div>
         ) : (
           filteredShipments.map((shipment) => {
-            const currentStepIdx = getStepProgressIndex(shipment.status);
-            const isCancelled = shipment.status === 'CANCELLED';
+            const currentStepIdx = getStepProgressIndex(shipment.status || shipment.fulfillmentStatus || 'CONFIRMED');
+            const isCancelled = (shipment.status || shipment.fulfillmentStatus) === 'CANCELLED';
             const orderKey = shipment.trackingNumber || shipment.orderNumber || shipment.id;
             const isExpanded = !!expandedOrders[orderKey];
 
@@ -367,21 +391,26 @@ export default function PayAIOrderTracker({
                 {/* Optional Items Preview Strip */}
                 {Array.isArray(shipment.items) && shipment.items.length > 0 && (
                   <div className="flex items-center gap-2 mb-3 overflow-x-auto hide-scrollbar py-1">
-                    {shipment.items.slice(0, 4).map((it, idx) => (
-                      <div key={idx} className="flex items-center gap-2 bg-black/5 dark:bg-white/[0.04] p-1.5 rounded-xl border border-[var(--border-color)] text-xs shrink-0">
-                        {it.imageUrl ? (
-                          <img src={it.imageUrl} alt={it.title} className="w-8 h-8 rounded-lg object-cover" />
-                        ) : (
-                          <div className="w-8 h-8 rounded-lg bg-gray-200 dark:bg-gray-800 flex items-center justify-center text-[var(--text-muted)]">
-                            <Box size={14} />
+                    {shipment.items.slice(0, 4).map((it, idx) => {
+                      const resolvedImg = resolveProductImage(it.imageUrl || it.image || '', it.title || '', it.category || '');
+                      return (
+                        <div key={idx} className="flex items-center gap-2 bg-black/5 dark:bg-white/[0.04] p-1.5 rounded-xl border border-[var(--border-color)] text-xs shrink-0">
+                          <img
+                            src={resolvedImg}
+                            alt={it.title || 'Product'}
+                            className="w-8 h-8 rounded-lg object-cover shrink-0"
+                            onError={(e) => {
+                              e.currentTarget.onerror = null;
+                              e.currentTarget.src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=200&q=80';
+                            }}
+                          />
+                          <div className="max-w-[150px] truncate">
+                            <p className="font-bold truncate text-[11px] text-[var(--text-main)]">{it.title || 'W-Commerce Item'}</p>
+                            <p className="text-[10px] text-[var(--text-muted)]">Qty: {it.quantity || 1} • {formatItemPrice(it.price, it.currency || shipment.currency)}</p>
                           </div>
-                        )}
-                        <div className="max-w-[150px] truncate">
-                          <p className="font-bold truncate text-[11px] text-[var(--text-main)]">{it.title}</p>
-                          <p className="text-[10px] text-[var(--text-muted)]">Qty: {it.quantity} • {formatLocalPrice ? formatLocalPrice(it.price, it.currency) : `₦${it.price}`}</p>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     {shipment.items.length > 4 && (
                       <span className="text-xs font-bold text-[var(--text-muted)] px-2">+{shipment.items.length - 4} more</span>
                     )}

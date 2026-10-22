@@ -294,7 +294,7 @@ class PayAIController {
 
   // --- Payments ---
   async createPayPalOrder(req, res) {
-    const { quoteId, approvalId, returnUrl, cancelUrl, cartId, amount, currency, items } = req.body;
+    const { quoteId, approvalId, returnUrl, cancelUrl, cartId, sessionId, amount, currency, items } = req.body;
     const userId = req.user?.id || null;
 
     try {
@@ -302,6 +302,7 @@ class PayAIController {
         quoteId,
         approvalId,
         userId,
+        sessionId,
         returnUrl,
         cancelUrl,
         cartId,
@@ -317,13 +318,14 @@ class PayAIController {
 
   async capturePayPalOrder(req, res) {
     const { id } = req.params; // PayPal order ID
-    const { internalOrderId, simulatedFailure, providerOrderId, sellerId } = req.body;
+    const { internalOrderId, simulatedFailure, providerOrderId, sellerId, sessionId } = req.body;
     const effectiveOrderId = id || providerOrderId;
 
     try {
       const result = await paypalPaymentService.capturePayPalOrder({
         providerOrderId: effectiveOrderId,
         internalOrderId,
+        sessionId,
         simulatedFailure: Boolean(simulatedFailure),
         sellerId
       });

@@ -8,7 +8,7 @@ class PaypalPaymentService {
   /**
    * Create a PayPal Sandbox checkout order from an approved quote or direct checkout request
    */
-  async createPayPalOrder({ quoteId, approvalId, userId, returnUrl, cancelUrl, cartId, amount, currency = 'USD', items = [] }) {
+  async createPayPalOrder({ quoteId, approvalId, userId, returnUrl, cancelUrl, cartId, sessionId, amount, currency = 'USD', items = [] }) {
     // 1. Revalidate or Auto-Create Quote
     let quote = null;
     if (quoteId) {
@@ -20,6 +20,16 @@ class PaypalPaymentService {
       } catch (e) {
         logger.warn(`[PayAI:PayPal] Quote validation notice: ${e.message}`);
       }
+    }
+
+    let effectiveCartId = cartId;
+    if (!effectiveCartId && (userId || sessionId)) {
+      try {
+        const userCart = await prisma.payAICart.findFirst({
+          where: userId ? { userId } : { sessionId }
+        });
+        if (userCart) effectiveCartId = userCart.id;
+      } catch (_) {}
     }
 
     if (!quote) {
@@ -34,7 +44,7 @@ class PaypalPaymentService {
         data: {
           quoteNumber,
           userId: userId || null,
-          cartId: cartId || null,
+          cartId: effectiveCartId || null,
           marketCode: 'W_COMMERCE_DIRECT',
           currency: currency || 'USD',
           subtotal,
@@ -189,7 +199,7 @@ class PaypalPaymentService {
    * Server-Side Capture of PayPal Order
    * Strictly enforces amount, currency (USD), calculates seller NGN payout into escrow, and prevents duplicate captures
    */
-  async capturePayPalOrder({ providerOrderId, internalOrderId, simulatedFailure = false, sellerId = null }) {
+  async capturePayPalOrder({ providerOrderId, internalOrderId, simulatedFailure = false, sellerId = null, sessionId = null }) {
     if (!providerOrderId) throw new Error('PayPal providerOrderId is required for capture.');
 
     // 1. Locate internal order safely without undefined query clauses
@@ -202,7 +212,7 @@ class PaypalPaymentService {
       where: {
         OR: whereConditions
       },
-      include: { payments: true, quote: true, events: true }
+      include: { payments: true, quote: { include: { cart: true } }, events: true }
     });
 
     if (!order) {
@@ -213,7 +223,7 @@ class PaypalPaymentService {
           paymentProvider: 'PAYPAL'
         },
         orderBy: { createdAt: 'desc' },
-        include: { payments: true, quote: true, events: true }
+        include: { payments: true, quote: { include: { cart: true } }, events: true }
       });
     }
 
@@ -321,6 +331,7 @@ class PaypalPaymentService {
 
     const providerCaptureId = `CAPTURE-${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
     const trackingNumber = order.trackingNumber || `DHL-EXP-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+    const primaryItemTitle = items[0]?.title || items[0]?.name || order.quote?.productTitle || 'W-Commerce Verified Item';
 
     // 6. Atomic DB Transaction to record verified payment, hold escrow, and advance order
     const [paymentRecord, updatedOrder] = await prisma.$transaction([
@@ -385,6 +396,79 @@ class PaypalPaymentService {
       });
     }
 
+    // 7. Clear user cart (both PayAICart and main Cart)
+    try {
+      const effectiveUserId = order.userId || order.quote?.userId;
+      const effectiveCartId = order.quote?.cartId;
+      if (effectiveCartId) {
+        await prisma.payAICartItem.deleteMany({ where: { cartId: effectiveCartId } }).catch(() => {});
+      }
+      if (effectiveUserId) {
+        const userCarts = await prisma.payAICart.findMany({ where: { userId: effectiveUserId } });
+        const cIds = userCarts.map(c => c.id);
+        if (cIds.length > 0) {
+          await prisma.payAICartItem.deleteMany({ where: { cartId: { in: cIds } } }).catch(() => {});
+        }
+        const mainCart = await prisma.cart.findUnique({ where: { userId: effectiveUserId } }).catch(() => null);
+        if (mainCart) {
+          await prisma.cartItem.deleteMany({ where: { cartId: mainCart.id } }).catch(() => {});
+        }
+      }
+    } catch (cartErr) {
+      logger.warn(`[PayAI:PayPal] Cart clear notice: ${cartErr.message}`);
+    }
+
+    // 8. Generate and persist Official AI Purchase Receipt in PayAI Session
+    let generatedReceiptMessage = null;
+    try {
+      let targetSessionId = sessionId || order.quote?.cart?.sessionId;
+      if (!targetSessionId && order.userId) {
+        const latestSession = await prisma.payAISession.findFirst({
+          where: { userId: order.userId },
+          orderBy: { updatedAt: 'desc' }
+        });
+        targetSessionId = latestSession?.id;
+      }
+
+      if (targetSessionId) {
+        const receiptMarkdown =
+          `🧾 **Official Purchase Receipt & Escrow Guarantee**\n\n` +
+          `Thank you! Your payment via **PayPal** has been verified and securely locked in the W-Commerce Escrow Vault.\n\n` +
+          `📦 **Order Summary:**\n` +
+          `- **Order Number:** \`${updatedOrder.orderNumber}\`\n` +
+          `- **Payment Method:** PayPal (USD)\n` +
+          `- **Amount Paid:** **$${expectedAmount.toFixed(2)} USD**\n` +
+          `- **Seller Payout:** **₦${sellerPayoutNgn.toLocaleString()} NGN** (Exchange rate: ${exchangeRate} NGN/USD)\n` +
+          `- **Escrow Status:** **PAID_IN_ESCROW** (100% Buyer Protection active) 🛡️\n` +
+          `- **Fulfillment Status:** **CONFIRMED & QUEUED FOR DISPATCH** ⚡\n` +
+          `- **Carrier:** **DHL Express International**\n` +
+          `- **Tracking Number:** \`${trackingNumber}\`\n\n` +
+          `Funds will only be released to the seller after your order is delivered and confirmed. You can check your delivery checkpoints live anytime in the **Live Tracking** tab or ask me: *"Track order ${updatedOrder.orderNumber}"*!`;
+
+        generatedReceiptMessage = await prisma.payAIMessage.create({
+          data: {
+            sessionId: targetSessionId,
+            role: 'assistant',
+            content: receiptMarkdown,
+            toolResults: JSON.stringify({
+              isReceipt: true,
+              orderNumber: updatedOrder.orderNumber,
+              orderId: updatedOrder.id,
+              itemTitle: primaryItemTitle,
+              trackingNumber,
+              carrier: 'DHL Express International',
+              amountUSD: expectedAmount,
+              sellerPayoutNGN: sellerPayoutNgn,
+              exchangeRate,
+              fulfillmentStatus: 'CONFIRMED'
+            })
+          }
+        });
+      }
+    } catch (msgErr) {
+      logger.warn(`[PayAI:PayPal] AI receipt generation notice: ${msgErr.message}`);
+    }
+
     // Non-blocking audit log
     await prisma.payAIAuditLog.create({
       data: {
@@ -419,8 +503,14 @@ class PaypalPaymentService {
       sellerPayoutNgn,
       exchangeRate,
       sellerId: targetSellerId,
+      itemTitle: primaryItemTitle,
       trackingNumber,
-      carrier: 'DHL Express International'
+      carrier: 'DHL Express International',
+      receiptMessage: generatedReceiptMessage ? {
+        id: generatedReceiptMessage.id,
+        content: generatedReceiptMessage.content,
+        createdAt: generatedReceiptMessage.createdAt
+      } : null
     };
   }
 

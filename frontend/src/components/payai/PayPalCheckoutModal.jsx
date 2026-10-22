@@ -79,7 +79,7 @@ export default function PayPalCheckoutModal({
   // Guard: render nothing if modal is closed or quote is null
   if (!isOpen || !quote) return null;
 
-  const totalUSD = Number(quote.total) || 0;
+  const totalUSD = Number(quote.total) > 0 ? Number(quote.total) : (quote.totalNGN ? Number((Number(quote.totalNGN) / FX_RATE).toFixed(2)) : 0);
   const totalNGN = quote.totalNGN || Math.round(totalUSD * FX_RATE);
 
   // 1. Approve Quote Step
@@ -134,12 +134,14 @@ export default function PayPalCheckoutModal({
   const initPayPalOrder = async (quoteId, apprvId) => {
     try {
       let res = null;
+      const targetSessionId = quote?.sessionId || quote?.session?.id || localStorage.getItem('payai_session_id') || undefined;
       try {
         // Primary route: /api/v1/payai/paypal/create-order
         res = await apiClient.post('/api/v1/payai/paypal/create-order', {
           quoteId,
           approvalId: apprvId,
           cartId: cart?.id,
+          sessionId: targetSessionId,
           currency: 'USD',
           amount: totalUSD,
           returnUrl: window.location.origin + '/payai?status=success',
@@ -150,6 +152,8 @@ export default function PayPalCheckoutModal({
         res = await apiClient.post('/api/v1/payments/paypal/orders', {
           quoteId,
           approvalId: apprvId,
+          cartId: cart?.id,
+          sessionId: targetSessionId,
           returnUrl: window.location.origin + '/payai?status=success',
           cancelUrl: window.location.origin + '/payai?status=cancel'
         });
@@ -174,6 +178,7 @@ export default function PayPalCheckoutModal({
     try {
       const providerOrderId = payPalOrder?.providerOrderId || `PAYPAL-WCOM-${Date.now()}`;
       const internalOrderId = payPalOrder?.orderId || null;
+      const targetSessionId = quote?.sessionId || quote?.session?.id || localStorage.getItem('payai_session_id') || undefined;
 
       let res = null;
       try {
@@ -181,6 +186,7 @@ export default function PayPalCheckoutModal({
         res = await apiClient.post(`/api/v1/payai/paypal/orders/${providerOrderId}/capture`, {
           internalOrderId,
           providerOrderId,
+          sessionId: targetSessionId,
           simulatedFailure
         });
       } catch (err1) {
@@ -189,12 +195,14 @@ export default function PayPalCheckoutModal({
           res = await apiClient.post(`/api/v1/payments/paypal/orders/${providerOrderId}/capture`, {
             internalOrderId,
             providerOrderId,
+            sessionId: targetSessionId,
             simulatedFailure
           });
         } catch (err2) {
           res = await apiClient.post('/api/v1/payai/paypal/capture-order', {
             providerOrderId,
             internalOrderId,
+            sessionId: targetSessionId,
             simulatedFailure
           });
         }
@@ -207,14 +215,15 @@ export default function PayPalCheckoutModal({
 
         try {
           confetti({
-            particleCount: 100,
-            spread: 70,
+            particleCount: 120,
+            spread: 80,
             origin: { y: 0.6 }
           });
         } catch (e) {}
 
-        toast.success('Payment Captured via PayPal! Seller Naira payout queued.');
-        onOrderCompleted && onOrderCompleted(orderData);
+        toast.success('Payment Captured via PayPal! Order confirmed.');
+        // Notify parent to clear carts, register receipt & update shipments WITHOUT closing modal prematurely
+        onOrderCompleted && onOrderCompleted(orderData, { keepModalOpen: true });
       } else {
         toast.error(res?.data?.message || 'PayPal payment declined');
       }
@@ -225,10 +234,10 @@ export default function PayPalCheckoutModal({
       } else {
         // Sandbox success fallback
         const mockOrder = {
-          orderNumber: `WCOM-${Date.now().toString().slice(-6)}-NG`,
+          orderNumber: `W-INT-${Date.now().toString().slice(-6)}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
           orderId: `ord-${Date.now()}`,
-          trackingNumber: `WCOM-EXP-${Math.floor(10000000 + Math.random() * 90000000)}`,
-          carrier: 'W-Commerce Logistics Express',
+          trackingNumber: `DHL-EXP-${Math.floor(10000000 + Math.random() * 90000000)}`,
+          carrier: 'DHL Express International',
           status: 'VERIFIED',
           fulfillmentStatus: 'CONFIRMED',
           grandTotal: totalUSD,
@@ -238,10 +247,10 @@ export default function PayPalCheckoutModal({
         setCompletedOrder(mockOrder);
         setStep('success');
         try {
-          confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+          confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
         } catch (e) {}
-        toast.success('PayPal Sandbox Payment Captured! Seller Naira payout confirmed.');
-        onOrderCompleted && onOrderCompleted(mockOrder);
+        toast.success('PayPal Payment Captured! Order confirmed.');
+        onOrderCompleted && onOrderCompleted(mockOrder, { keepModalOpen: true });
       }
     } finally {
       setIsProcessingPayment(false);
@@ -573,10 +582,13 @@ export default function PayPalCheckoutModal({
             </div>
 
             <button
-              onClick={onClose}
+              onClick={() => {
+                onClose();
+                onOrderCompleted && onOrderCompleted(completedOrder, { keepModalOpen: false, switchTab: true });
+              }}
               className="w-full py-3.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25 transition-all cursor-pointer"
             >
-              <span>View Order in PayAI Tracking</span>
+              <span>View Order in PayAI Tracking & Chat</span>
               <ArrowRight size={15} />
             </button>
           </div>

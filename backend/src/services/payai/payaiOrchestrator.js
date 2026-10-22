@@ -69,8 +69,23 @@ class PayAIOrchestrator {
    * Process a shopping prompt through the PayAI tool-assisted engine
    */
   async handleUserMessage({ sessionId, userId, userMessage, content, message, productId, proposedPrice, actionType, quantity }) {
-    const session = await prisma.payAISession.findUnique({ where: { id: sessionId } });
-    if (!session) throw new Error('PayAI session not found');
+    let session = null;
+    if (sessionId) {
+      session = await prisma.payAISession.findUnique({ where: { id: sessionId } });
+    }
+    if (!session) {
+      if (userId) {
+        session = await prisma.payAISession.findFirst({
+          where: { userId, status: 'ACTIVE' },
+          orderBy: { updatedAt: 'desc' }
+        });
+      }
+      if (!session) {
+        const created = await this.createSession({ userId });
+        session = created?.session || created;
+      }
+      sessionId = session.id;
+    }
 
     const finalMessage = userMessage || content || message || '';
 
@@ -340,10 +355,11 @@ class PayAIOrchestrator {
               }
             });
             if (selectedProduct) {
+              const safeImg = safeImageUrl(selectedProduct) || selectedProduct.imageUrl || selectedProduct.images?.[0]?.url || 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?auto=format&fit=crop&w=800&q=80';
               selectedProduct = {
                 ...selectedProduct,
                 productId: selectedProduct.id,
-                imageUrl: selectedProduct.imageUrl || selectedProduct.images?.[0]?.url || 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?auto=format&fit=crop&w=800&q=80',
+                imageUrl: safeImg,
                 canNegotiate: true,
                 inStock: (selectedProduct.stock ?? 1) > 0,
                 seller: {
@@ -354,7 +370,38 @@ class PayAIOrchestrator {
           } catch (_) {}
         }
 
-        // 2. If not found by targetId, search via catalogSearchService
+        // 2. Direct exact or substring title match from database FIRST!
+        if (!selectedProduct && query) {
+          const cleanQ = query.trim();
+          try {
+            const directMatch = await prisma.product.findFirst({
+              where: {
+                isArchived: false,
+                OR: [
+                  { title: { equals: cleanQ } },
+                  { normalizedTitle: { equals: cleanQ.toLowerCase() } },
+                  { title: { contains: cleanQ } }
+                ]
+              },
+              include: { store: true, images: true }
+            });
+            if (directMatch) {
+              const safeImg = safeImageUrl(directMatch) || directMatch.imageUrl || directMatch.images?.[0]?.url || 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?auto=format&fit=crop&w=800&q=80';
+              selectedProduct = {
+                ...directMatch,
+                productId: directMatch.id,
+                imageUrl: safeImg,
+                canNegotiate: true,
+                inStock: (directMatch.stock ?? 1) > 0,
+                seller: {
+                  name: directMatch.store?.storeName || 'Verified Local Merchant'
+                }
+              };
+            }
+          } catch (_) {}
+        }
+
+        // 3. If not found by direct match, search via catalogSearchService
         if (!selectedProduct && query) {
           const searchRes = await catalogSearchService.search({
             marketCode,
@@ -1998,15 +2045,22 @@ class PayAIOrchestrator {
           }
         }
 
+        const isPayPal = Boolean(toolArgs?.isPayPalIntent || (typeof toolArgs?.prompt === 'string' && /paypal|pay\s*pal/i.test(toolArgs.prompt)));
+        const amountUSD = Number((lastAmountNGN / 1480).toFixed(2));
+
         return {
           checkoutReady: true,
           isWalletCheckout: true,
+          isPayPalCheckout: isPayPal,
           amountNGN: lastAmountNGN,
+          amountUSD: amountUSD,
           productTitle: lastProductTitle,
           storeName: lastStoreName,
           productId: lastProductId,
           imageUrl: lastImageUrl,
-          supportedGateways: ['Paystack', 'Monnify', 'Wallet', 'Cash on Delivery']
+          supportedGateways: isPayPal
+            ? ['PayPal', 'Wallet', 'Paystack', 'Monnify']
+            : ['Paystack', 'Monnify', 'Wallet', 'Cash on Delivery']
         };
       }
 
@@ -3016,9 +3070,19 @@ class PayAIOrchestrator {
       /\bcan\s+i\s+(?:pay|give|do|offer)\s+[0-9]+/i.test(lower) ||
       /\bfor\s+.+?\s+can\s+i\s+pay\b/i.test(lower);
 
+    const isPayPalSpecificInquiry =
+      lower.includes('paypal') ||
+      lower.includes('pay pal') ||
+      /\bpay\s+(?:with|using|via|through|by)\s+pay\s*pal\b/i.test(lower);
+
     const isPaymentMethodInquiry =
       /\bcan\s+i\s+(?:also\s+)?pay\s+(?:with|using|via|through|by)\s+(?:paystack|monnify|card|debit|credit|transfer|bank|ussd|cash|cod|delivery|wallet|crypto|paypal|opay|palmpay)\b/i.test(lower) ||
       /\b(?:how\s+(?:do\s+i|can\s+i)\s+pay|where\s+(?:is\s+the\s+button|to\s+click|do\s+i\s+click)|which\s+button|ready\s+to\s+pay|pay\s+with\s+paystack|action\s+card)\b/i.test(lower);
+
+    // PayPal-specific inquiry takes precedence
+    if (isPayPalSpecificInquiry && !hasPriceOfferIndicators) {
+      return { toolName: 'guide_checkout_button', toolArgs: { prompt: text, isPayPalIntent: true } };
+    }
 
     const isPaymentOrButtonGuidance =
       !hasPriceOfferIndicators && (
@@ -3975,7 +4039,8 @@ class PayAIOrchestrator {
           const dLocal = !drink.isExternal && (drink.provider === 'w-commerce' || !drink.provider);
           const dPrice = dLocal ? `₦${Number(drink.price).toLocaleString()} NGN` : `$${drink.price} USD`;
           const dStock = drink.inStock ? '✅ In stock' : '✅ Available';
-          const imgPart = drink.imageUrl ? `\n  ![${drink.title}](${drink.imageUrl})` : '';
+          const drinkImg = safeImageUrl(drink) || drink.imageUrl;
+          const imgPart = drinkImg ? `\n  ![${drink.title}](${drinkImg})` : '';
           return `- **${drink.title}** — **${dPrice}** (${dStock} | 🤝 *Negotiable*)\n  *Seller:* ${drink.seller?.name || 'Verified Local Merchant'}${imgPart}`;
         };
 
@@ -4012,7 +4077,8 @@ class PayAIOrchestrator {
           comboPrompt + `\n` +
           `- [Negotiate Price](prompt:Can you give me a discount on ${p.title}?)`;
 
-        const mainImage = p.imageUrl ? `\n\n![${p.title}](${p.imageUrl})` : '';
+        const safeImg = safeImageUrl(p) || p.imageUrl;
+        const mainImage = safeImg ? `\n\n![${p.title}](${safeImg})` : '';
 
         return `${ack}${mainImage}${pairingsSection}${quickActions}`;
       }
@@ -4266,7 +4332,8 @@ class PayAIOrchestrator {
           const negTag = item.canNegotiate ? '🤝 *Negotiable*' : '🔒 *Fixed Price*';
           const stockTag = item.inStock ? (item.isLowStock ? `⚠️ Only ${item.stock} left` : `✅ In stock (${item.stock})`) : (item.isExternal ? '✅ Available' : '❌ Out of stock');
           const sellerName = item.seller?.name || (isLocal ? 'Verified Local Merchant' : `${item.provider?.toUpperCase()} Store`);
-          const imgPart = item.imageUrl ? `\n  ![${item.title}](${item.imageUrl})` : '';
+          const safeImg = safeImageUrl(item) || item.imageUrl;
+          const imgPart = safeImg ? `\n  ![${item.title}](${safeImg})` : '';
           return `- **${item.title}** — **${priceDisplay}** (${stockTag} | ${negTag})\n  *Seller:* ${sellerName}${imgPart}`;
         };
 
@@ -4301,7 +4368,8 @@ class PayAIOrchestrator {
         }
         const statusIcon = result.available ? (result.isLowStock ? '⚠️' : '✅') : '❌';
         const negText = result.canNegotiate ? 'Price negotiation is available for this product 🤝' : 'Fixed price listing 🔒';
-        const imgPart = result.imageUrl ? `\n\n![${result.title}](${result.imageUrl})` : '';
+        const resImg = safeImageUrl(result) || result.imageUrl;
+        const imgPart = resImg ? `\n\n![${result.title}](${resImg})` : '';
         return `${statusIcon} **Real-Time Stock Check: "${result.title}"**\n- **Inventory Status:** ${result.reason}\n- **Current Stock:** ${result.stock} units available\n- **Unit Price:** ₦${result.price?.toLocaleString()} NGN\n- **Negotiation:** ${negText}\n- **Estimated Delivery:** ${result.estimatedDeliveryDays} business days (₦${result.shippingFee?.toLocaleString()} NGN standard shipping)${imgPart}`;
       }
 
@@ -4563,6 +4631,15 @@ class PayAIOrchestrator {
 
       case 'guide_checkout_button': {
         const priceDisplay = result?.amountNGN ? `₦${Number(result.amountNGN).toLocaleString()} NGN` : 'your order total';
+        const usdDisplay = result?.amountUSD ? `$${result.amountUSD} USD` : `$${(Number(result?.amountNGN || 18000) / 1480).toFixed(2)} USD`;
+        if (result?.isPayPalCheckout) {
+          return `👇 **Your PayPal & Escrow Checkout Controls Are Ready Below!**\n\n` +
+            `Yes! You can complete your purchase securely using **PayPal** (${usdDisplay} / ${priceDisplay}) with full buyer and seller escrow protection:\n` +
+            `• 🟡 **Pay with PayPal**: Instant international checkout via PayPal in USD.\n` +
+            `• 🟢 **Pay from Wallet**: One-click instant deduction in NGN from your W-Commerce Wallet.\n` +
+            `• 🔵 **Debit / Credit Card (Paystack / Monnify)**: Local card & bank transfer options.\n\n` +
+            `Funds remain securely held in the **W-Commerce Escrow Vault** and are only released to **${result?.storeName || 'the seller'}** after your delivery is verified and confirmed.`;
+        }
         return `👇 **Your Interactive Checkout Controls Are Ready Below!**\n\n` +
           `You can safely complete your purchase using any supported payment method:\n` +
           `• 🔵 **Secure Checkout (Paystack / Card)**: Complete payment securely using Paystack (Debit Card, Bank Transfer, USSD), Monnify, or Cash on Delivery (COD).\n` +

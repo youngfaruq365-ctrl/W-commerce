@@ -230,9 +230,9 @@ class CatalogSearchService {
       }
     }
 
-    this.applyValueScoring(primaryItems, effectiveDeadline, sortBy);
+    this.applyValueScoring(primaryItems, effectiveDeadline, sortBy, cleanQuery);
     if (secondaryItems.length > 0) {
-      this.applyValueScoring(secondaryItems, effectiveDeadline, sortBy);
+      this.applyValueScoring(secondaryItems, effectiveDeadline, sortBy, secondaryQuery);
     }
 
     const allItems = [...primaryItems, ...secondaryItems];
@@ -269,7 +269,8 @@ class CatalogSearchService {
   }
 
   async _searchLocalProducts({ query = '', category, limit = 16, page = 1, minPrice, maxPrice, inStockOnly = false }) {
-    const take = Number(limit) || 16;
+    const requestedTake = Number(limit) || 16;
+    const take = query && query.trim() ? Math.max(requestedTake * 4, 30) : requestedTake;
     const skip = ((Number(page) || 1) - 1) * take;
 
     // Strictly fetch products from verified or approved sellers
@@ -911,7 +912,7 @@ class CatalogSearchService {
    * Balances price (35%), seller rating (30%), stock health (15%), and delivery speed (20%)
    * Highlights 'Best Value' vs 'Budget Pick' and ranks by overall valueScore
    */
-  applyValueScoring(items = [], deadline = null, sortBy = 'value') {
+  applyValueScoring(items = [], deadline = null, sortBy = 'value', searchQuery = '') {
     if (!Array.isArray(items) || items.length === 0) return items;
 
     // 1. Calculate normalized prices for fair cross-currency price comparison
@@ -962,9 +963,29 @@ class CatalogSearchService {
         speedScore *= 0.4;
       }
 
-      // Composite Value Score (0 - 100)
+      // E. Title Relevance Score Boost
+      let relevanceBoost = 0;
+      if (searchQuery && typeof searchQuery === 'string') {
+        const cleanQuery = searchQuery.toLowerCase().trim();
+        const titleLower = (it.title || '').toLowerCase().trim();
+        if (titleLower === cleanQuery) {
+          relevanceBoost = 60;
+        } else if (titleLower.includes(cleanQuery) || cleanQuery.includes(titleLower)) {
+          relevanceBoost = 40;
+        } else {
+          const queryWords = cleanQuery.split(/\s+/).filter(w => w.length > 2 && !['want', 'need', 'give', 'like', 'food'].includes(w));
+          const matchedWords = queryWords.filter(w => titleLower.includes(w));
+          if (queryWords.length > 0 && matchedWords.length === queryWords.length) {
+            relevanceBoost = 35;
+          } else if (matchedWords.length > 0) {
+            relevanceBoost = (matchedWords.length / queryWords.length) * 20;
+          }
+        }
+      }
+
+      // Composite Value Score (0 - 100) + relevance boost
       const compositeRaw = (priceScore * 0.35) + (ratingScore * 0.30) + (stockScore * 0.15) + (speedScore * 0.20);
-      const valueScore = Math.round(compositeRaw * 100 * 10) / 10;
+      const valueScore = Math.round((compositeRaw * 100 + relevanceBoost) * 10) / 10;
 
       it.valueScore = valueScore;
       it.valueBreakdown = {
