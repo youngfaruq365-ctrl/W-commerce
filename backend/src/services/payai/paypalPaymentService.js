@@ -3,6 +3,7 @@ const prisma = require('../../utils/prismaClient');
 const logger = require('../../utils/logger');
 const pricingService = require('./pricingService');
 const crypto = require('crypto');
+const { resolveBackendProductImage, FALLBACK_PACKAGE_BOX_IMG } = require('../../utils/productImageHelper');
 
 class PaypalPaymentService {
   /**
@@ -32,6 +33,43 @@ class PaypalPaymentService {
       } catch (_) {}
     }
 
+    // Hydrate items if not passed directly
+    let resolvedItems = Array.isArray(items) && items.length > 0 ? [...items] : [];
+    if (resolvedItems.length === 0 && effectiveCartId) {
+      try {
+        const cartItems = await prisma.payAICartItem.findMany({
+          where: { cartId: effectiveCartId }
+        });
+        if (cartItems && cartItems.length > 0) {
+          resolvedItems = cartItems.map(ci => ({
+            id: ci.id,
+            productId: ci.productId,
+            title: ci.title,
+            price: Number(ci.price),
+            quantity: ci.quantity || 1,
+            imageUrl: ci.imageUrl,
+            currency: ci.currency || currency
+          }));
+        }
+      } catch (_) {}
+    }
+
+    if (resolvedItems.length === 0) {
+      const fallbackPrice = amount ? Number(amount) : 100;
+      resolvedItems = [{
+        title: 'W-Commerce Direct Order',
+        price: fallbackPrice,
+        quantity: 1,
+        imageUrl: FALLBACK_PACKAGE_BOX_IMG
+      }];
+    }
+
+    // Ensure all items have valid clean product images (never vegetable placeholders)
+    resolvedItems = resolvedItems.map(it => ({
+      ...it,
+      imageUrl: resolveBackendProductImage(it, it.imageUrl || it.image)
+    }));
+
     if (!quote) {
       // Find latest active quote or create a new quote on the fly
       const targetAmount = amount ? Number(amount) : 100;
@@ -55,7 +93,7 @@ class PaypalPaymentService {
           total: targetAmount,
           exchangeRate: pricingService.getExchangeRate('USD', 'NGN'),
           breakdown: JSON.stringify({ subtotal, shipping, duties, taxes: 0, serviceFee: 0.99, total: targetAmount }),
-          itemsSnapshot: JSON.stringify(Array.isArray(items) && items.length > 0 ? items : [{ title: 'W-Commerce Direct Order', price: subtotal, quantity: 1 }]),
+          itemsSnapshot: JSON.stringify(resolvedItems),
           expiresAt: new Date(Date.now() + 15 * 60 * 1000),
           status: 'APPROVED'
         }
@@ -140,6 +178,22 @@ class PaypalPaymentService {
 
     const orderNumber = `W-INT-${Date.now().toString().slice(-6)}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
 
+    // Clean and validate items snapshot to prevent broken or missing images
+    let finalItemsSnapshot = quote.itemsSnapshot;
+    try {
+      const parsedItems = typeof finalItemsSnapshot === 'string' ? JSON.parse(finalItemsSnapshot) : finalItemsSnapshot;
+      if (Array.isArray(parsedItems) && parsedItems.length > 0) {
+        finalItemsSnapshot = JSON.stringify(parsedItems.map(it => ({
+          ...it,
+          imageUrl: resolveBackendProductImage(it, it.imageUrl || it.image)
+        })));
+      } else {
+        finalItemsSnapshot = JSON.stringify(resolvedItems);
+      }
+    } catch (_) {
+      finalItemsSnapshot = JSON.stringify(resolvedItems);
+    }
+
     // 4. Create internal PayAIOrder with AWAITING_PAYMENT in USD
     const internalOrder = await prisma.payAIOrder.create({
       data: {
@@ -155,7 +209,7 @@ class PaypalPaymentService {
         paymentProvider: 'PAYPAL',
         paymentStatus: 'AWAITING_PAYMENT',
         fulfillmentStatus: 'AWAITING_PAYMENT',
-        itemsSnapshot: quote.itemsSnapshot,
+        itemsSnapshot: finalItemsSnapshot,
         idempotencyKey: providerOrderId,
         events: {
           create: {

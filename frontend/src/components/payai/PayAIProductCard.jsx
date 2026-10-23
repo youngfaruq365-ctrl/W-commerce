@@ -150,38 +150,36 @@ export default function PayAIProductCard({
         </div>
       )}
 
-      {/* Thumbnail image — always rendered, fades out when video plays */}
-      <img
-        src={thumbnailUrl}
-        alt={decodeHtml(offer.title)}
-        className={`absolute inset-0 w-full h-full object-cover transition-all duration-500 ease-out ${
-          imgLoaded ? 'opacity-100' : 'opacity-0'
-        } ${isPlayingVideo ? 'opacity-0' : 'group-hover:scale-105'}`}
-        loading="lazy"
-        onLoad={() => setImgLoaded(true)}
-        onError={(e) => {
-          e.currentTarget.src = thumbnailUrl;
-          setImgLoaded(true);
-        }}
-      />
-
-      {/* Video element — preloaded silently, visible only on hover */}
-      {hasVideo && (
+      {/* Media: Video or Image */}
+      {hasVideo ? (
         <video
           ref={videoRef}
           src={rawVideoUrl}
-          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${
-            isPlayingVideo ? 'opacity-100' : 'opacity-0'
-          }`}
+          className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
           muted
           playsInline
           loop
-          preload="none"
+          preload="metadata"
+          onLoadedData={() => setImgLoaded(true)}
+        />
+      ) : (
+        <img
+          src={thumbnailUrl}
+          alt={decodeHtml(offer.title)}
+          className={`absolute inset-0 w-full h-full object-cover transition-all duration-500 ease-out ${
+            imgLoaded ? 'opacity-100' : 'opacity-0'
+          } group-hover:scale-105`}
+          loading="lazy"
+          onLoad={() => setImgLoaded(true)}
+          onError={(e) => {
+            e.currentTarget.src = thumbnailUrl;
+            setImgLoaded(true);
+          }}
         />
       )}
 
       {/* Video badge — shown on cards that have video */}
-      {hasVideo && !isPlayingVideo && imgLoaded && (
+      {hasVideo && !isPlayingVideo && (
         <div className="absolute bottom-16 right-3 z-10 flex items-center gap-1 bg-black/50 backdrop-blur-md text-white text-[10px] font-bold px-2 py-0.5 rounded-full border border-white/20 pointer-events-none">
           <Play size={9} className="fill-white" />
           <span>Video</span>

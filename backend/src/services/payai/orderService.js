@@ -4,6 +4,7 @@ const logger = require('../../utils/logger');
 const crypto = require('crypto');
 const pricingService = require('./pricingService');
 const cartService = require('./cartService');
+const { resolveBackendProductImage, FALLBACK_PACKAGE_BOX_IMG } = require('../../utils/productImageHelper');
 
 // Full 7-9 Stage Fulfillment Tracking States:
 // PAYMENT_PENDING -> PAID_IN_ESCROW -> SELLER_ACCEPTED -> PREPARING -> PACKAGED -> COURIER_ASSIGNED -> IN_TRANSIT -> DELIVERED -> CONFIRMED_COMPLETED
@@ -303,6 +304,23 @@ class PayAIOrderService {
       } catch (e) {
         items = [];
       }
+
+      const enrichedItems = (Array.isArray(items) && items.length > 0 ? items : [{ title: order.quote?.productTitle || order.quote?.title || 'W-Commerce Direct Order', price: Number(order.subtotal || 0), quantity: 1 }]).map(it => {
+        const itemImg = it.imageUrl || it.image || order.quote?.imageUrl || '';
+        const itemTitle = (it.title && it.title !== 'W-Commerce Direct Order') ? it.title : (order.quote?.productTitle || order.quote?.title || it.title || 'W-Commerce Direct Order');
+        const resolvedImg = resolveBackendProductImage({
+          title: itemTitle,
+          category: it.category || order.quote?.category || '',
+          imageUrl: itemImg
+        }, itemImg);
+
+        return {
+          ...it,
+          title: itemTitle,
+          imageUrl: resolvedImg
+        };
+      });
+
       let shippingAddress = null;
       try {
         shippingAddress = typeof order.shippingAddress === 'string' ? JSON.parse(order.shippingAddress) : order.shippingAddress;
@@ -315,7 +333,7 @@ class PayAIOrderService {
         shippingCost: Number(order.shippingCost || 0),
         dutiesAndTaxes: Number(order.dutiesAndTaxes || 0),
         grandTotal: Number(order.grandTotal || 0),
-        items,
+        items: enrichedItems,
         shippingAddress,
         payments: (order.payments || []).map(p => ({
           id: p.id,
@@ -518,30 +536,25 @@ class PayAIOrderService {
           items = typeof order.itemsSnapshot === 'string' ? JSON.parse(order.itemsSnapshot) : (order.itemsSnapshot || []);
         } catch (_) {}
 
-        // Enrich items with smart category-matched fallback images
-        const CATEGORY_IMAGE_MAP = [
-          { keywords: ['headphone', 'earphone', 'airpod', 'earbud', 'audio', 'headset'], url: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=400&q=80' },
-          { keywords: ['watch', 'smartwatch', 'chronograph'], url: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=400&q=80' },
-          { keywords: ['gymshark', 'activewear', 'sportswear', 'fitness', 'workout', 'leggings', 'gym'], url: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=400&q=80' },
-          { keywords: ['shirt', 'hoodie', 'jacket', 'clothing', 'apparel', 't-shirt', 'fashion', 'wear'], url: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=400&q=80' },
-          { keywords: ['laptop', 'macbook', 'computer', 'notebook', 'chromebook'], url: 'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&w=400&q=80' },
-          { keywords: ['phone', 'iphone', 'samsung', 'smartphone', 'mobile'], url: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=400&q=80' },
-          { keywords: ['shoe', 'sneaker', 'trainer', 'boot', 'footwear'], url: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=400&q=80' },
-          { keywords: ['bag', 'backpack', 'handbag', 'purse', 'luggage'], url: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=400&q=80' },
-          { keywords: ['perfume', 'cologne', 'fragrance', 'scent'], url: 'https://images.unsplash.com/photo-1541643600914-78b084683702?auto=format&fit=crop&w=400&q=80' },
-          { keywords: ['sunglasses', 'glasses', 'spectacles', 'eyewear'], url: 'https://images.unsplash.com/photo-1511499767150-a48a237f0083?auto=format&fit=crop&w=400&q=80' },
-        ];
-        const DEFAULT_PRODUCT_IMG = 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=400&q=80';
+        // Enrich items with smart category-matched fallback images and resolve through helper
+        const enrichedItems = (Array.isArray(items) && items.length > 0 ? items : [{ title: order.quote?.productTitle || order.quote?.title || 'W-Commerce Direct Order', price: Number(order.subtotal || 0), quantity: 1 }]).map(it => {
+          const itemImg = it.imageUrl || it.image || order.quote?.imageUrl || '';
+          const itemTitle = (it.title && it.title !== 'W-Commerce Direct Order') ? it.title : (order.quote?.productTitle || order.quote?.title || it.title || 'W-Commerce Direct Order');
+          const resolvedImg = resolveBackendProductImage({
+            title: itemTitle,
+            category: it.category || order.quote?.category || '',
+            imageUrl: itemImg
+          }, itemImg);
 
-        const enrichedItems = items.map(it => {
-          if (it.imageUrl || it.image) return it;
-          const titleLower = (it.title || '').toLowerCase();
-          const match = CATEGORY_IMAGE_MAP.find(c => c.keywords.some(kw => titleLower.includes(kw)));
-          return { ...it, imageUrl: match ? match.url : DEFAULT_PRODUCT_IMG };
+          return {
+            ...it,
+            title: itemTitle,
+            imageUrl: resolvedImg
+          };
         });
 
         const itemTitle = enrichedItems.length === 0
-          ? 'W-Commerce Order'
+          ? (order.quote?.productTitle || order.quote?.title || 'W-Commerce Order')
           : enrichedItems.length === 1
           ? enrichedItems[0].title
           : `${enrichedItems[0].title} (+${enrichedItems.length - 1} items)`;

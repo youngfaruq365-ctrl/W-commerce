@@ -295,7 +295,7 @@ class SellerExternalSiteService {
     }
 
     // 9. General Groceries & Food
-    if (/grocer|food|sauce|spice|seasoning|oil/i.test(combined)) {
+    if (/(?:raw\s+grocery|fresh\s+vegetable|fresh\s+produce|supermarket\s+food|tomato|onion|cabbage)/i.test(combined)) {
       return 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=800&q=80';
     }
 

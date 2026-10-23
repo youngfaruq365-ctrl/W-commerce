@@ -6,6 +6,7 @@ import { Package, Truck, Clock, MapPin, CheckCircle2, AlertCircle, ArrowLeft, Na
 import { format } from 'date-fns';
 import { MapView } from '../../maps/MapView';
 import { useTrackingStore } from '../../store/trackingStore';
+import { isVideoUrl, getImageUrl } from '@/utils/imageHelpers';
 
 
 const fmt = (n) => Number(n || 0).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -216,11 +217,27 @@ const OrderDetail = () => {
           {order.items?.map((item) => (
             <div key={item.id} className="p-6 flex flex-col sm:flex-row gap-6 items-start sm:items-center transition-all duration-300 hover:bg-[var(--bg-tertiary)] group">
               <div className="w-24 h-24 aspect-square rounded-xl overflow-hidden bg-white border border-[var(--border-color)] flex-shrink-0">
-                <img
-                  src={item.product?.images?.[0]?.url || item.product?.images?.[0] || 'https://via.placeholder.com/80'}
-                  alt={item.productName || item.product?.title}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                />
+                {(() => {
+                  const media = item.product?.images?.[0]?.url || item.product?.images?.[0];
+                  if (isVideoUrl(media)) {
+                    return (
+                      <video
+                        src={getImageUrl(media)}
+                        className="w-full h-full object-cover"
+                        muted
+                        playsInline
+                        preload="metadata"
+                      />
+                    );
+                  }
+                  return (
+                    <img
+                      src={media ? getImageUrl(media) : 'https://via.placeholder.com/80'}
+                      alt={item.productName || item.product?.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    />
+                  );
+                })()}
               </div>
               <div className="flex-1">
                 <h4 className="font-sans font-bold tracking-tight text-lg mb-1">{item.productName || item.product?.title}</h4>

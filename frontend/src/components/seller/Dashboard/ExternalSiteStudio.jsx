@@ -1851,7 +1851,7 @@ export default function ExternalSiteStudio({ user, storeConfig, setActiveTab, on
                     alt="Preview"
                     className="max-h-full max-w-full object-contain"
                     onError={(e) => {
-                      e.currentTarget.src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=800&q=80';
+                      e.currentTarget.src = 'https://images.unsplash.com/photo-1549465220-1a8b9238cd48?auto=format&fit=crop&w=800&q=80';
                     }}
                   />
                 </div>

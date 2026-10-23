@@ -3,6 +3,7 @@ import { History, Star, ShoppingCart } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useCartStore } from '../../../store/cartStore';
 import { PLACEHOLDER_IMAGE } from '@/constants/placeholders';
+import { isVideoUrl, getImageUrl } from '@/utils/imageHelpers';
 
 const HISTORY_STATUSES = ['DELIVERED', 'COMPLETED', 'CANCELLED', 'REFUNDED', 'REJECTED'];
 
@@ -39,12 +40,28 @@ const BuyerOrderHistoryTab = ({ orders = [], onLeaveReview }) => {
             </div>
             <div className="flex gap-4">
               <div className="w-16 h-16 bg-white rounded-lg overflow-hidden border border-[var(--border-color)]">
-                <img
-                  src={order.items?.[0]?.product?.images?.[0]?.url || PLACEHOLDER_IMAGE}
-                  className="w-full h-full object-cover grayscale"
-                  alt="product"
-                  loading="lazy"
-                />
+                {(() => {
+                  const media = order.items?.[0]?.product?.images?.[0]?.url || order.items?.[0]?.product?.images?.[0];
+                  if (isVideoUrl(media)) {
+                    return (
+                      <video
+                        src={getImageUrl(media)}
+                        className="w-full h-full object-cover"
+                        muted
+                        playsInline
+                        preload="metadata"
+                      />
+                    );
+                  }
+                  return (
+                    <img
+                      src={media ? getImageUrl(media) : PLACEHOLDER_IMAGE}
+                      className="w-full h-full object-cover grayscale"
+                      alt="product"
+                      loading="lazy"
+                    />
+                  );
+                })()}
               </div>
               <div>
                 <p className="font-bold text-[var(--text-muted)] line-clamp-1">

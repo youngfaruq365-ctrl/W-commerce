@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { apiClient } from '../../utils/apiClient';
-import { decodeHtml, resolveProductImage } from '../../utils/imageHelpers';
+import { decodeHtml, resolveProductImage, isVideoUrl, getImageUrl } from '../../utils/imageHelpers';
 
 const FX_RATE = 1480;
 
@@ -431,14 +431,30 @@ export default function PayAINegotiationModal({
         <div className="neu-card p-3 rounded-2xl flex items-center justify-between gap-3 mb-3 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-12 h-12 rounded-xl bg-white p-1 flex items-center justify-center shrink-0 border border-gray-100 overflow-hidden">
-              <img
-                src={resolveProductImage(offer)}
-                alt={decodeHtml(productTitle)}
-                onError={(e) => {
-                  e.currentTarget.src = resolveProductImage(offer);
-                }}
-                className="max-h-full max-w-full object-contain"
-              />
+              {(() => {
+                const rawMedia = offer?.imageUrl || offer?.image || offer?.images?.[0]?.url || offer?.images?.[0];
+                if (isVideoUrl(rawMedia)) {
+                  return (
+                    <video
+                      src={getImageUrl(rawMedia)}
+                      className="w-full h-full object-cover rounded-lg"
+                      muted
+                      playsInline
+                      preload="metadata"
+                    />
+                  );
+                }
+                return (
+                  <img
+                    src={resolveProductImage(offer)}
+                    alt={decodeHtml(productTitle)}
+                    onError={(e) => {
+                      e.currentTarget.src = resolveProductImage(offer);
+                    }}
+                    className="max-h-full max-w-full object-contain"
+                  />
+                );
+              })()}
             </div>
             <div className="min-w-0">
               <span className="text-[9px] font-black uppercase text-indigo-600 block">

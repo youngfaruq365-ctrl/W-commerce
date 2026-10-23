@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShoppingBag, PackageCheck, MapPin } from 'lucide-react';
 import { useBuyerStore } from '../../../store/buyerStore';
+import { isVideoUrl, getImageUrl } from '@/utils/imageHelpers';
 
 /**
  * BuyerOverviewTab
@@ -54,11 +55,24 @@ const BuyerOverviewTab = () => {
             <div key={order.id} className="flex justify-between items-center p-4 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-color)]">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-white rounded-lg overflow-hidden border border-[var(--accent-gray)] flex items-center justify-center shadow-[0_0_10px_var(--accent-gray-dim)] flex-shrink-0">
-                  {order.items?.[0]?.product?.images?.[0] ? (
-                     <img src={order.items[0].product.images[0]?.url || order.items[0].product.images[0]} alt="product" className="w-full h-full object-cover" />
-                  ) : (
-                     <PackageCheck className="text-[var(--accent-gray)]" />
-                  )}
+                  {(() => {
+                    const media = order.items?.[0]?.product?.images?.[0]?.url || order.items?.[0]?.product?.images?.[0];
+                    if (isVideoUrl(media)) {
+                      return (
+                        <video
+                          src={getImageUrl(media)}
+                          className="w-full h-full object-cover"
+                          muted
+                          playsInline
+                          preload="metadata"
+                        />
+                      );
+                    }
+                    if (media) {
+                      return <img src={getImageUrl(media)} alt="product" className="w-full h-full object-cover" />;
+                    }
+                    return <PackageCheck className="text-[var(--accent-gray)]" />;
+                  })()}
                 </div>
                 <div>
                   <p className="font-bold">{order.items?.[0]?.product?.title || 'Consolidated Item'}</p>

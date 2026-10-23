@@ -49,6 +49,7 @@ export function decodeHtml(html) {
 }
 
 export const FALLBACK_SMARTWATCH_ID = 'photo-1523275335684-37898b6baf30';
+export const FALLBACK_PACKAGE_BOX_IMG = 'https://images.unsplash.com/photo-1549465220-1a8b9238cd48?auto=format&fit=crop&w=800&q=80';
 
 export const CATEGORY_IMAGE_PRESETS = [
   { id: 'biscuits', label: 'Biscuits & Cookies', keywords: ['biscuit', 'biscuits', 'cookie', 'cookies', 'cracker', 'wafer', 'shortbread'], url: 'https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&w=800&q=80' },
@@ -61,7 +62,7 @@ export const CATEGORY_IMAGE_PRESETS = [
   { id: 'soda', label: 'Sodas & Cold Beverages', keywords: ['coca-cola', 'coca cola', 'coke', 'fanta', 'sprite', 'pepsi', 'soft drink', 'carbonated'], url: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=800&q=80' },
   { id: 'dairy', label: 'Milk & Dairy', keywords: ['milk', 'dairy', 'cheese', 'butter', 'yogurt', 'cream'], url: 'https://images.unsplash.com/photo-1563636619-e9143da7973b?auto=format&fit=crop&w=800&q=80' },
   { id: 'eggs', label: 'Fresh Eggs', keywords: ['egg', 'eggs'], url: 'https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?auto=format&fit=crop&w=800&q=80' },
-  { id: 'produce', label: 'Fresh Vegetables & Produce', keywords: ['tomato', 'tomatoes', 'vegetable', 'produce', 'salad', 'onion', 'carrot', 'pepper', 'fresh produce', 'potato'], url: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?auto=format&fit=crop&w=800&q=80' },
+  { id: 'produce', label: 'Fresh Vegetables & Produce', keywords: ['tomato', 'tomatoes', 'vegetable', 'fresh produce', 'salad', 'onion', 'carrot', 'pepper', 'potato'], url: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?auto=format&fit=crop&w=800&q=80' },
   { id: 'fruit', label: 'Fresh Fruits', keywords: ['banana', 'apple', 'orange', 'fruit', 'berries', 'grape', 'lemon', 'citrus'], url: 'https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?auto=format&fit=crop&w=800&q=80' },
   { id: 'bakery', label: 'Bakery & Bread', keywords: ['bread', 'bakery', 'loaf', 'toast', 'bun', 'croissant', 'bagel'], url: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=800&q=80' },
   { id: 'foil', label: 'Foil & Food Storage', keywords: ['foil', 'aluminium', 'wrap', 'baking sheet', 'food storage', 'parchment'], url: 'https://images.unsplash.com/photo-1584269600464-37b1b58a9fe7?auto=format&fit=crop&w=800&q=80' },
@@ -76,12 +77,13 @@ export const CATEGORY_IMAGE_PRESETS = [
   { id: 'oil', label: 'Cooking Oils & Condiments', keywords: ['oil', 'olive oil', 'cooking oil', 'sunflower oil', 'vinegar', 'sauce', 'ketchup'], url: 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?auto=format&fit=crop&w=800&q=80' },
   { id: 'snacks', label: 'Snacks & Sweets', keywords: ['snack', 'candy', 'chocolate'], url: 'https://images.unsplash.com/photo-1621939514649-280e2ee25f60?auto=format&fit=crop&w=800&q=80' },
   { id: 'personal_care', label: 'Personal Care & Beauty', keywords: ['shampoo', 'conditioner', 'lotion', 'cream', 'skincare', 'cosmetic', 'deodorant', 'body wash'], url: 'https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=800&q=80' },
-  { id: 'headphones', label: 'Headphones & Audio', keywords: ['headphone', 'headphones', 'earphone', 'earphones', 'airpod', 'earbuds', 'audio', 'headset'], url: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=80' },
+  { id: 'headphones', label: 'Headphones & Audio', keywords: ['headphone', 'headphones', 'earphone', 'earphones', 'airpod', 'earbuds', 'audio', 'headset', 'sound'], url: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=80' },
   { id: 'smartwatch', label: 'Smartwatches & Tech', keywords: ['watch', 'smartwatch', 'chronograph', 'timepiece'], url: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80' },
+  { id: 'electronics', label: 'Computers & Electronics', keywords: ['laptop', 'macbook', 'computer', 'notebook', 'phone', 'iphone', 'samsung', 'gadget', 'charger', 'tech'], url: 'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&w=800&q=80' },
   { id: 'gymshark', label: 'Gym & Activewear', keywords: ['gymshark', 'activewear', 'sportswear', 'fitness', 'workout', 'leggings', 'gym'], url: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=800&q=80' },
-  { id: 'apparel', label: 'Clothing & Apparel', keywords: ['men wear', 'mens wear', 'clothing', 'apparel', 'shirt', 'hoodie', 'pants', 'jacket', 'wear', 't-shirt', 'fashion'], url: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=800&q=80' },
+  { id: 'apparel', label: 'Clothing & Apparel', keywords: ['men wear', 'mens wear', 'clothing', 'apparel', 'shirt', 'hoodie', 'pants', 'jacket', 'wear', 't-shirt', 'fashion', 'dress', 'shoe', 'sneaker'], url: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=800&q=80' },
   { id: 'fries', label: 'French Fries & Sides', keywords: ['fries', 'french fries', 'fry', 'loaded fries', 'regular fries', 'large fries'], url: 'https://images.unsplash.com/photo-1573080496219-bb080dd4f877?auto=format&fit=crop&w=800&q=80' },
-  { id: 'groceries', label: 'General Groceries', keywords: ['grocer', 'grocery', 'supermarket', 'market', 'food'], url: 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=800&q=80' }
+  { id: 'groceries', label: 'General Groceries', keywords: ['raw grocer', 'raw grocery', 'fresh market food', 'supermarket food'], url: 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=800&q=80' }
 ];
 
 export function resolveProductImage(productOrUrl, title = '', category = '') {
@@ -89,7 +91,21 @@ export function resolveProductImage(productOrUrl, title = '', category = '') {
   let fullText = '';
 
   if (productOrUrl && typeof productOrUrl === 'object') {
-    rawUrl = productOrUrl.imageUrl || productOrUrl.image || (Array.isArray(productOrUrl.images) ? (productOrUrl.images[0]?.url || productOrUrl.images[0]?.src || productOrUrl.images[0]) : '') || '';
+    if (Array.isArray(productOrUrl.images) && productOrUrl.images.length > 0) {
+      const nonVideoImage = productOrUrl.images.find(img => {
+        const u = typeof img === 'string' ? img : img?.url || img?.src;
+        return u && !isVideoUrl(u);
+      });
+      if (nonVideoImage) {
+        rawUrl = typeof nonVideoImage === 'string' ? nonVideoImage : nonVideoImage?.url || nonVideoImage?.src;
+      } else {
+        const first = productOrUrl.images[0];
+        rawUrl = typeof first === 'string' ? first : first?.url || first?.src;
+      }
+    }
+    if (!rawUrl) {
+      rawUrl = productOrUrl.imageUrl || productOrUrl.image || '';
+    }
     fullText = `${productOrUrl.title || title || ''} ${productOrUrl.category || category || ''}`.toLowerCase();
   } else {
     rawUrl = typeof productOrUrl === 'string' ? productOrUrl : '';
@@ -97,16 +113,18 @@ export function resolveProductImage(productOrUrl, title = '', category = '') {
   }
 
   const isBrokenPhotoId = rawUrl.includes('1576107232684');
+  const isWrongGroceryPhoto = rawUrl.includes('1542838132-92c53300491e') && !/(vegetable|produce|tomato|onion|grocery|groceries|fresh market)/i.test(fullText);
   const isSmartwatchFallback = rawUrl.includes(FALLBACK_SMARTWATCH_ID);
   const isActualWatch = fullText.includes('watch') || fullText.includes('chronograph');
-  const isGenericPlaceholder = rawUrl.includes('placeholder') || rawUrl.includes('via.placeholder') || rawUrl.includes('data:image/svg+xml') || isBrokenPhotoId;
+  const isGenericPlaceholder = rawUrl.includes('placeholder') || rawUrl.includes('via.placeholder') || rawUrl.includes('data:image/svg+xml') || isBrokenPhotoId || isWrongGroceryPhoto;
 
   if (rawUrl && (!isSmartwatchFallback || isActualWatch) && !isGenericPlaceholder) {
-    // If the stored URL is a video, convert to a thumbnail image instead
+    // If the stored URL is a video, convert to a thumbnail image if possible (Cloudinary snapshot)
     if (isVideoUrl(rawUrl)) {
       const thumbnailUrl = convertVideoToImageUrl(rawUrl);
       if (thumbnailUrl) return thumbnailUrl;
-      // Fall through to category preset below
+      // Keep the video URL — do NOT discard the video and replace it with a placeholder
+      return getImageUrl(rawUrl);
     } else {
       return getImageUrl(rawUrl);
     }
@@ -118,5 +136,6 @@ export function resolveProductImage(productOrUrl, title = '', category = '') {
     }
   }
 
-  return 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=800&q=80';
+  // High quality neutral retail order packaging default instead of random vegetables
+  return FALLBACK_PACKAGE_BOX_IMG;
 }

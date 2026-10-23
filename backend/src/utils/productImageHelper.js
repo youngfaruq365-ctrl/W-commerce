@@ -1,6 +1,7 @@
 'use strict';
 
 const FALLBACK_SMARTWATCH_ID = 'photo-1523275335684-37898b6baf30';
+const FALLBACK_PACKAGE_BOX_IMG = 'https://images.unsplash.com/photo-1549465220-1a8b9238cd48?auto=format&fit=crop&w=800&q=80';
 
 function isVideoUrl(url) {
   if (!url || typeof url !== 'string') return false;
@@ -137,8 +138,8 @@ function getCategoryFallbackImage(title = '', category = '', storeName = '') {
   if (/headphone|earphone|airpod|earbuds|audio|speaker/i.test(combined)) {
     return 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=80';
   }
-  if (/charger|cable|power bank|adapter|electronics|gadget/i.test(combined)) {
-    return 'https://images.unsplash.com/photo-1583863788434-e58a36330cf0?auto=format&fit=crop&w=800&q=80';
+  if (/charger|cable|power bank|adapter|electronics|gadget|laptop|macbook|computer/i.test(combined)) {
+    return 'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&w=800&q=80';
   }
 
   // 11. Apparel, Fashion, Footwear, Gymshark
@@ -158,7 +159,7 @@ function getCategoryFallbackImage(title = '', category = '', storeName = '') {
   }
 
   // General high-quality store package default
-  return 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=800&q=80';
+  return FALLBACK_PACKAGE_BOX_IMG;
 }
 
 function resolveBackendProductImage(product, rawUrl = '') {
@@ -171,23 +172,34 @@ function resolveBackendProductImage(product, rawUrl = '') {
     category = product.category || '';
     if (!url) {
       if (Array.isArray(product.images) && product.images.length > 0) {
-        url = product.images[0]?.url || product.images[0]?.src || (typeof product.images[0] === 'string' ? product.images[0] : '');
+        const nonVideoImage = product.images.find(img => {
+          const u = typeof img === 'string' ? img : img?.url || img?.src;
+          return u && !isVideoUrl(u);
+        });
+        if (nonVideoImage) {
+          url = typeof nonVideoImage === 'string' ? nonVideoImage : nonVideoImage?.url || nonVideoImage?.src;
+        } else {
+          url = product.images[0]?.url || product.images[0]?.src || (typeof product.images[0] === 'string' ? product.images[0] : '');
+        }
       } else if (typeof product.imageUrl === 'string') {
         url = product.imageUrl;
       }
     }
   }
 
+  const combinedText = (title + ' ' + category).toLowerCase();
   const isSmartwatch = typeof url === 'string' && url.includes(FALLBACK_SMARTWATCH_ID);
-  const isActualWatch = (title + ' ' + category).toLowerCase().includes('watch');
-  const isPlaceholder = typeof url === 'string' && (url.includes('placeholder') || url.includes('via.placeholder') || !url.trim());
+  const isActualWatch = combinedText.includes('watch') || combinedText.includes('chronograph');
+  const isWrongGroceryPhoto = typeof url === 'string' && url.includes('1542838132-92c53300491e') && !/(vegetable|produce|tomato|onion|grocery|groceries|fresh market)/i.test(combinedText);
+  const isPlaceholder = typeof url === 'string' && (url.includes('placeholder') || url.includes('via.placeholder') || isWrongGroceryPhoto || !url.trim());
 
   if (url && typeof url === 'string' && url.trim() && (!isSmartwatch || isActualWatch) && !isPlaceholder) {
-    // Convert video URLs to image thumbnails
+    // Convert video URLs to image thumbnails if possible (Cloudinary snapshot)
     if (isVideoUrl(url)) {
       const thumbnailUrl = convertVideoToImageUrl(url);
       if (thumbnailUrl) return thumbnailUrl;
-      // Fall through to category fallback
+      // Keep the video URL — do NOT discard the video and replace it with a category placeholder
+      return url.trim();
     } else {
       return url.trim();
     }
@@ -201,5 +213,6 @@ module.exports = {
   resolveBackendProductImage,
   convertVideoToImageUrl,
   isVideoUrl,
-  FALLBACK_SMARTWATCH_ID
+  FALLBACK_SMARTWATCH_ID,
+  FALLBACK_PACKAGE_BOX_IMG
 };

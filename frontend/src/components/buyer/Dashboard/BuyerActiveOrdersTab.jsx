@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShoppingBag, MapPin, Truck } from 'lucide-react';
 import { PLACEHOLDER_IMAGE } from '@/constants/placeholders';
+import { isVideoUrl, getImageUrl } from '@/utils/imageHelpers';
 
 const ACTIVE_STATUSES = [
   'PENDING', 'AWAITING_DIRECT_PAYMENT', 'AWAITING_TRANSFER',
@@ -68,12 +69,28 @@ const BuyerActiveOrdersTab = ({
               {order.items?.map(item => (
                 <div key={item.id} className="flex gap-4">
                   <div className="w-24 h-24 bg-white rounded-lg overflow-hidden border border-[var(--border-color)]">
-                    <img
-                      src={item.product?.images?.[0]?.url || PLACEHOLDER_IMAGE}
-                      className="w-full h-full object-cover hover:scale-110 transition-transform duration-500"
-                      alt="product"
-                      loading="lazy"
-                    />
+                    {(() => {
+                      const media = item.product?.images?.[0]?.url || item.product?.images?.[0];
+                      if (isVideoUrl(media)) {
+                        return (
+                          <video
+                            src={getImageUrl(media)}
+                            className="w-full h-full object-cover"
+                            muted
+                            playsInline
+                            preload="metadata"
+                          />
+                        );
+                      }
+                      return (
+                        <img
+                          src={media ? getImageUrl(media) : PLACEHOLDER_IMAGE}
+                          className="w-full h-full object-cover hover:scale-110 transition-transform duration-500"
+                          alt="product"
+                          loading="lazy"
+                        />
+                      );
+                    })()}
                   </div>
                   <div>
                     <p className="font-bold text-lg line-clamp-1">{item.product?.title}</p>

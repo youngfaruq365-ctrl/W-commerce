@@ -135,6 +135,17 @@ export default function PayPalCheckoutModal({
     try {
       let res = null;
       const targetSessionId = quote?.sessionId || quote?.session?.id || localStorage.getItem('payai_session_id') || undefined;
+      const checkoutItems = (quote?.items && quote.items.length > 0)
+        ? quote.items
+        : (cart?.items && cart.items.length > 0)
+          ? cart.items
+          : [{
+              title: quote?.productTitle || quote?.title || 'W-Commerce Direct Order',
+              price: totalUSD,
+              quantity: 1,
+              imageUrl: quote?.imageUrl || ''
+            }];
+
       try {
         // Primary route: /api/v1/payai/paypal/create-order
         res = await apiClient.post('/api/v1/payai/paypal/create-order', {
@@ -144,6 +155,7 @@ export default function PayPalCheckoutModal({
           sessionId: targetSessionId,
           currency: 'USD',
           amount: totalUSD,
+          items: checkoutItems,
           returnUrl: window.location.origin + '/payai?status=success',
           cancelUrl: window.location.origin + '/payai?status=cancel'
         });
@@ -154,6 +166,9 @@ export default function PayPalCheckoutModal({
           approvalId: apprvId,
           cartId: cart?.id,
           sessionId: targetSessionId,
+          currency: 'USD',
+          amount: totalUSD,
+          items: checkoutItems,
           returnUrl: window.location.origin + '/payai?status=success',
           cancelUrl: window.location.origin + '/payai?status=cancel'
         });

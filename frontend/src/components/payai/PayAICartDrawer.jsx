@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { apiClient } from '../../utils/apiClient';
-import { decodeHtml, resolveProductImage } from '../../utils/imageHelpers';
+import { decodeHtml, resolveProductImage, isVideoUrl, getImageUrl } from '../../utils/imageHelpers';
 
 const FX_RATE = 1480;
 
@@ -304,15 +304,31 @@ export default function PayAICartDrawer({
                     >
                       {/* Product Thumbnail */}
                       <div className="w-16 h-16 rounded-xl bg-white p-1 flex items-center justify-center shrink-0 border border-gray-100 overflow-hidden">
-                        <img
-                          src={resolveProductImage(item)}
-                          alt={decodeHtml(item.title)}
-                          onError={(e) => {
-                            e.currentTarget.onerror = null;
-                            e.currentTarget.src = resolveProductImage(item);
-                          }}
-                          className="max-h-full max-w-full object-contain"
-                        />
+                        {(() => {
+                          const rawMedia = item.imageUrl || item.image || item.images?.[0]?.url || item.images?.[0];
+                          if (isVideoUrl(rawMedia)) {
+                            return (
+                              <video
+                                src={getImageUrl(rawMedia)}
+                                className="w-full h-full object-cover rounded-lg"
+                                muted
+                                playsInline
+                                preload="metadata"
+                              />
+                            );
+                          }
+                          return (
+                            <img
+                              src={resolveProductImage(item)}
+                              alt={decodeHtml(item.title)}
+                              onError={(e) => {
+                                e.currentTarget.onerror = null;
+                                e.currentTarget.src = resolveProductImage(item);
+                              }}
+                              className="max-h-full max-w-full object-contain"
+                            />
+                          );
+                        })()}
                       </div>
 
                       {/* Product Details */}

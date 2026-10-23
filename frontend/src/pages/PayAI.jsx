@@ -13,7 +13,7 @@ import { apiClient } from '../utils/apiClient';
 import { useAuthStore } from '../store/authStore';
 import { useCartStore } from '../store/cartStore';
 import { getSocket, identifyUser } from '../lib/socketClient';
-import { decodeHtml, resolveProductImage, isVideoUrl, convertVideoToImageUrl } from '../utils/imageHelpers';
+import { decodeHtml, resolveProductImage, isVideoUrl, convertVideoToImageUrl, FALLBACK_PACKAGE_BOX_IMG } from '../utils/imageHelpers';
 import { PLACEHOLDER_IMAGE } from '../constants/placeholders';
 
 // Supporting Modular Components
@@ -93,20 +93,27 @@ const INITIAL_SHIPMENTS = [
 ];
 
 // Helper: Persistent Recent Chat Sessions Storage
-const SESSIONS_STORAGE_KEY = 'payai_recent_sessions_v1';
+// Keys are user-scoped to prevent cross-user data leaks on shared browsers.
+const SESSIONS_STORAGE_KEY_BASE = 'payai_recent_sessions_v1';
 
-function loadStoredSessions() {
+function getSessionsStorageKey(userId) {
+  return userId ? `${SESSIONS_STORAGE_KEY_BASE}_${userId}` : `${SESSIONS_STORAGE_KEY_BASE}_guest`;
+}
+
+function loadStoredSessions(userId) {
   try {
-    const raw = localStorage.getItem(SESSIONS_STORAGE_KEY);
+    const key = getSessionsStorageKey(userId);
+    const raw = localStorage.getItem(key);
     return raw ? JSON.parse(raw) : [];
   } catch (e) {
     return [];
   }
 }
 
-function saveStoredSessions(sessions) {
+function saveStoredSessions(sessions, userId) {
   try {
-    localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(sessions.slice(0, 30)));
+    const key = getSessionsStorageKey(userId);
+    localStorage.setItem(key, JSON.stringify(sessions.slice(0, 30)));
   } catch (e) {}
 }
 
@@ -189,19 +196,29 @@ function MarkdownContent({ content, onAction, isSending = false }) {
         const src = imgMatch[2]?.trim() || '';
         if (!src) return null;
 
-        const effectiveSrc = isVideoUrl(src) ? (convertVideoToImageUrl(src) || resolveProductImage(null, alt)) : src;
+        const isVideo = isVideoUrl(src);
+        const effectiveSrc = isVideo ? getImageUrl(src) : (convertVideoToImageUrl(src) || resolveProductImage(null, alt));
         return (
           <span key={pIdx} className="block my-2 max-w-sm rounded-xl overflow-hidden border border-slate-200 dark:border-zinc-700/60 shadow-sm bg-slate-50 dark:bg-zinc-800/50 group">
-            <img
-              src={effectiveSrc}
-              alt={alt}
-              loading="lazy"
-              className="w-full h-44 object-cover group-hover:scale-105 transition-transform duration-300"
-              onError={(e) => {
-                e.currentTarget.onerror = null;
-                e.currentTarget.src = convertVideoToImageUrl(src) || resolveProductImage(null, alt);
-              }}
-            />
+            {isVideo ? (
+              <video
+                src={effectiveSrc}
+                controls
+                playsInline
+                className="w-full h-44 object-cover"
+              />
+            ) : (
+              <img
+                src={effectiveSrc}
+                alt={alt}
+                loading="lazy"
+                className="w-full h-44 object-cover group-hover:scale-105 transition-transform duration-300"
+                onError={(e) => {
+                  e.currentTarget.onerror = null;
+                  e.currentTarget.src = convertVideoToImageUrl(src) || resolveProductImage(null, alt);
+                }}
+              />
+            )}
             {alt && (
               <span className="block px-2.5 py-1 text-[11px] font-medium text-slate-600 dark:text-zinc-300 truncate bg-white/80 dark:bg-zinc-900/80 border-t border-slate-100 dark:border-zinc-800">
                 {alt}
@@ -435,19 +452,29 @@ function MarkdownContent({ content, onAction, isSending = false }) {
       const alt = imgLineMatch[1] || 'Product Media';
       const src = imgLineMatch[2]?.trim() || '';
       if (src) {
-        const effectiveSrc = isVideoUrl(src) ? (convertVideoToImageUrl(src) || resolveProductImage(null, alt)) : src;
+        const isVideo = isVideoUrl(src);
+        const effectiveSrc = isVideo ? getImageUrl(src) : (convertVideoToImageUrl(src) || resolveProductImage(null, alt));
         elements.push(
           <div key={`img-${keyIdx++}`} className="my-2 max-w-sm rounded-xl overflow-hidden border border-slate-200 dark:border-zinc-700/60 shadow-sm bg-slate-50 dark:bg-zinc-800/50 group">
-            <img
-              src={effectiveSrc}
-              alt={alt}
-              loading="lazy"
-              className="w-full h-44 object-cover group-hover:scale-105 transition-transform duration-300"
-              onError={(e) => {
-                e.currentTarget.onerror = null;
-                e.currentTarget.src = convertVideoToImageUrl(src) || resolveProductImage(null, alt);
-              }}
-            />
+            {isVideo ? (
+              <video
+                src={effectiveSrc}
+                controls
+                playsInline
+                className="w-full h-44 object-cover"
+              />
+            ) : (
+              <img
+                src={effectiveSrc}
+                alt={alt}
+                loading="lazy"
+                className="w-full h-44 object-cover group-hover:scale-105 transition-transform duration-300"
+                onError={(e) => {
+                  e.currentTarget.onerror = null;
+                  e.currentTarget.src = convertVideoToImageUrl(src) || resolveProductImage(null, alt);
+                }}
+              />
+            )}
             {alt && (
               <div className="px-2.5 py-1 text-[11px] font-medium text-slate-600 dark:text-zinc-300 truncate bg-white/80 dark:bg-zinc-900/80 border-t border-slate-100 dark:border-zinc-800">
                 {alt}
@@ -509,7 +536,7 @@ function MarkdownContent({ content, onAction, isSending = false }) {
                 className="w-full h-44 object-cover group-hover:scale-105 transition-transform duration-300"
                 onError={(e) => {
                   e.currentTarget.onerror = null;
-                  e.currentTarget.src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=800&q=80';
+                  e.currentTarget.src = FALLBACK_PACKAGE_BOX_IMG;
                 }}
               />
               {imgAlt && (
@@ -561,7 +588,7 @@ function MarkdownContent({ content, onAction, isSending = false }) {
                 className="w-full h-44 object-cover group-hover:scale-105 transition-transform duration-300"
                 onError={(e) => {
                   e.currentTarget.onerror = null;
-                  e.currentTarget.src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=800&q=80';
+                  e.currentTarget.src = FALLBACK_PACKAGE_BOX_IMG;
                 }}
               />
               {imgAlt && (
@@ -648,8 +675,8 @@ export default function PayAI() {
     return true;
   });
 
-  // Recent Sessions History State
-  const [recentSessions, setRecentSessions] = useState(() => loadStoredSessions());
+  // Recent Sessions History State — initially loaded from guest key; overwritten by initSession for logged-in users
+  const [recentSessions, setRecentSessions] = useState(() => loadStoredSessions(null));
 
   // Market & Destination
   const [marketCode, setMarketCode] = useState('INTERNATIONAL');
@@ -760,7 +787,10 @@ export default function PayAI() {
       if (createRes.data?.success) {
         const newSession = createRes.data.session;
         setSessionId(newSession.id);
-        localStorage.setItem('payai_session_id', newSession.id);
+        // Store session ID under user-scoped key to prevent cross-user leaks
+        const _userId = user?.id || user?._id || null;
+        const _sessionKey = _userId ? `payai_session_id_${_userId}` : 'payai_session_id_guest';
+        localStorage.setItem(_sessionKey, newSession.id);
         const msgs = createRes.data.messages || [];
         setMessages(msgs);
         setAttachedChatProduct(null);
@@ -775,7 +805,7 @@ export default function PayAI() {
         setRecentSessions(prev => {
           const filtered = prev.filter(s => s.id !== newSession.id);
           const updated = [newEntry, ...filtered].slice(0, 30);
-          saveStoredSessions(updated);
+          saveStoredSessions(updated, _userId);
           return updated;
         });
 
@@ -808,7 +838,10 @@ export default function PayAI() {
         setMarketCode(res.data.session.marketCode || 'INTERNATIONAL');
         setDestinationCountry(res.data.session.destinationCountry || 'NG');
         setMessages(res.data.session.messages || []);
-        localStorage.setItem('payai_session_id', res.data.session.id);
+        // Store under user-scoped key
+        const _userId = user?.id || user?._id || null;
+        const _sessionKey = _userId ? `payai_session_id_${_userId}` : 'payai_session_id_guest';
+        localStorage.setItem(_sessionKey, res.data.session.id);
         setAttachedChatProduct(null);
         setActiveQuickChatSeller(null);
         fetchCart(res.data.session.id);
@@ -819,7 +852,8 @@ export default function PayAI() {
       toast.error('Session expired or unavailable.');
       setRecentSessions(prev => {
         const updated = prev.filter(s => s.id !== targetId);
-        saveStoredSessions(updated);
+        const _uid2 = user?.id || user?._id || null;
+        saveStoredSessions(updated, _uid2);
         return updated;
       });
     } finally {
@@ -835,7 +869,8 @@ export default function PayAI() {
     e.stopPropagation();
     setRecentSessions(prev => {
       const updated = prev.filter(s => s.id !== targetId);
-      saveStoredSessions(updated);
+      const _uid3 = user?.id || user?._id || null;
+      saveStoredSessions(updated, _uid3);
       return updated;
     });
     if (targetId === sessionId) {
@@ -846,8 +881,9 @@ export default function PayAI() {
 
   // Clear all recent session history
   const handleClearAllSessions = () => {
+    const _uid4 = user?.id || user?._id || null;
     setRecentSessions([]);
-    saveStoredSessions([]);
+    saveStoredSessions([], _uid4);
     handleStartNewChat();
   };
 
@@ -906,43 +942,82 @@ export default function PayAI() {
     touchStartY.current = null;
   };
 
-  // 1. Initialize PayAI Session & Cart
+  // 1. Initialize PayAI Session & Cart — scoped per logged-in user
   useEffect(() => {
     async function initSession() {
       setIsInitializing(true);
       try {
-        const storedSessionId = localStorage.getItem('payai_session_id');
+        // Scope the session key to the logged-in user so different users
+        // on the same browser never share sessions.
+        const userId = user?.id || user?._id || null;
+        const SESSION_KEY = userId ? `payai_session_id_${userId}` : 'payai_session_id_guest';
+        const SESSIONS_KEY = userId ? `payai_recent_sessions_v1_${userId}` : 'payai_recent_sessions_v1_guest';
+
+        // Load user-scoped recent sessions list immediately so sidebar is correct
+        try {
+          const storedSessionsRaw = localStorage.getItem(SESSIONS_KEY);
+          if (storedSessionsRaw) {
+            const storedSessions = JSON.parse(storedSessionsRaw);
+            if (Array.isArray(storedSessions)) {
+              setRecentSessions(storedSessions);
+            }
+          }
+        } catch (_) {}
+
+        // Remove any stale generic key to prevent cross-user leaks
+        if (userId) {
+          const genericStored = localStorage.getItem('payai_session_id');
+          if (genericStored) {
+            // Only clear it if it belongs to a different user — we'll never
+            // know for sure, so always migrate: copy to user-scoped key if
+            // user-scoped key is empty, then remove the generic one.
+            if (!localStorage.getItem(SESSION_KEY)) {
+              localStorage.setItem(SESSION_KEY, genericStored);
+            }
+            localStorage.removeItem('payai_session_id');
+          }
+        }
+
+        const storedSessionId = localStorage.getItem(SESSION_KEY);
         let currentSessionId = storedSessionId;
 
         if (storedSessionId) {
           try {
             const res = await apiClient.get(`/api/v1/payai/sessions/${storedSessionId}`);
             if (res.data?.success && res.data.session) {
-              setSessionId(res.data.session.id);
-              setMarketCode(res.data.session.marketCode || 'INTERNATIONAL');
-              setDestinationCountry(res.data.session.destinationCountry || 'NG');
-              setMessages(res.data.session.messages || []);
-              currentSessionId = res.data.session.id;
+              // Validate session belongs to this user (if logged in)
+              const sessionUserId = res.data.session.userId;
+              if (userId && sessionUserId && sessionUserId !== userId) {
+                // Session belongs to a different user — discard it
+                localStorage.removeItem(SESSION_KEY);
+                currentSessionId = null;
+              } else {
+                setSessionId(res.data.session.id);
+                setMarketCode(res.data.session.marketCode || 'INTERNATIONAL');
+                setDestinationCountry(res.data.session.destinationCountry || 'NG');
+                setMessages(res.data.session.messages || []);
+                currentSessionId = res.data.session.id;
 
-              // Ensure stored in recentSessions
-              setRecentSessions(prev => {
-                const exists = prev.some(s => s.id === currentSessionId);
-                if (!exists) {
-                  const entry = {
-                    id: currentSessionId,
-                    title: 'Active Shopping Chat',
-                    timestamp: Date.now(),
-                    messageCount: res.data.session.messages?.length || 1
-                  };
-                  const updated = [entry, ...prev].slice(0, 30);
-                  saveStoredSessions(updated);
-                  return updated;
-                }
-                return prev;
-              });
+                // Ensure stored in recentSessions
+                setRecentSessions(prev => {
+                  const exists = prev.some(s => s.id === currentSessionId);
+                  if (!exists) {
+                    const entry = {
+                      id: currentSessionId,
+                      title: 'Active Shopping Chat',
+                      timestamp: Date.now(),
+                      messageCount: res.data.session.messages?.length || 1
+                    };
+                    const updated = [entry, ...prev].slice(0, 30);
+                    try { localStorage.setItem(SESSIONS_KEY, JSON.stringify(updated)); } catch (_) {}
+                    return updated;
+                  }
+                  return prev;
+                });
+              }
             }
           } catch (e) {
-            localStorage.removeItem('payai_session_id');
+            localStorage.removeItem(SESSION_KEY);
             currentSessionId = null;
           }
         }
@@ -955,7 +1030,7 @@ export default function PayAI() {
           if (createRes.data?.success) {
             const newSession = createRes.data.session;
             setSessionId(newSession.id);
-            localStorage.setItem('payai_session_id', newSession.id);
+            localStorage.setItem(SESSION_KEY, newSession.id);
             const msgs = createRes.data.messages || [];
             setMessages(msgs);
             currentSessionId = newSession.id;
@@ -970,7 +1045,7 @@ export default function PayAI() {
               };
               const filtered = prev.filter(s => s.id !== newSession.id);
               const updated = [entry, ...filtered].slice(0, 30);
-              saveStoredSessions(updated);
+              try { localStorage.setItem(SESSIONS_KEY, JSON.stringify(updated)); } catch (_) {}
               return updated;
             });
           }
@@ -989,7 +1064,7 @@ export default function PayAI() {
     fetchAppCart();
     fetchCatalogOffers('', 'all', 'all');
     fetchDiscoverableStores();
-  }, []);
+  }, [user?.id, user?._id]);
 
   // Fetch Discoverable External Seller Stores
   const fetchDiscoverableStores = async () => {
@@ -1297,7 +1372,10 @@ export default function PayAI() {
   // Send Message to PayAI Assistant with optional context parameters (e.g. productId, proposedPrice, actionType)
   const handleSendMessage = async (textToSend = inputText, extraParams = {}) => {
     const text = textToSend?.trim();
-    const effectiveSessionId = sessionId || localStorage.getItem('payai_session_id');
+    // Use user-scoped session key to avoid reading another user's session
+    const _uid = user?.id || user?._id || null;
+    const _sk = _uid ? `payai_session_id_${_uid}` : 'payai_session_id_guest';
+    const effectiveSessionId = sessionId || localStorage.getItem(_sk);
     if (!text || !effectiveSessionId || isSending) return;
 
     if (!sessionId) {
@@ -1327,7 +1405,7 @@ export default function PayAI() {
       };
       const filtered = prev.filter(s => s.id !== effectiveSessionId);
       const updated = [updatedEntry, ...filtered].slice(0, 30);
-      saveStoredSessions(updated);
+      saveStoredSessions(updated, _uid);
       return updated;
     });
 
@@ -1953,12 +2031,23 @@ export default function PayAI() {
     if (quoteData) {
       const totalNGN = Number(quoteData.totalNGN || quoteData.amountNGN || 0);
       const totalUSD = Number(quoteData.total || quoteData.totalLandedUSD || quoteData.amountUSD || (totalNGN > 0 ? (totalNGN / 1480).toFixed(2) : 12.16));
+      const resolvedItems = (quoteData.items && quoteData.items.length > 0)
+        ? quoteData.items
+        : (cart?.items && cart.items.length > 0)
+          ? cart.items
+          : [{
+              title: quoteData.productTitle || quoteData.title || 'W-Commerce Order',
+              price: totalUSD,
+              quantity: 1,
+              imageUrl: quoteData.imageUrl || FALLBACK_PACKAGE_BOX_IMG
+            }];
       setCheckoutQuote({
         ...quoteData,
         sessionId: quoteData.sessionId || sessionId,
         total: totalUSD,
         totalNGN: totalNGN > 0 ? totalNGN : Math.round(totalUSD * 1480),
-        items: quoteData.items || cart?.items || []
+        items: resolvedItems,
+        imageUrl: quoteData.imageUrl || resolvedItems[0]?.imageUrl || FALLBACK_PACKAGE_BOX_IMG
       });
       setIsCartDrawerOpen(false);
       setIsPayPalModalOpen(true);
@@ -3328,15 +3417,25 @@ export default function PayAI() {
                                       const resolvedImg = resolveProductImage(itemImg, it.title || '', it.category || '');
                                       return (
                                     <div key={it.id || it.productId || itemIdx} className="flex items-center gap-3 p-3 rounded-2xl neu-card-pressed">
-                                      <img
-                                        src={resolvedImg}
-                                        alt={it.title || 'Product'}
-                                        className="w-11 h-11 rounded-xl object-cover border border-[var(--border-subtle)] shrink-0"
-                                        onError={(e) => {
-                                          e.currentTarget.onerror = null;
-                                          e.currentTarget.src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=200&q=80';
-                                        }}
-                                      />
+                                      {isVideoUrl(itemImg) ? (
+                                        <video
+                                          src={getImageUrl(itemImg)}
+                                          className="w-11 h-11 rounded-xl object-cover border border-[var(--border-subtle)] shrink-0"
+                                          muted
+                                          playsInline
+                                          preload="metadata"
+                                        />
+                                      ) : (
+                                        <img
+                                          src={resolvedImg}
+                                          alt={it.title || 'Product'}
+                                          className="w-11 h-11 rounded-xl object-cover border border-[var(--border-subtle)] shrink-0"
+                                          onError={(e) => {
+                                            e.currentTarget.onerror = null;
+                                            e.currentTarget.src = FALLBACK_PACKAGE_BOX_IMG;
+                                          }}
+                                        />
+                                      )}
                                       <div className="min-w-0 flex-1">
                                         <div className="flex items-center justify-between gap-2">
                                           <h4 className="text-xs font-bold text-[var(--text-main)] truncate">{it.title || 'W-Commerce Item'}</h4>
@@ -3523,12 +3622,22 @@ export default function PayAI() {
 
                                 {displayProductTitle && (
                                   <div className="text-xs font-bold text-[var(--text-main)] flex items-center gap-2 px-3 py-2 rounded-xl neu-card-pressed">
-                                    <img
-                                      src={resolveProductImage(checkoutGuidance?.imageUrl || '', displayProductTitle, checkoutGuidance?.category || '')}
-                                      alt={displayProductTitle}
-                                      className="w-8 h-8 rounded-lg object-cover shrink-0"
-                                      onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=200&q=80'; }}
-                                    />
+                                    {isVideoUrl(checkoutGuidance?.imageUrl) ? (
+                                      <video
+                                        src={getImageUrl(checkoutGuidance.imageUrl)}
+                                        className="w-8 h-8 rounded-lg object-cover shrink-0"
+                                        muted
+                                        playsInline
+                                        preload="metadata"
+                                      />
+                                    ) : (
+                                      <img
+                                        src={resolveProductImage(checkoutGuidance?.imageUrl || '', displayProductTitle, checkoutGuidance?.category || '')}
+                                        alt={displayProductTitle}
+                                        className="w-8 h-8 rounded-lg object-cover shrink-0"
+                                        onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = FALLBACK_PACKAGE_BOX_IMG; }}
+                                      />
+                                    )}
                                     <span className="truncate">{displayProductTitle}</span>
                                     {checkoutGuidance?.storeName && (
                                       <span className="text-[10px] text-[var(--text-muted)] shrink-0">• {checkoutGuidance.storeName}</span>
@@ -3549,12 +3658,21 @@ export default function PayAI() {
                                   <button
                                     type="button"
                                     onClick={() => {
+                                      const defaultItems = (cart?.items && cart.items.length > 0)
+                                        ? cart.items
+                                        : [{
+                                            title: displayProductTitle || 'W-Commerce Order',
+                                            price: totalUSDAmt,
+                                            quantity: 1,
+                                            imageUrl: checkoutGuidance?.imageUrl || FALLBACK_PACKAGE_BOX_IMG
+                                          }];
                                       handleProceedToCheckout({
                                         total: totalUSDAmt,
                                         totalNGN: totalNGNAmt,
                                         productTitle: displayProductTitle || 'W-Commerce Order',
                                         storeName: checkoutGuidance?.storeName || 'Verified Merchant',
-                                        items: cart?.items || []
+                                        imageUrl: checkoutGuidance?.imageUrl || '',
+                                        items: defaultItems
                                       });
                                     }}
                                     className={`flex-1 min-w-[150px] py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all ${

@@ -72,6 +72,10 @@ class PayAIOrchestrator {
     let session = null;
     if (sessionId) {
       session = await prisma.payAISession.findUnique({ where: { id: sessionId } });
+      // If session exists but belongs to a different registered user, do not contaminate it
+      if (session && session.userId && userId && session.userId !== userId) {
+        session = null;
+      }
     }
     if (!session) {
       if (userId) {
@@ -85,6 +89,13 @@ class PayAIOrchestrator {
         session = created?.session || created;
       }
       sessionId = session.id;
+    } else if (session && !session.userId && userId) {
+      // Bind guest session to logged-in user
+      await prisma.payAISession.update({
+        where: { id: session.id },
+        data: { userId }
+      }).catch(() => {});
+      session.userId = userId;
     }
 
     const finalMessage = userMessage || content || message || '';
@@ -333,6 +344,7 @@ class PayAIOrchestrator {
     }
 
     return {
+      sessionId,
       message: assistantMessage,
       toolCall: toolName ? { toolName, toolArgs, result: toolResult } : null
     };

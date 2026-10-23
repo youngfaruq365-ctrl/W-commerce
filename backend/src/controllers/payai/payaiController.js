@@ -113,6 +113,21 @@ class PayAIController {
     const { id } = req.params;
     const session = await payaiOrchestrator.getSession(id);
     if (!session) return res.status(404).json({ success: false, message: 'Session not found' });
+
+    // Isolation: If session is bound to a registered user, ensure only that user can view it
+    const userId = req.user?.id || null;
+    if (session.userId && userId && session.userId !== userId) {
+      return res.status(403).json({ success: false, message: 'Unauthorized session access' });
+    }
+    // Bind anonymous session to newly authenticated user
+    if (!session.userId && userId) {
+      await prisma.payAISession.update({
+        where: { id: session.id },
+        data: { userId }
+      }).catch(() => {});
+      session.userId = userId;
+    }
+
     res.json({ success: true, session });
   }
 
@@ -146,6 +161,9 @@ class PayAIController {
 
     const session = await payaiOrchestrator.getSession(id);
     if (!session) return res.status(404).json({ success: false, message: 'Session not found' });
+    if (session.userId && userId && session.userId !== userId) {
+      return res.status(403).json({ success: false, message: 'Unauthorized session access' });
+    }
 
     const result = await payaiOrchestrator.executeTool({
       toolName,

@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { apiClient } from '../../utils/apiClient';
-import { resolveProductImage } from '../../utils/imageHelpers';
+import { resolveProductImage, isVideoUrl, getImageUrl } from '../../utils/imageHelpers';
 
 // 7 Standard Milestones
 const MILESTONES = [
@@ -392,20 +392,35 @@ export default function PayAIOrderTracker({
                 {Array.isArray(shipment.items) && shipment.items.length > 0 && (
                   <div className="flex items-center gap-2 mb-3 overflow-x-auto hide-scrollbar py-1">
                     {shipment.items.slice(0, 4).map((it, idx) => {
-                      const resolvedImg = resolveProductImage(it.imageUrl || it.image || '', it.title || '', it.category || '');
+                      const itemTitle = (it.title && it.title !== 'W-Commerce Direct Order') ? it.title : (shipment.itemTitle || it.title || 'W-Commerce Item');
+                      const rawMedia = it.imageUrl || it.image || '';
+                      const resolvedImg = resolveProductImage(it, itemTitle, it.category || shipment.category || '');
+                      const isVideo = isVideoUrl(rawMedia) || isVideoUrl(resolvedImg);
+                      const mediaSrc = getImageUrl(rawMedia || resolvedImg);
+
                       return (
                         <div key={idx} className="flex items-center gap-2 bg-black/5 dark:bg-white/[0.04] p-1.5 rounded-xl border border-[var(--border-color)] text-xs shrink-0">
-                          <img
-                            src={resolvedImg}
-                            alt={it.title || 'Product'}
-                            className="w-8 h-8 rounded-lg object-cover shrink-0"
-                            onError={(e) => {
-                              e.currentTarget.onerror = null;
-                              e.currentTarget.src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=200&q=80';
-                            }}
-                          />
+                          {isVideo ? (
+                            <video
+                              src={mediaSrc}
+                              className="w-8 h-8 rounded-lg object-cover shrink-0"
+                              muted
+                              playsInline
+                              preload="metadata"
+                            />
+                          ) : (
+                            <img
+                              src={resolvedImg}
+                              alt={itemTitle}
+                              className="w-8 h-8 rounded-lg object-cover shrink-0"
+                              onError={(e) => {
+                                e.currentTarget.onerror = null;
+                                e.currentTarget.src = 'https://images.unsplash.com/photo-1549465220-1a8b9238cd48?auto=format&fit=crop&w=200&q=80';
+                              }}
+                            />
+                          )}
                           <div className="max-w-[150px] truncate">
-                            <p className="font-bold truncate text-[11px] text-[var(--text-main)]">{it.title || 'W-Commerce Item'}</p>
+                            <p className="font-bold truncate text-[11px] text-[var(--text-main)]">{itemTitle}</p>
                             <p className="text-[10px] text-[var(--text-muted)]">Qty: {it.quantity || 1} • {formatItemPrice(it.price, it.currency || shipment.currency)}</p>
                           </div>
                         </div>
