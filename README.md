@@ -44,7 +44,7 @@ Built with Google Gemini 2.0 Flash, React 18, Node.js Express, Prisma, Socket.IO
 
 Clone the repository:
 ```bash
-git clone https://github.com/<your-username>/w-commerce-payai.git
+git clone https://github.com/youngfaruq365-ctrl/w-commerce-payai.git
 cd w-commerce-payai
 ```
 
