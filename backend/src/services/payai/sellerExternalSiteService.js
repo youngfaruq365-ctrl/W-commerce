@@ -832,6 +832,28 @@ class SellerExternalSiteService {
 
         const existingProd = existingBySku.get(sku) || existingByTitle.get(title.toLowerCase());
 
+        const categoryImg = this._getCategoryFallbackImage(title, category, store.storeName);
+        const isSmartwatch = typeof imageUrl === 'string' && imageUrl.includes('photo-1523275335684-37898b6baf30');
+        const isActualWatch = (title + ' ' + category).toLowerCase().includes('watch');
+        const safeImageUrl = (typeof imageUrl === 'string' && imageUrl.trim() && (!isSmartwatch || isActualWatch))
+          ? imageUrl.trim()
+          : categoryImg;
+
+        const rawImagesList = Array.isArray(item.images) && item.images.length > 0 ? item.images : [safeImageUrl];
+        const cleanImagesList = rawImagesList.map(img => {
+          if (typeof img === 'string' && img.trim()) {
+            const trimmed = img.trim();
+            if (trimmed.includes('photo-1523275335684-37898b6baf30') && !isActualWatch) {
+              return safeImageUrl;
+            }
+            return trimmed;
+          }
+          if (img && typeof img === 'object' && img.url) return img.url;
+          if (img && typeof img === 'object' && img.src) return img.src;
+          return safeImageUrl;
+        }).filter(Boolean);
+        const finalImages = cleanImagesList.length > 0 ? cleanImagesList : [safeImageUrl];
+
         let productRecord;
         if (existingProd) {
           productRecord = await prisma.product.update({
@@ -850,13 +872,6 @@ class SellerExternalSiteService {
             }
           });
 
-          const categoryImg = this._getCategoryFallbackImage(title, category, store.storeName);
-          const isSmartwatch = typeof imageUrl === 'string' && imageUrl.includes('photo-1523275335684-37898b6baf30');
-          const isActualWatch = (title + ' ' + category).toLowerCase().includes('watch');
-          const safeImageUrl = (typeof imageUrl === 'string' && imageUrl.trim() && (!isSmartwatch || isActualWatch))
-            ? imageUrl.trim()
-            : categoryImg;
-
           if (safeImageUrl) {
             if (!existingProd.images || existingProd.images.length === 0) {
               await prisma.productImage.create({
@@ -874,28 +889,6 @@ class SellerExternalSiteService {
             }
           }
         } else {
-          const categoryImg = this._getCategoryFallbackImage(title, category, store.storeName);
-          const isSmartwatch = typeof imageUrl === 'string' && imageUrl.includes('photo-1523275335684-37898b6baf30');
-          const isActualWatch = (title + ' ' + category).toLowerCase().includes('watch');
-          const safeImageUrl = (typeof imageUrl === 'string' && imageUrl.trim() && (!isSmartwatch || isActualWatch))
-            ? imageUrl.trim()
-            : categoryImg;
-
-          const rawImagesList = Array.isArray(item.images) && item.images.length > 0 ? item.images : [safeImageUrl];
-          const cleanImagesList = rawImagesList.map(img => {
-            if (typeof img === 'string' && img.trim()) {
-              const trimmed = img.trim();
-              if (trimmed.includes('photo-1523275335684-37898b6baf30') && !isActualWatch) {
-                return safeImageUrl;
-              }
-              return trimmed;
-            }
-            if (img && typeof img === 'object' && img.url) return img.url;
-            if (img && typeof img === 'object' && img.src) return img.src;
-            return safeImageUrl;
-          }).filter(Boolean);
-          const finalImages = cleanImagesList.length > 0 ? cleanImagesList : [safeImageUrl];
-
           productRecord = await prisma.product.create({
             data: {
               storeId: store.id,
