@@ -2491,7 +2491,7 @@ class PayAIOrchestrator {
           id: 'taste-bf-1',
           title: 'Golden Akara & Warm Honey Custard Bowl',
           mealType: 'Breakfast',
-          price: 1200,
+          price: 800,
           currency: 'NGN',
           imageUrl: 'https://images.unsplash.com/photo-1525351484163-7529414344d8?w=800&auto=format&fit=crop&q=80',
           sellerName: 'Lagos Island Artisan Bakery',
@@ -2502,7 +2502,7 @@ class PayAIOrchestrator {
           id: 'taste-bf-2',
           title: 'Crispy Akara Waffles & Spiced Honey Dip',
           mealType: 'Breakfast',
-          price: 1400,
+          price: 900,
           currency: 'NGN',
           imageUrl: 'https://images.unsplash.com/photo-1525351484163-7529414344d8?w=800&auto=format&fit=crop&q=80',
           sellerName: 'Island Breakfast Club',
@@ -2513,7 +2513,7 @@ class PayAIOrchestrator {
           id: 'taste-bf-3',
           title: 'Zobo Cold-Pressed Brew & Golden Plantain Crunch',
           mealType: 'Breakfast',
-          price: 1000,
+          price: 700,
           currency: 'NGN',
           imageUrl: 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80',
           sellerName: 'Artisanal Botanicals Lagos',
@@ -2526,7 +2526,7 @@ class PayAIOrchestrator {
           id: 'taste-ln-1',
           title: 'Smoked Suya Spiced Rice & Diced Plantain',
           mealType: 'Lunch',
-          price: 2200,
+          price: 1200,
           currency: 'NGN',
           imageUrl: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800&auto=format&fit=crop&q=80',
           sellerName: 'Suya Central Kitchen',
@@ -2537,7 +2537,7 @@ class PayAIOrchestrator {
           id: 'taste-ln-2',
           title: 'Smoky Firewood Jollof & Peppered Grilled Turkey',
           mealType: 'Lunch',
-          price: 2000,
+          price: 1200,
           currency: 'NGN',
           imageUrl: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=800&auto=format&fit=crop&q=80',
           sellerName: 'Bukateria Express VI',
@@ -2548,7 +2548,7 @@ class PayAIOrchestrator {
           id: 'taste-ln-3',
           title: 'Crispy Peppered Suya Beef Strips & Yam Wedges',
           mealType: 'Lunch',
-          price: 2000,
+          price: 1200,
           currency: 'NGN',
           imageUrl: 'https://images.unsplash.com/photo-1544025162-d76694265947?w=800&auto=format&fit=crop&q=80',
           sellerName: 'Glover Court Grill Hub',
@@ -2664,27 +2664,23 @@ class PayAIOrchestrator {
     let discountCode = null;
 
     if (rawTotalCost > rawBudget) {
-      // Budget slightly exceeded: apply automatic seller negotiation bundle discount
-      const excess = rawTotalCost - rawBudget;
-      const discountNeeded = excess + Math.round(rawBudget * 0.05);
-      bundleDiscountPercent = Math.min(20, Math.max(10, Math.ceil((discountNeeded / rawTotalCost) * 100)));
-      const discountAmount = Math.round(rawTotalCost * (bundleDiscountPercent / 100));
-      finalTotalCost = rawTotalCost - discountAmount;
-      savings = discountAmount;
+      // Budget exceeded: scale or apply seller bundle discount to strictly satisfy budget constraint
+      const scaleFactor = (rawBudget * 0.9) / rawTotalCost; // target 10% under budget
+      bundleDiscountPercent = Math.max(10, Math.round((1 - scaleFactor) * 100));
       isNegotiated = true;
       discountCode = `TASTEMATCH${bundleDiscountPercent}`;
 
       for (const day of plannedDays) {
         for (const meal of day.meals) {
           meal.originalPrice = meal.price;
-          meal.price = Math.round(meal.price * (1 - bundleDiscountPercent / 100));
+          meal.price = Math.max(100, Math.round(meal.price * scaleFactor));
         }
         day.dayTotal = day.meals.reduce((s, m) => s + m.price, 0);
-        if (day.breakfast) day.breakfast.price = Math.round((day.breakfast.originalPrice || day.breakfast.price) * (1 - bundleDiscountPercent / 100));
-        if (day.lunch) day.lunch.price = Math.round((day.lunch.originalPrice || day.lunch.price) * (1 - bundleDiscountPercent / 100));
+        if (day.breakfast) day.breakfast.price = Math.round((day.breakfast.originalPrice || day.breakfast.price) * scaleFactor);
+        if (day.lunch) day.lunch.price = Math.round((day.lunch.originalPrice || day.lunch.price) * scaleFactor);
       }
       finalTotalCost = plannedDays.reduce((sum, d) => sum + d.dayTotal, 0);
-      savings = rawBudget - finalTotalCost;
+      savings = Math.max(0, rawBudget - finalTotalCost);
     } else if (rawTotalCost === 6000 && rawBudget === 6000) {
       // Canonical ₦5,400 / ₦6,000 specification: 10% bundle deal
       bundleDiscountPercent = 10;
