@@ -1,0 +1,1541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>W-Commerce PayAI — Product Requirements Document (PRD) & Interactive Companion</title>
+  <style>
+    :root {
+      --bg-dark: #090d16;
+      --bg-card: #0f172a;
+      --bg-card-hover: #1e293b;
+      --border-color: #334155;
+      --border-focus: #475569;
+      --emerald-500: #10b981;
+      --emerald-400: #34d399;
+      --emerald-600: #059669;
+      --emerald-900: #064e3b;
+      --cyan-400: #22d3ee;
+      --cyan-500: #06b6d4;
+      --amber-400: #fbbf24;
+      --amber-500: #f59e0b;
+      --rose-400: #fb7185;
+      --rose-500: #f43f5e;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 18px;
+      --shadow-glow: 0 0 25px rgba(16, 185, 129, 0.16);
+      --shadow-cyan: 0 0 20px rgba(6, 182, 212, 0.16);
+      --font-mono: "JetBrains Mono", "SF Mono", "Fira Code", monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      line-height: 1.6;
+      padding: 2rem 1rem;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    /* Header styling */
+    header {
+      background: linear-gradient(145deg, #0f172a 0%, #111e38 100%);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 2.25rem;
+      margin-bottom: 2rem;
+      box-shadow: var(--shadow-glow);
+      position: relative;
+      overflow: hidden;
+    }
+
+    header::before {
+      content: "";
+      position: absolute;
+      top: -60px;
+      right: -60px;
+      width: 240px;
+      height: 240px;
+      background: radial-gradient(circle, rgba(16, 185, 129, 0.22) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .meta-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+      margin-bottom: 1.25rem;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.35rem 0.8rem;
+      border-radius: 9999px;
+      border: 1px solid transparent;
+    }
+
+    .badge-approved {
+      background-color: rgba(16, 185, 129, 0.15);
+      color: var(--emerald-400);
+      border-color: rgba(16, 185, 129, 0.4);
+    }
+
+    .badge-stage {
+      background-color: rgba(6, 182, 212, 0.12);
+      color: var(--cyan-400);
+      border-color: rgba(6, 182, 212, 0.35);
+    }
+
+    .badge-mono {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      background: rgba(148, 163, 184, 0.1);
+      color: var(--text-muted);
+      border-color: var(--border-color);
+    }
+
+    h1 {
+      font-size: 2.25rem;
+      font-weight: 800;
+      letter-spacing: -0.025em;
+      margin-bottom: 0.6rem;
+      background: linear-gradient(to right, #f8fafc, #cbd5e1);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .tagline {
+      font-size: 1.15rem;
+      color: var(--text-muted);
+      max-width: 900px;
+      line-height: 1.5;
+      margin-bottom: 1rem;
+    }
+
+    .source-cite {
+      font-size: 0.82rem;
+      color: var(--text-dim);
+      font-family: var(--font-mono);
+      background: rgba(15, 23, 42, 0.7);
+      display: inline-block;
+      padding: 0.3rem 0.6rem;
+      border-radius: 6px;
+      border: 1px solid rgba(51, 65, 85, 0.6);
+    }
+
+    /* Tab Controls */
+    .tab-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1.75rem;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 0.5rem;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      font-size: 0.92rem;
+      font-weight: 600;
+      padding: 0.65rem 1.2rem;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .tab-btn:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .tab-btn.active {
+      background: var(--bg-card);
+      color: var(--emerald-400);
+      border-color: var(--border-color);
+      border-bottom-color: var(--emerald-500);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Content Area */
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+      animation: fadeIn 0.25s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Cards & Containers */
+    .card {
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 1.75rem;
+      margin-bottom: 1.75rem;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.25rem;
+      border-bottom: 1px solid rgba(51, 65, 85, 0.4);
+      padding-bottom: 0.75rem;
+    }
+
+    .card-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    /* STEPPER COMPONENT */
+    .stepper-progress {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: relative;
+      margin: 1.5rem 0 2rem;
+      padding: 0 1rem;
+    }
+
+    .stepper-progress::before {
+      content: "";
+      position: absolute;
+      top: 24px;
+      left: 3rem;
+      right: 3rem;
+      height: 3px;
+      background: var(--border-color);
+      z-index: 1;
+    }
+
+    .stepper-progress-fill {
+      position: absolute;
+      top: 24px;
+      left: 3rem;
+      height: 3px;
+      background: linear-gradient(to right, var(--cyan-500), var(--emerald-500));
+      z-index: 2;
+      transition: width 0.35s ease;
+      width: 0%;
+    }
+
+    .step-node {
+      position: relative;
+      z-index: 3;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      cursor: pointer;
+      background: var(--bg-dark);
+      padding: 0.25rem 0.5rem;
+      border-radius: 8px;
+    }
+
+    .step-circle {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: var(--bg-card);
+      border: 2px solid var(--border-color);
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 1.1rem;
+      transition: all 0.25s ease;
+      margin-bottom: 0.5rem;
+    }
+
+    .step-node:hover .step-circle {
+      border-color: var(--cyan-400);
+      color: var(--text-main);
+      transform: scale(1.08);
+    }
+
+    .step-node.completed .step-circle {
+      background: rgba(16, 185, 129, 0.18);
+      border-color: var(--emerald-500);
+      color: var(--emerald-400);
+    }
+
+    .step-node.active .step-circle {
+      background: var(--emerald-500);
+      border-color: var(--emerald-400);
+      color: #020617;
+      box-shadow: 0 0 18px rgba(16, 185, 129, 0.55);
+      transform: scale(1.12);
+    }
+
+    .step-label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-align: center;
+      max-width: 110px;
+    }
+
+    .step-node.active .step-label {
+      color: var(--emerald-400);
+      font-weight: 700;
+    }
+
+    /* STEP DETAIL VIEW */
+    .step-detail-card {
+      background: linear-gradient(145deg, #0d1527 0%, #101c33 100%);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 1.75rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .step-detail-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 1.25rem;
+    }
+
+    .step-nav-buttons {
+      display: flex;
+      gap: 0.75rem;
+    }
+
+    .btn {
+      padding: 0.6rem 1.25rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      border: 1px solid transparent;
+      text-decoration: none;
+    }
+
+    .btn-emerald {
+      background: var(--emerald-500);
+      color: #020617;
+      font-weight: 700;
+    }
+
+    .btn-emerald:hover {
+      background: var(--emerald-400);
+      box-shadow: 0 0 16px rgba(16, 185, 129, 0.4);
+    }
+
+    .btn-outline {
+      background: transparent;
+      border-color: var(--border-color);
+      color: var(--text-muted);
+    }
+
+    .btn-outline:hover {
+      border-color: var(--text-main);
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .interactive-preview-box {
+      background: var(--bg-dark);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 1.25rem;
+      margin: 1.25rem 0;
+      position: relative;
+    }
+
+    .preview-badge {
+      position: absolute;
+      top: -10px;
+      right: 15px;
+      background: #1e293b;
+      color: var(--cyan-400);
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 0.2rem 0.6rem;
+      border-radius: 4px;
+      border: 1px solid var(--border-color);
+      text-transform: uppercase;
+    }
+
+    /* BLUEPRINT SCREEN MOCK */
+    .blueprint-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.25rem;
+      margin-top: 1rem;
+    }
+
+    .blueprint-panel {
+      background: #090e1a;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 1rem;
+      position: relative;
+    }
+
+    .blueprint-panel:hover {
+      border-color: var(--cyan-500);
+      box-shadow: var(--shadow-cyan);
+    }
+
+    .blueprint-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--cyan-400);
+      margin-bottom: 0.75rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* SIMULATOR COMPONENT */
+    .sim-pipeline {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      margin: 1.5rem 0;
+    }
+
+    .sim-state-card {
+      flex: 1;
+      background: #0d1424;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 1.25rem 1rem;
+      text-align: center;
+      transition: all 0.3s ease;
+      position: relative;
+    }
+
+    .sim-state-card.active {
+      border-color: var(--emerald-400);
+      background: rgba(16, 185, 129, 0.08);
+      box-shadow: 0 0 20px rgba(16, 185, 129, 0.25);
+    }
+
+    .sim-state-card.dispute {
+      border-color: var(--rose-500) !important;
+      background: rgba(244, 63, 94, 0.12) !important;
+      box-shadow: 0 0 20px rgba(244, 63, 94, 0.35) !important;
+    }
+
+    .sim-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 0.75rem;
+      font-size: 1.2rem;
+    }
+
+    .sim-state-card.active .sim-icon {
+      background: var(--emerald-500);
+      color: #020617;
+      border-color: var(--emerald-400);
+    }
+
+    .sim-state-card.dispute .sim-icon {
+      background: var(--rose-500);
+      color: white;
+      border-color: var(--rose-400);
+    }
+
+    .sim-state-name {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 0.35rem;
+    }
+
+    .sim-state-desc {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .sim-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin: 1.5rem 0;
+      background: #0d1424;
+      padding: 1rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-color);
+      align-items: center;
+    }
+
+    .sim-log-box {
+      background: #020617;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 1rem;
+      max-height: 180px;
+      overflow-y: auto;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--emerald-400);
+    }
+
+    .sim-log-entry {
+      margin-bottom: 0.35rem;
+      display: flex;
+      gap: 0.75rem;
+    }
+
+    .sim-log-ts {
+      color: var(--text-dim);
+    }
+
+    /* MARKDOWN TABLE CARD PREVIEW */
+    .md-table-wrap {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      margin: 0.75rem 0;
+    }
+
+    .md-table-wrap th, .md-table-wrap td {
+      border: 1px solid var(--border-color);
+      padding: 0.55rem 0.85rem;
+      text-align: left;
+    }
+
+    .md-table-wrap th {
+      background: #1e293b;
+      color: var(--cyan-400);
+      font-weight: 700;
+    }
+
+    .md-table-wrap tr:nth-child(even) {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .md-table-wrap .total-row {
+      background: rgba(16, 185, 129, 0.12);
+      color: var(--emerald-400);
+      font-weight: 800;
+      font-size: 0.95rem;
+    }
+
+    /* Checkable criteria list */
+    .criteria-list {
+      list-style: none;
+      margin-top: 0.75rem;
+    }
+
+    .criteria-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.6rem;
+      margin-bottom: 0.6rem;
+      font-size: 0.88rem;
+      color: var(--text-muted);
+    }
+
+    .criteria-item input[type="checkbox"] {
+      margin-top: 0.25rem;
+      accent-color: var(--emerald-500);
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+    }
+
+    /* Responsive */
+    @media (max-width: 860px) {
+      .blueprint-grid {
+        grid-template-columns: 1fr;
+      }
+      .stepper-progress {
+        overflow-x: auto;
+        padding-bottom: 1rem;
+      }
+      .sim-pipeline {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header>
+      <div class="meta-bar">
+        <span class="badge badge-approved">status: approved</span>
+        <span class="badge badge-stage">Stage 3: PRD</span>
+        <span class="badge badge-mono">doc: prd.md</span>
+        <span class="badge badge-mono">Devpost: Build With AI Basics</span>
+      </div>
+      <h1>W-Commerce PayAI — Product Requirements Document</h1>
+      <p class="tagline">
+        Cross-border AI commerce engine with cultural taste-matching, real-time price negotiation, and progressive milestone escrow protection.
+      </p>
+      <div class="source-cite">
+        Source: scope.md &gt; The Unique Kernel &amp; The Core Loop | Target: 4-spec &amp; 5-build
+      </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="tab-nav">
+      <button class="tab-btn active" onclick="switchTab('tab-journey')">
+        <span>🗺️</span> 1. Core Journey Stepper
+      </button>
+      <button class="tab-btn" onclick="switchTab('tab-blueprint')">
+        <span>📐</span> 2. Screen &amp; Layout Blueprint
+      </button>
+      <button class="tab-btn" onclick="switchTab('tab-simulator')">
+        <span>🛡️</span> 3. Escrow State Simulator
+      </button>
+      <button class="tab-btn" onclick="switchTab('tab-quote')">
+        <span>📊</span> 4. Markdown Quote Cards
+      </button>
+      <button class="tab-btn" onclick="switchTab('tab-criteria')">
+        <span>✅</span> 5. Acceptance Criteria
+      </button>
+      <button class="tab-btn" onclick="switchTab('tab-boundaries')">
+        <span>🎯</span> 6. Boundary &amp; Decisions
+      </button>
+    </nav>
+
+    <!-- TAB 1: CORE JOURNEY STEPPER -->
+    <section id="tab-journey" class="tab-content active">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <span>✨</span> Interactive Core Journey Stepper (Steps 1–6)
+          </div>
+          <span class="badge badge-mono">Click any step node or use Next/Prev</span>
+        </div>
+        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">
+          Walk through the complete 6-stage cross-border transaction loop as defined in <code>prd.md &gt; The Core Journey</code>.
+        </p>
+
+        <!-- Stepper Node Indicator -->
+        <div class="stepper-progress">
+          <div class="stepper-progress-fill" id="stepperFill"></div>
+          
+          <div class="step-node active" id="node-1" onclick="goToStep(1)">
+            <div class="step-circle">1</div>
+            <div class="step-label">Taste Prompting</div>
+          </div>
+          <div class="step-node" id="node-2" onclick="goToStep(2)">
+            <div class="step-circle">2</div>
+            <div class="step-label">Affinity Match</div>
+          </div>
+          <div class="step-node" id="node-3" onclick="goToStep(3)">
+            <div class="step-circle">3</div>
+            <div class="step-label">AI Negotiation</div>
+          </div>
+          <div class="step-node" id="node-4" onclick="goToStep(4)">
+            <div class="step-circle">4</div>
+            <div class="step-label">Landed Quote</div>
+          </div>
+          <div class="step-node" id="node-5" onclick="goToStep(5)">
+            <div class="step-circle">5</div>
+            <div class="step-label">Escrow Lock</div>
+          </div>
+          <div class="step-node" id="node-6" onclick="goToStep(6)">
+            <div class="step-circle">6</div>
+            <div class="step-label">Disbursement</div>
+          </div>
+        </div>
+
+        <!-- Step Detail Display -->
+        <div class="step-detail-card" id="stepDetailView">
+          <div class="step-detail-header">
+            <div>
+              <span class="badge badge-stage" id="stepBadge">Step 1 of 6</span>
+              <h2 style="font-size: 1.4rem; font-weight: 700; margin-top: 0.4rem;" id="stepTitle">
+                Cultural Taste Discovery &amp; Palate Prompting
+              </h2>
+            </div>
+            <div class="step-nav-buttons">
+              <button class="btn btn-outline" id="prevBtn" onclick="stepNav(-1)" disabled>← Previous</button>
+              <button class="btn btn-emerald" id="nextBtn" onclick="stepNav(1)">Next Step →</button>
+            </div>
+          </div>
+
+          <p id="stepDescription" style="font-size: 0.95rem; color: var(--text-main); margin-bottom: 1rem; line-height: 1.6;">
+            The buyer lands on the PayAI Workspace and inputs a blended cultural/aesthetic prompt rather than generic search keywords. The system immediately provides curated cultural seed prompts to jumpstart exploration.
+          </p>
+
+          <!-- Interactive UI State Preview -->
+          <div class="interactive-preview-box">
+            <span class="preview-badge" id="previewBadge">UI Component Simulation</span>
+            <div id="stepInteractiveArea">
+              <!-- Dynamically injected per step -->
+            </div>
+          </div>
+
+          <div style="margin-top: 1.25rem;">
+            <div style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase; color: var(--emerald-400); margin-bottom: 0.5rem;">
+              Key Observable Acceptance Behavior:
+            </div>
+            <p id="stepCriterion" style="font-size: 0.88rem; color: var(--text-muted); font-family: var(--font-mono);">
+              [ ] Prompt input reacts instantaneously; clicking any cultural chip auto-populates the query bar and initiates affinity scoring.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: SCREEN & LAYOUT BLUEPRINT -->
+    <section id="tab-blueprint" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <span>📐</span> Visual Screen &amp; Layout Blueprint
+          </div>
+          <span class="badge badge-mono">Desktop &amp; Tablet SPA Workspace</span>
+        </div>
+        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">
+          Architectural specification of the PayAI unified single-page layout from <code>prd.md &gt; Screens and Layout</code>.
+        </p>
+
+        <!-- Top Bar Blueprint -->
+        <div class="blueprint-panel" style="margin-bottom: 1rem; background: #0c1424;">
+          <div class="blueprint-title">
+            <span>Global Navigation &amp; Cultural Palate Bar (Surface 1)</span>
+            <span class="badge badge-approved">Active Currency: USD ($)</span>
+          </div>
+          <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+            <div style="font-weight: 800; color: var(--emerald-400); font-size: 1.1rem;">
+              W-Commerce PayAI
+            </div>
+            <div style="flex: 1; min-width: 280px; background: #020617; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.5rem 1rem; font-family: var(--font-mono); font-size: 0.85rem; color: var(--cyan-400); display: flex; justify-content: space-between;">
+              <span>🔍 "Lagos street style meets Tokyo minimalist techwear"</span>
+              <span style="color: var(--text-dim);">[Affinity Filter Active]</span>
+            </div>
+            <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid var(--emerald-500); padding: 0.4rem 0.8rem; border-radius: 6px; font-family: var(--font-mono); font-size: 0.85rem; color: var(--emerald-400);">
+              Wallet: $500.00 USD
+            </div>
+          </div>
+        </div>
+
+        <!-- Split Grid Blueprint -->
+        <div class="blueprint-grid">
+          <!-- Left Pane -->
+          <div class="blueprint-panel">
+            <div class="blueprint-title">
+              <span>Left Surface: Cultural Catalog (50%)</span>
+              <span class="badge badge-stage">Qloo-Inspired Affinity</span>
+            </div>
+            <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+              Renders artisan products ranked by cultural affinity match score with provenance metadata and instant negotiation triggers.
+            </p>
+
+            <div style="background: #020617; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.85rem; margin-bottom: 0.75rem;">
+              <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div>
+                  <span class="badge badge-stage" style="font-size: 0.65rem;">94% Cultural Affinity</span>
+                  <h4 style="font-size: 0.95rem; font-weight: 700; margin-top: 0.35rem;">Hand-Dyed Indigo Shibori Kimono</h4>
+                  <div style="font-size: 0.75rem; color: var(--text-dim); font-family: var(--font-mono);">Origin: Kyoto x Lagos Accent | Raw Cotton</div>
+                </div>
+                <div style="text-align: right;">
+                  <div style="font-family: var(--font-mono); font-weight: 700; color: var(--emerald-400);">$185.00</div>
+                  <button class="btn btn-emerald" style="padding: 0.25rem 0.6rem; font-size: 0.72rem; margin-top: 0.35rem;">Negotiate</button>
+                </div>
+              </div>
+            </div>
+
+            <div style="background: #020617; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.85rem;">
+              <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div>
+                  <span class="badge badge-stage" style="font-size: 0.65rem;">88% Cultural Affinity</span>
+                  <h4 style="font-size: 0.95rem; font-weight: 700; margin-top: 0.35rem;">Hand-Carved Obsidian Matcha Bowl</h4>
+                  <div style="font-size: 0.75rem; color: var(--text-dim); font-family: var(--font-mono);">Origin: Oaxaca x Uji Blend | Volcanic Clay</div>
+                </div>
+                <div style="text-align: right;">
+                  <div style="font-family: var(--font-mono); font-weight: 700; color: var(--emerald-400);">$68.00</div>
+                  <button class="btn btn-outline" style="padding: 0.25rem 0.6rem; font-size: 0.72rem; margin-top: 0.35rem;">Add Bundle</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Pane -->
+          <div class="blueprint-panel">
+            <div class="blueprint-title">
+              <span>Right Surface: Negotiation &amp; Escrow (50%)</span>
+              <span class="badge badge-approved">Dual-Tab Mode</span>
+            </div>
+            
+            <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.4rem;">
+              <button style="background: var(--bg-card); border: 1px solid var(--emerald-500); color: var(--emerald-400); font-size: 0.75rem; font-weight: 700; padding: 0.3rem 0.75rem; border-radius: 4px;">Tab 1: Live Chat &amp; Quotes</button>
+              <button style="background: transparent; border: 1px solid transparent; color: var(--text-muted); font-size: 0.75rem; font-weight: 600; padding: 0.3rem 0.75rem;">Tab 2: Escrow Pipeline</button>
+            </div>
+
+            <div style="background: #020617; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.85rem; font-size: 0.82rem; height: 180px; overflow-y: auto;">
+              <div style="color: var(--cyan-400); font-weight: 600; margin-bottom: 0.25rem;">[AI Negotiator]</div>
+              <div style="color: var(--text-muted); margin-bottom: 0.6rem;">"I appreciate your appreciation of authentic Kyoto indigo dye! I can offer 12% off base retail, locking landed cost to Berlin."</div>
+              
+              <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid var(--emerald-500); border-radius: 6px; padding: 0.6rem; font-family: var(--font-mono); font-size: 0.75rem;">
+                <div>Item: $185.00 | Discount: -$22.20 | Customs: $14.80</div>
+                <div style="color: var(--emerald-400); font-weight: 700; margin-top: 0.2rem;">Net Landed: $192.00 USD [Accept &amp; Lock CTA]</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Seller Drawer Blueprint -->
+        <div class="blueprint-panel" style="margin-top: 1rem; background: #0c1524;">
+          <div class="blueprint-title">
+            <span>Seller Control Room Drawer (Surface 3)</span>
+            <span class="badge badge-mono">Merchant Profit Floor Enforcer</span>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; font-size: 0.82rem;">
+            <div style="background: #020617; padding: 0.75rem; border-radius: 6px; border: 1px solid var(--border-color);">
+              <span style="color: var(--text-dim);">Minimum Floor Margin:</span>
+              <div style="font-size: 1.1rem; font-weight: 700; color: var(--emerald-400); font-family: var(--font-mono);">15.0% Gross</div>
+            </div>
+            <div style="background: #020617; padding: 0.75rem; border-radius: 6px; border: 1px solid var(--border-color);">
+              <span style="color: var(--text-dim);">Max AI Discount:</span>
+              <div style="font-size: 1.1rem; font-weight: 700; color: var(--cyan-400); font-family: var(--font-mono);">20.0% Max</div>
+            </div>
+            <div style="background: #020617; padding: 0.75rem; border-radius: 6px; border: 1px solid var(--border-color);">
+              <span style="color: var(--text-dim);">Total Disbursed Escrow:</span>
+              <div style="font-size: 1.1rem; font-weight: 700; color: var(--amber-400); font-family: var(--font-mono);">$1,420.00 USD</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: ESCROW STATE SIMULATOR -->
+    <section id="tab-simulator" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <span>🛡️</span> Interactive Multi-Day Escrow State Simulator
+          </div>
+          <span class="badge badge-mono">4-State Deterministic Ledger</span>
+        </div>
+        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">
+          Test state transitions, tracking event webhooks, dispute freeze logic, and automated merchant payouts as defined in <code>prd.md &gt; Multi-Day Milestone Escrow State Machine</code>.
+        </p>
+
+        <!-- Escrow Pipeline Cards -->
+        <div class="sim-pipeline">
+          <div class="sim-state-card active" id="sim-card-locked">
+            <div class="sim-icon">🔒</div>
+            <div class="sim-state-name">LOCKED</div>
+            <div class="sim-state-desc">Buyer funds authorized in escrow custody</div>
+            <div style="margin-top: 0.5rem; font-size: 0.7rem; color: var(--emerald-400); font-family: var(--font-mono);" id="sim-status-1">STATUS: HELD</div>
+          </div>
+
+          <div class="sim-state-card" id="sim-card-transit">
+            <div class="sim-icon">✈️</div>
+            <div class="sim-state-name">IN_TRANSIT</div>
+            <div class="sim-state-desc">Carrier pickup &amp; tracking ID verified</div>
+            <div style="margin-top: 0.5rem; font-size: 0.7rem; color: var(--text-dim); font-family: var(--font-mono);" id="sim-status-2">PENDING</div>
+          </div>
+
+          <div class="sim-state-card" id="sim-card-delivered">
+            <div class="sim-icon">📦</div>
+            <div class="sim-state-name">DELIVERED</div>
+            <div class="sim-state-desc">Carrier or buyer receipt confirmed</div>
+            <div style="margin-top: 0.5rem; font-size: 0.7rem; color: var(--text-dim); font-family: var(--font-mono);" id="sim-status-3">PENDING</div>
+          </div>
+
+          <div class="sim-state-card" id="sim-card-disbursed">
+            <div class="sim-icon">💰</div>
+            <div class="sim-state-name">DISBURSED</div>
+            <div class="sim-state-desc">100% net payout released to artisan</div>
+            <div style="margin-top: 0.5rem; font-size: 0.7rem; color: var(--text-dim); font-family: var(--font-mono);" id="sim-status-4">PENDING</div>
+          </div>
+        </div>
+
+        <!-- Simulator Action Controls -->
+        <div class="sim-controls">
+          <button class="btn btn-emerald" id="simBtnAdvance" onclick="advanceSimState()">
+            Advance to Next Milestone →
+          </button>
+          <button class="btn btn-outline" style="border-color: var(--rose-500); color: var(--rose-400);" id="simBtnDispute" onclick="toggleDispute()">
+            ⚠️ Toggle Dispute Hold
+          </button>
+          <button class="btn btn-outline" onclick="resetSimulator()">
+            🔄 Reset Escrow Simulation
+          </button>
+          <div style="margin-left: auto; font-family: var(--font-mono); font-size: 0.82rem; color: var(--cyan-400);">
+            Contract: <span id="contractIdDisplay">#ESC-8921-KYOTO</span> | Escrow: $192.00
+          </div>
+        </div>
+
+        <!-- Simulation Audit Log -->
+        <div style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.5rem;">
+          Cryptographic Milestone State Ledger Log:
+        </div>
+        <div class="sim-log-box" id="simLogBox">
+          <div class="sim-log-entry">
+            <span class="sim-log-ts">[12:40:01 UTC]</span>
+            <span>Contract initialized. Escrow authorization captured: $192.00 USD via Internal Ledger. State = ESCROW_LOCKED.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: MARKDOWN QUOTE CARDS -->
+    <section id="tab-quote" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <span>📊</span> Itemized Landed-Cost Quotes &amp; Markdown Cards
+          </div>
+          <span class="badge badge-approved">Live Converter &amp; Formatter</span>
+        </div>
+        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">
+          Inspect how the negotiation engine produces verifiable landed-cost quotes formatted as Markdown table cards inside the conversation feed.
+        </p>
+
+        <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1.25rem;">
+          <label style="font-size: 0.85rem; color: var(--text-muted); font-weight: 600;">Display Currency:</label>
+          <select id="currencySelector" onchange="updateQuoteCurrency()" style="background: #020617; border: 1px solid var(--border-color); color: var(--emerald-400); font-family: var(--font-mono); padding: 0.4rem 0.8rem; border-radius: 6px; font-weight: 700;">
+            <option value="USD">USD ($)</option>
+            <option value="EUR">EUR (€)</option>
+            <option value="GBP">GBP (£)</option>
+            <option value="JPY">JPY (¥)</option>
+          </select>
+          <span class="badge badge-stage" id="lockTimerBadge">⏱️ Locked for 14:48</span>
+        </div>
+
+        <!-- Markdown Table Card Render -->
+        <div style="background: #090e1a; border: 1px solid var(--emerald-500); border-radius: var(--radius-sm); padding: 1.25rem; box-shadow: var(--shadow-glow);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+            <span style="font-weight: 700; color: var(--emerald-400); font-size: 0.95rem;">
+              🏷️ Binding Landed-Cost Quote (Item #KY-SHIB-01)
+            </span>
+            <span class="badge badge-mono">HS Code: 6202.93</span>
+          </div>
+
+          <table class="md-table-wrap">
+            <thead>
+              <tr>
+                <th>Fee Component</th>
+                <th>Description</th>
+                <th>Rate / Basis</th>
+                <th>Subtotal Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Base Item Retail</td>
+                <td>Hand-Dyed Indigo Shibori Kimono</td>
+                <td>Catalog List</td>
+                <td id="rowBase">$185.00</td>
+              </tr>
+              <tr>
+                <td>Negotiated Discount</td>
+                <td>Artisan bundle incentive</td>
+                <td style="color: var(--emerald-400);">-12.0%</td>
+                <td id="rowDiscount" style="color: var(--emerald-400);">-$22.20</td>
+              </tr>
+              <tr>
+                <td>Landed Customs &amp; Tariff</td>
+                <td>Harmonized import duty estimate</td>
+                <td>8.0% Net</td>
+                <td id="rowCustoms">+$14.80</td>
+              </tr>
+              <tr>
+                <td>Insured International Express</td>
+                <td>Kyoto Workshop to Destination</td>
+                <td>Subsidized Tier</td>
+                <td id="rowShipping">+$14.40</td>
+              </tr>
+              <tr class="total-row">
+                <td colspan="3">GUARANTEED TOTAL LANDED COST</td>
+                <td id="rowTotal">$192.00</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem;">
+            <div style="font-size: 0.78rem; color: var(--text-muted);">
+              🛡️ Zero surprise import fees guaranteed by PayAI escrow policy.
+            </div>
+            <button class="btn btn-emerald" onclick="alert('Simulation: Proceeding to dual checkout gateway with $192.00 locked in escrow!')">
+              Accept Offer &amp; Lock in Escrow →
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 5: ACCEPTANCE CRITERIA MATRIX -->
+    <section id="tab-criteria" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <span>✅</span> Feature Acceptance Criteria &amp; Verification Matrix
+          </div>
+          <span class="badge badge-approved">6 Verified Capabilities</span>
+        </div>
+        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.25rem;">
+          Verifiable acceptance criteria from <code>prd.md &gt; Features and Behavior</code> to be tested directly during <code>5-build</code>.
+        </p>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;">
+          <!-- Feature 1 -->
+          <div style="background: #0d1527; border: 1px solid var(--border-color); border-radius: 8px; padding: 1.25rem;">
+            <div style="font-weight: 700; color: var(--cyan-400); font-size: 0.95rem; margin-bottom: 0.5rem;">
+              1. Cultural TasteMatch Engine
+            </div>
+            <ul class="criteria-list">
+              <li class="criteria-item">
+                <input type="checkbox" checked disabled>
+                <span>Inputting blended cultural prompts ranks items with affinity scores &gt;= 90%.</span>
+              </li>
+              <li class="criteria-item">
+                <input type="checkbox" checked disabled>
+                <span>Clicking preset cultural seed chips updates catalog items instantaneously.</span>
+              </li>
+              <li class="criteria-item">
+                <input type="checkbox" checked disabled>
+                <span>Each card renders origin provenance tags and cultural rationale tooltips.</span>
+              </li>
+            </ul>
+          </div>
+
+          <!-- Feature 2 -->
+          <div style="background: #0d1527; border: 1px solid var(--border-color); border-radius: 8px; padding: 1.25rem;">
+            <div style="font-weight: 700; color: var(--cyan-400); font-size: 0.95rem; margin-bottom: 0.5rem;">
+              2. Conversational AI Sales Negotiator
+            </div>
+            <ul class="criteria-list">
+              <li class="criteria-item">
+                <input type="checkbox" checked disabled>
+                <span>Agent evaluates proposals against merchant margin floors before responding.</span>
+              </li>
+              <li class="criteria-item">
+                <input type="checkbox" checked disabled>
+                <span>Adversarial prompts ("give it for $1") trigger polite deterministic price boundaries.</span>
+              </li>
+              <li class="criteria-item">
+                <input type="checkbox" checked disabled>
+                <span>Agent suggests volume bundle incentives to preserve merchant transaction value.</span>
+              </li>
+            </ul>
+          </div>
+
+          <!-- Feature 3 -->
+          <div style="background: #0d1527; border: 1px solid var(--border-color); border-radius: 8px; padding: 1.25rem;">
+            <div style="font-weight: 700; color: var(--cyan-400); font-size: 0.95rem; margin-bottom: 0.5rem;">
+              3. Landed-Cost Markdown Cards
+            </div>
+            <ul class="criteria-list">
+              <li class="criteria-item">
+                <input type="checkbox" checked disabled>
+                <span>Agreed pricing outputs an itemized Markdown table directly inside chat stream.</span>
+              </li>
+              <li class="criteria-item">
+                <input type="checkbox" checked disabled>
+                <span>Landed arithmetic strictly balances: (Base - Disc) + Customs + Shipping = Net.</span>
+              </li>
+              <li class="criteria-item">
+                <input type="checkbox" checked disabled>
+                <span>Markdown card embeds an actionable 15-minute escrow locking button.</span>
+              </li>
+            </ul>
+          </div>
+
+          <!-- Feature 4 -->
+          <div style="background: #0d1527; border: 1px solid var(--border-color); border-radius: 8px; padding: 1.25rem;">
+            <div style="font-weight: 700; color: var(--cyan-400); font-size: 0.95rem; margin-bottom: 0.5rem;">
+              4. Multi-Day Milestone Escrow Ledger
+            </div>
+            <ul class="criteria-list">
+              <li class="criteria-item">
+                <input type="checkbox" checked disabled>
+                <span>Funds cannot transition to DISBURSED without confirmed DELIVERED status.</span>
+              </li>
+              <li class="criteria-item">
+                <input type="checkbox" checked disabled>
+                <span>Simulating dispatch generates tracking airway bill (e.g. DHL-GLO-8921-X).</span>
+              </li>
+              <li class="criteria-item">
+                <input type="checkbox" checked disabled>
+                <span>Dispute hold immediately halts automated release timers and freezes escrow.</span>
+              </li>
+            </ul>
+          </div>
+
+          <!-- Feature 5 -->
+          <div style="background: #0d1527; border: 1px solid var(--border-color); border-radius: 8px; padding: 1.25rem;">
+            <div style="font-weight: 700; color: var(--cyan-400); font-size: 0.95rem; margin-bottom: 0.5rem;">
+              5. Dual Payment Gateways
+            </div>
+            <ul class="criteria-list">
+              <li class="criteria-item">
+                <input type="checkbox" checked disabled>
+                <span>Single-click toggle between PayPal Sandbox and Internal Ledger Wallet.</span>
+              </li>
+              <li class="criteria-item">
+                <input type="checkbox" checked disabled>
+                <span>Internal Wallet provides $500.00 pre-funded test balance for instant reviews.</span>
+              </li>
+              <li class="criteria-item">
+                <input type="checkbox" checked disabled>
+                <span>Insufficient balance shows explicit top-up prompt rather than silent failure.</span>
+              </li>
+            </ul>
+          </div>
+
+          <!-- Feature 6 -->
+          <div style="background: #0d1527; border: 1px solid var(--border-color); border-radius: 8px; padding: 1.25rem;">
+            <div style="font-weight: 700; color: var(--cyan-400); font-size: 0.95rem; margin-bottom: 0.5rem;">
+              6. Seller Control Room &amp; Margin Guard
+            </div>
+            <ul class="criteria-list">
+              <li class="criteria-item">
+                <input type="checkbox" checked disabled>
+                <span>Interactive sliders dynamically adjust floor margin % and max discount %.</span>
+              </li>
+              <li class="criteria-item">
+                <input type="checkbox" checked disabled>
+                <span>In-memory invariant guard overrides any LLM response breaching profit floor.</span>
+              </li>
+              <li class="criteria-item">
+                <input type="checkbox" checked disabled>
+                <span>Historical escrow disbursement ledger displays all settled merchant payouts.</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 6: BOUNDARY & DECISIONS -->
+    <section id="tab-boundaries" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <span>🎯</span> Scope Boundary, Non-Goals &amp; Architectural Decisions
+          </div>
+          <span class="badge badge-approved">Approved POC Contract</span>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1.5rem;">
+          <!-- What We're Building -->
+          <div style="background: rgba(16, 185, 129, 0.05); border: 1px solid var(--emerald-500); border-radius: 8px; padding: 1.25rem;">
+            <h4 style="color: var(--emerald-400); font-size: 1rem; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem;">
+              <span>✅</span> What We're Building (POC)
+            </h4>
+            <ul style="padding-left: 1.2rem; font-size: 0.85rem; color: var(--text-muted); line-height: 1.7;">
+              <li>Cultural TasteMatch semantic affinity scoring engine</li>
+              <li>Autonomous conversational price negotiator with profit floor guards</li>
+              <li>Dynamic Markdown landed-cost table generator</li>
+              <li>4-state milestone escrow state machine (LOCKED to DISBURSED)</li>
+              <li>Dual checkout gateway (PayPal Sandbox + Internal Ledger)</li>
+              <li>Seller control room drawer with interactive bounds</li>
+            </ul>
+          </div>
+
+          <!-- Deferred From POC -->
+          <div style="background: rgba(6, 182, 212, 0.05); border: 1px solid var(--cyan-500); border-radius: 8px; padding: 1.25rem;">
+            <h4 style="color: var(--cyan-400); font-size: 1rem; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem;">
+              <span>⏳</span> Deferred From POC (Future Road)
+            </h4>
+            <ul style="padding-left: 1.2rem; font-size: 0.85rem; color: var(--text-muted); line-height: 1.7;">
+              <li>L2 blockchain USDC smart contract escrow on Solana/Base</li>
+              <li>Live official government customs API (HS tariff lookups)</li>
+              <li>Direct live courier hardware/satellite telematics integration</li>
+              <li>Shopify / WooCommerce live catalog inventory sync</li>
+              <li>Multi-party legal arbitration courtroom interface</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Product Decisions Table -->
+        <h4 style="color: var(--text-main); font-size: 1rem; margin-bottom: 0.75rem;">
+          Key Architectural Product Decisions &amp; Tradeoffs
+        </h4>
+        <div style="background: #090e1a; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden;">
+          <table class="md-table-wrap" style="margin: 0;">
+            <thead>
+              <tr>
+                <th>Decision Area</th>
+                <th>Selected Approach</th>
+                <th>Strategic Tradeoff &amp; Rationale</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style="font-weight: 700; color: var(--text-main);">Pricing Guard</td>
+                <td style="color: var(--emerald-400);">Deterministic Boundary Layer</td>
+                <td>Constrains LLM counter-offers by hard mathematical code guards rather than trusting prompt-only safeguards. Eliminates hallucinated pricing exploits.</td>
+              </tr>
+              <tr>
+                <td style="font-weight: 700; color: var(--text-main);">Landed Cost UI</td>
+                <td style="color: var(--cyan-400);">Inline Markdown Table Cards</td>
+                <td>Embeds financial breakdown tables directly in chat feed instead of kicking user out to external cart screen. Keeps conversational bargaining context.</td>
+              </tr>
+              <tr>
+                <td style="font-weight: 700; color: var(--text-main);">Escrow Release</td>
+                <td style="color: var(--emerald-400);">4-Stage Milestone State Machine</td>
+                <td>Releases funds progressively on verified delivery milestones rather than binary instant capture. Solves cross-border non-delivery anxiety.</td>
+              </tr>
+              <tr>
+                <td style="font-weight: 700; color: var(--text-main);">Verification</td>
+                <td style="color: var(--amber-400);">Dual-Mode (PayPal + Internal Wallet)</td>
+                <td>Supports real PayPal Sandbox API calls while providing a pre-funded internal mock wallet so evaluators can test instantly without credential friction.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer style="margin-top: 3rem; text-align: center; color: var(--text-dim); font-size: 0.82rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
+      <p>W-Commerce PayAI — Product Requirements Specification Companion &bull; Devpost Learn Hackathon ('Build With AI: Basics')</p>
+      <p style="margin-top: 0.4rem; font-family: var(--font-mono);">Document Status: approved &bull; Stage: 3-prd &bull; Next: 4-spec</p>
+    </footer>
+  </div>
+
+  <script>
+    // Tab switching logic
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+      event.currentTarget.classList.add('active');
+      const target = document.getElementById(tabId);
+      if (target) {
+        target.classList.add('active');
+      }
+    }
+
+    // Interactive Core Journey Stepper Data
+    const journeySteps = [
+      {
+        step: 1,
+        title: "Cultural Taste Discovery & Palate Prompting",
+        badge: "Step 1 of 6 &bull; Discovery Phase",
+        description: "The buyer lands on the PayAI Workspace and inputs a blended cultural/aesthetic prompt rather than generic keywords. The system immediately provides curated cultural seed prompts to jumpstart exploration.",
+        criterion: "[ ] Prompt input reacts instantaneously; clicking any cultural chip auto-populates the query bar and initiates affinity scoring.",
+        previewHtml: `
+          <div style="display:flex; flex-direction:column; gap:0.75rem;">
+            <div style="display:flex; gap:0.5rem; align-items:center;">
+              <input type="text" id="interactivePromptInput" value="Lagos street style meets Tokyo minimalist techwear" 
+                     style="flex:1; background:#0f172a; border:1px solid #334155; color:#f8fafc; padding:0.6rem 0.85rem; border-radius:6px; font-family:var(--font-mono); font-size:0.85rem;" />
+              <button class="btn btn-emerald" onclick="simulateSearch()" style="padding:0.6rem 1rem;">Score Taste</button>
+            </div>
+            <div style="display:flex; gap:0.5rem; flex-wrap:wrap; font-size:0.75rem;">
+              <span style="color:#94a3b8; align-self:center;">Preset Palettes:</span>
+              <button class="btn btn-outline" style="padding:0.25rem 0.6rem; font-size:0.72rem;" onclick="setSeed('Nordic Minimalist x Kyoto Ceramic')">Nordic x Kyoto</button>
+              <button class="btn btn-outline" style="padding:0.25rem 0.6rem; font-size:0.72rem;" onclick="setSeed('Lagos Street x Tokyo Tech')">Lagos x Tokyo</button>
+              <button class="btn btn-outline" style="padding:0.25rem 0.6rem; font-size:0.72rem;" onclick="setSeed('Oaxacan Earth x Bauhaus')">Oaxaca x Bauhaus</button>
+            </div>
+            <div id="searchSimResult" style="font-family:var(--font-mono); font-size:0.8rem; color:#34d399; margin-top:0.25rem;">
+              ✓ Parsed attributes: [Indigo dye, oversized drape, utility pockets, hand-spun cotton]. 6 catalog items scored.
+            </div>
+          </div>
+        `
+      },
+      {
+        step: 2,
+        title: "Semantic Affinity Matching & Catalog Exploration",
+        badge: "Step 2 of 6 &bull; Matching Engine",
+        description: "PayAI parses cultural dimensions against item provenance, silhouettes, and artisanal techniques to generate real-time cultural affinity scores. Highest affinity matches are presented with explanatory cultural rationales.",
+        criterion: "[ ] Catalog displays cultural affinity percentage badges (>=90%) with detailed cultural heritage origin pills.",
+        previewHtml: `
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem;">
+            <div style="background:#0f172a; border:1px solid #10b981; border-radius:6px; padding:0.75rem;">
+              <span class="badge badge-approved" style="font-size:0.7rem;">94% Match</span>
+              <h4 style="font-size:0.9rem; margin-top:0.3rem;">Hand-Dyed Indigo Shibori Kimono</h4>
+              <p style="font-size:0.75rem; color:#94a3b8; margin:0.3rem 0;">Kyoto indigo craft meets oversized Lagos street silhouette.</p>
+              <div style="font-family:var(--font-mono); color:#10b981; font-weight:700;">$185.00 USD</div>
+            </div>
+            <div style="background:#0f172a; border:1px solid #334155; border-radius:6px; padding:0.75rem;">
+              <span class="badge badge-stage" style="font-size:0.7rem;">88% Match</span>
+              <h4 style="font-size:0.9rem; margin-top:0.3rem;">Obsidian Carved Ceremonial Cup</h4>
+              <p style="font-size:0.75rem; color:#94a3b8; margin:0.3rem 0;">Oaxacan volcanic glaze with Japanese tea ceremony minimalism.</p>
+              <div style="font-family:var(--font-mono); color:#10b981; font-weight:700;">$68.00 USD</div>
+            </div>
+          </div>
+        `
+      },
+      {
+        step: 3,
+        title: "Conversational AI Sales Bargaining & Bundle Negotiation",
+        badge: "Step 3 of 6 &bull; Negotiation Phase",
+        description: "The buyer proposes pricing or bundle discounts. The autonomous seller agent evaluates the proposal against the merchant profit floor (e.g. 15%) and counters with agreeable bundle terms.",
+        criterion: "[ ] Agent generates bounded counter-offers; proposals below floor margin trigger automated compromise suggestions.",
+        previewHtml: `
+          <div style="display:flex; flex-direction:column; gap:0.5rem; font-size:0.8rem;">
+            <div style="background:#1e293b; padding:0.5rem 0.75rem; border-radius:6px; align-self:flex-end; max-width:80%;">
+              <strong>Buyer:</strong> "Can I get this Kimono for $150? Shipping to Germany is expensive."
+            </div>
+            <div style="background:rgba(16, 185, 129, 0.1); border:1px solid #10b981; padding:0.5rem 0.75rem; border-radius:6px; align-self:flex-start; max-width:85%;">
+              <strong style="color:#34d399;">PayAI Agent:</strong> "$150 is below my artisan floor ($157.25), but I can do $162.80 (12% off) OR bundle the Obsidian Cup for free express shipping!"
+            </div>
+          </div>
+        `
+      },
+      {
+        step: 4,
+        title: "Itemized Landed-Cost Breakdown via Markdown Cards",
+        badge: "Step 4 of 6 &bull; Pricing Transparency",
+        description: "The agent generates a structured Markdown pricing table directly in the conversation. The quote itemizes base price, discounts, customs duties, insured shipping, and guaranteed net landed cost.",
+        criterion: "[ ] Markdown table renders cleanly inside chat with exact calculated arithmetic and an active 15-minute price lock timer.",
+        previewHtml: `
+          <div style="background:#090e1a; border:1px solid #10b981; border-radius:6px; padding:0.75rem; font-family:var(--font-mono); font-size:0.75rem;">
+            <div style="color:#22d3ee; font-weight:700; margin-bottom:0.35rem;">| Fee Breakdown | Amount |</div>
+            <div>| Base Price: $185.00 | Disc (12%): -$22.20 |</div>
+            <div>| Customs (8%): +$14.80 | Express Ship: +$14.40 |</div>
+            <div style="color:#34d399; font-weight:700; margin-top:0.35rem;">| GUARANTEED TOTAL LANDED: $192.00 USD |</div>
+            <button class="btn btn-emerald" style="padding:0.25rem 0.75rem; font-size:0.72rem; margin-top:0.5rem;" onclick="goToStep(5)">Lock in Escrow →</button>
+          </div>
+        `
+      },
+      {
+        step: 5,
+        title: "Instant Agreement & Milestone Escrow Lock",
+        badge: "Step 5 of 6 &bull; Escrow Authorization",
+        description: "Buyer approves terms and chooses PayPal Sandbox or Internal Wallet. Funds are captured and locked into an immutable 4-stage escrow contract.",
+        criterion: "[ ] Escrow contract is generated with unique ID; funds are deducted from buyer balance and recorded as LOCKED.",
+        previewHtml: `
+          <div style="background:#0f172a; border:1px solid #334155; border-radius:6px; padding:0.75rem; display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <div style="font-family:var(--font-mono); color:#22d3ee; font-size:0.85rem; font-weight:700;">Contract #ESC-8921-KYOTO</div>
+              <div style="font-size:0.75rem; color:#94a3b8;">Method: Internal Ledger Wallet &bull; $192.00 USD Secured</div>
+            </div>
+            <span class="badge badge-approved" style="font-size:0.75rem;">ESCROW LOCKED</span>
+          </div>
+        `
+      },
+      {
+        step: 6,
+        title: "Progressive Milestone Tracking & Automated Disbursement",
+        badge: "Step 6 of 6 &bull; Fulfillment & Settlement",
+        description: "Carrier tracking triggers advance milestones (IN_TRANSIT -> DELIVERED). Upon delivery verification, escrow automatically disburses 100% of proceeds to the merchant.",
+        criterion: "[ ] Delivery confirmation automatically triggers 100% net disbursement to merchant ledger without chargeback vulnerability.",
+        previewHtml: `
+          <div style="background:rgba(16, 185, 129, 0.12); border:1px solid #10b981; border-radius:6px; padding:0.85rem; text-align:center;">
+            <div style="font-size:1.4rem;">🎉</div>
+            <div style="font-weight:700; color:#34d399; font-size:0.95rem; margin-top:0.25rem;">Milestone Reached: DISBURSED</div>
+            <div style="font-size:0.78rem; color:#94a3b8; margin-top:0.25rem;">$192.00 USD disbursed to Kyoto Artisan Workshop Ledger. Transaction closed with 5-star verified rating.</div>
+          </div>
+        `
+      }
+    ];
+
+    let currentStep = 1;
+
+    function renderStep(stepNum) {
+      currentStep = stepNum;
+      const data = journeySteps[stepNum - 1];
+
+      document.getElementById('stepBadge').innerHTML = data.badge;
+      document.getElementById('stepTitle').innerText = data.title;
+      document.getElementById('stepDescription').innerText = data.description;
+      document.getElementById('stepCriterion').innerText = data.criterion;
+      document.getElementById('stepInteractiveArea').innerHTML = data.previewHtml;
+
+      // Update Node classes
+      for (let i = 1; i <= 6; i++) {
+        const node = document.getElementById(`node-${i}`);
+        node.classList.remove('active', 'completed');
+        if (i < stepNum) {
+          node.classList.add('completed');
+        } else if (i === stepNum) {
+          node.classList.add('active');
+        }
+      }
+
+      // Update progress bar fill
+      const percent = ((stepNum - 1) / 5) * 100;
+      document.getElementById('stepperFill').style.width = `${percent}%`;
+
+      // Update buttons
+      document.getElementById('prevBtn').disabled = (stepNum === 1);
+      document.getElementById('nextBtn').disabled = (stepNum === 6);
+    }
+
+    function goToStep(num) {
+      renderStep(num);
+    }
+
+    function stepNav(direction) {
+      const target = currentStep + direction;
+      if (target >= 1 && target <= 6) {
+        renderStep(target);
+      }
+    }
+
+    function simulateSearch() {
+      const val = document.getElementById('interactivePromptInput').value;
+      const res = document.getElementById('searchSimResult');
+      res.innerText = `✓ Re-evaluating TasteMatch for "${val}"... Found 6 authentic matches (Top affinity: 96%).`;
+    }
+
+    function setSeed(text) {
+      document.getElementById('interactivePromptInput').value = text;
+      simulateSearch();
+    }
+
+    // Initialize Stepper
+    renderStep(1);
+
+    // ESCROW STATE SIMULATOR LOGIC
+    let simStateIndex = 0; // 0: LOCKED, 1: IN_TRANSIT, 2: DELIVERED, 3: DISBURSED
+    let isDisputed = false;
+
+    const simStates = [
+      { name: 'LOCKED', cardId: 'sim-card-locked', statusId: 'sim-status-1', activeText: 'STATUS: HELD', desc: 'Escrow authorized' },
+      { name: 'IN_TRANSIT', cardId: 'sim-card-transit', statusId: 'sim-status-2', activeText: 'STATUS: DISPATCHED', desc: 'Carrier pickup confirmed' },
+      { name: 'DELIVERED', cardId: 'sim-card-delivered', statusId: 'sim-status-3', activeText: 'STATUS: RECEIVED', desc: 'Buyer confirmed receipt' },
+      { name: 'DISBURSED', cardId: 'sim-card-disbursed', statusId: 'sim-status-4', activeText: 'STATUS: SETTLED', desc: 'Funds released to merchant' }
+    ];
+
+    function advanceSimState() {
+      if (isDisputed) {
+        alert("Cannot advance milestone: Escrow is currently in DISPUTE_HOLD. Please resolve or toggle off dispute first.");
+        return;
+      }
+
+      if (simStateIndex < 3) {
+        simStateIndex++;
+        updateSimUI();
+        logSimEvent(`Transitioned state to ${simStates[simStateIndex].name}. Hash: 0x${Math.random().toString(16).substring(2, 10).toUpperCase()}`);
+      } else {
+        alert("Escrow contract has reached final milestone (DISBURSED). Click 'Reset Escrow Simulation' to test again.");
+      }
+    }
+
+    function toggleDispute() {
+      isDisputed = !isDisputed;
+      const currentCard = document.getElementById(simStates[simStateIndex].cardId);
+      
+      if (isDisputed) {
+        currentCard.classList.add('dispute');
+        document.getElementById('simBtnDispute').innerText = '✅ Clear Dispute Hold';
+        logSimEvent(`[ALERT] Dispute triggered by user. Contract FROZEN in DISPUTE_HOLD. Release timers suspended.`);
+      } else {
+        currentCard.classList.remove('dispute');
+        document.getElementById('simBtnDispute').innerText = '⚠️ Toggle Dispute Hold';
+        logSimEvent(`[RESOLVED] Dispute hold cleared by mutual settlement. Normal milestone flow resumed.`);
+      }
+    }
+
+    function resetSimulator() {
+      simStateIndex = 0;
+      isDisputed = false;
+      document.getElementById('simBtnDispute').innerText = '⚠️ Toggle Dispute Hold';
+      
+      simStates.forEach(s => {
+        const c = document.getElementById(s.cardId);
+        c.classList.remove('active', 'dispute');
+        document.getElementById(s.statusId).innerText = 'PENDING';
+        document.getElementById(s.statusId).style.color = 'var(--text-dim)';
+      });
+
+      updateSimUI();
+      document.getElementById('simLogBox').innerHTML = '';
+      logSimEvent(`Contract reset. New escrow contract initialized: #ESC-${Math.floor(1000 + Math.random() * 9000)}-KYOTO.`);
+    }
+
+    function updateSimUI() {
+      simStates.forEach((s, idx) => {
+        const card = document.getElementById(s.cardId);
+        const status = document.getElementById(s.statusId);
+        if (idx <= simStateIndex) {
+          card.classList.add('active');
+          status.innerText = (idx === simStateIndex) ? s.activeText : 'COMPLETED';
+          status.style.color = 'var(--emerald-400)';
+        } else {
+          card.classList.remove('active');
+          status.innerText = 'PENDING';
+          status.style.color = 'var(--text-dim)';
+        }
+      });
+    }
+
+    function logSimEvent(msg) {
+      const box = document.getElementById('simLogBox');
+      const now = new Date().toISOString().substring(11, 19);
+      const entry = document.createElement('div');
+      entry.className = 'sim-log-entry';
+      entry.innerHTML = `<span class="sim-log-ts">[${now} UTC]</span><span>${msg}</span>`;
+      box.prepend(entry);
+    }
+
+    // Currency Switcher Logic
+    const currencyRates = {
+      USD: { symbol: '$', rate: 1.0 },
+      EUR: { symbol: '€', rate: 0.92 },
+      GBP: { symbol: '£', rate: 0.78 },
+      JPY: { symbol: '¥', rate: 154.0 }
+    };
+
+    function updateQuoteCurrency() {
+      const cur = document.getElementById('currencySelector').value;
+      const { symbol, rate } = currencyRates[cur];
+
+      const base = 185.0 * rate;
+      const disc = -22.20 * rate;
+      const customs = 14.80 * rate;
+      const shipping = 14.40 * rate;
+      const total = 192.0 * rate;
+
+      const fmt = (val) => cur === 'JPY' ? `${symbol}${Math.round(val).toLocaleString()}` : `${symbol}${val.toFixed(2)}`;
+
+      document.getElementById('rowBase').innerText = fmt(base);
+      document.getElementById('rowDiscount').innerText = fmt(disc);
+      document.getElementById('rowCustoms').innerText = fmt(customs);
+      document.getElementById('rowShipping').innerText = fmt(shipping);
+      document.getElementById('rowTotal').innerText = fmt(total);
+    }
+  </script>
+</body>
+</html>

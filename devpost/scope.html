@@ -1,0 +1,1216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>W-Commerce PayAI — Scope Document & Interactive Companion</title>
+  <style>
+    :root {
+      --bg-dark: #090d16;
+      --bg-card: #0f172a;
+      --bg-card-hover: #1e293b;
+      --border-color: #334155;
+      --emerald-500: #10b981;
+      --emerald-400: #34d399;
+      --emerald-900: #064e3b;
+      --cyan-400: #22d3ee;
+      --cyan-500: #06b6d4;
+      --amber-400: #fbbf24;
+      --rose-400: #fb7185;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 18px;
+      --shadow-glow: 0 0 25px rgba(16, 185, 129, 0.18);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      line-height: 1.6;
+      padding: 2rem 1rem;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    /* Header styling */
+    header {
+      background: linear-gradient(145deg, #0f172a 0%, #111e38 100%);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 2.25rem;
+      margin-bottom: 2rem;
+      box-shadow: var(--shadow-glow);
+      position: relative;
+      overflow: hidden;
+    }
+
+    header::before {
+      content: "";
+      position: absolute;
+      top: -50px;
+      right: -50px;
+      width: 200px;
+      height: 200px;
+      background: radial-gradient(circle, rgba(16, 185, 129, 0.25) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .meta-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+      margin-bottom: 1.25rem;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.35rem 0.8rem;
+      border-radius: 9999px;
+      border: 1px solid transparent;
+    }
+
+    .badge-approved {
+      background-color: rgba(16, 185, 129, 0.15);
+      color: var(--emerald-400);
+      border-color: rgba(16, 185, 129, 0.4);
+    }
+
+    .badge-stage {
+      background-color: rgba(6, 182, 212, 0.12);
+      color: var(--cyan-400);
+      border-color: rgba(6, 182, 212, 0.3);
+    }
+
+    .badge-hackathon {
+      background-color: rgba(251, 191, 36, 0.12);
+      color: var(--amber-400);
+      border-color: rgba(251, 191, 36, 0.3);
+    }
+
+    h1 {
+      font-size: 2.4rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, #ffffff 30%, var(--emerald-400) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .tagline {
+      font-size: 1.15rem;
+      color: var(--text-muted);
+      max-width: 850px;
+    }
+
+    /* Diagram Section */
+    .diagram-panel {
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 1.75rem;
+      margin-bottom: 2rem;
+    }
+
+    .section-title {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .section-subtitle {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      margin-bottom: 1.25rem;
+    }
+
+    .svg-container {
+      width: 100%;
+      background: #070b12;
+      border: 1px solid #1e293b;
+      border-radius: var(--radius-md);
+      padding: 1.5rem 1rem;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    svg.flow-svg {
+      width: 100%;
+      max-width: 950px;
+      height: auto;
+      overflow: visible;
+    }
+
+    .node-rect {
+      cursor: pointer;
+      transition: all 0.25s ease;
+      rx: 10px;
+    }
+
+    .node-rect:hover {
+      filter: brightness(1.25);
+    }
+
+    .node-active {
+      stroke: var(--emerald-400) !important;
+      stroke-width: 3px !important;
+      filter: drop-shadow(0 0 10px rgba(16, 185, 129, 0.5));
+    }
+
+    .diagram-inspector {
+      margin-top: 1.25rem;
+      padding: 1rem 1.25rem;
+      border-radius: var(--radius-md);
+      background: rgba(16, 185, 129, 0.06);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      transition: all 0.3s ease;
+    }
+
+    .inspector-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--emerald-400);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .inspector-body {
+      font-size: 0.88rem;
+      color: var(--text-muted);
+    }
+
+    /* Tab Controls */
+    .tab-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 0.5rem;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      font-weight: 600;
+      padding: 0.6rem 1.1rem;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .tab-btn:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .tab-btn.active {
+      background: var(--bg-card);
+      color: var(--emerald-400);
+      border-color: var(--border-color);
+      border-bottom-color: var(--emerald-500);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Content Area */
+    .tab-content {
+      display: none;
+      animation: fadeIn 0.25s ease forwards;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Grid Layouts */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .card {
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 1.5rem;
+      transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+
+    .card:hover {
+      border-color: #475569;
+    }
+
+    .card-highlight {
+      border-color: rgba(16, 185, 129, 0.35);
+      background: linear-gradient(160deg, #0f172a 0%, #0d2325 100%);
+    }
+
+    .card-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .card-body {
+      color: var(--text-muted);
+      font-size: 0.92rem;
+    }
+
+    .card-body p {
+      margin-bottom: 0.75rem;
+    }
+
+    .card-body p:last-child {
+      margin-bottom: 0;
+    }
+
+    /* List style */
+    ul.check-list {
+      list-style: none;
+      margin-top: 0.5rem;
+    }
+
+    ul.check-list li {
+      position: relative;
+      padding-left: 1.6rem;
+      margin-bottom: 0.5rem;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    ul.check-list li::before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      top: 0;
+      color: var(--emerald-400);
+      font-weight: bold;
+    }
+
+    /* Steps list for Core Loop */
+    .loop-track {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .loop-step {
+      display: flex;
+      gap: 1rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 1.25rem;
+      align-items: flex-start;
+      transition: transform 0.2s ease;
+    }
+
+    .loop-step:hover {
+      transform: translateX(4px);
+      border-color: var(--emerald-500);
+    }
+
+    .step-number {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--emerald-400);
+      font-weight: 800;
+      font-size: 1rem;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+
+    .step-info h4 {
+      font-size: 1.05rem;
+      margin-bottom: 0.25rem;
+      color: var(--text-main);
+    }
+
+    .step-info p {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    /* Interactive Simulator */
+    .simulator-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 1.75rem;
+    }
+
+    .escrow-pipeline {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: relative;
+      margin: 2rem 0;
+      padding: 0 1rem;
+    }
+
+    .pipeline-line {
+      position: absolute;
+      top: 22px;
+      left: 3rem;
+      right: 3rem;
+      height: 4px;
+      background: #1e293b;
+      z-index: 1;
+    }
+
+    .pipeline-progress {
+      position: absolute;
+      top: 22px;
+      left: 3rem;
+      width: 0%;
+      height: 4px;
+      background: linear-gradient(90deg, var(--cyan-500), var(--emerald-400));
+      z-index: 2;
+      transition: width 0.4s ease;
+    }
+
+    .escrow-node {
+      position: relative;
+      z-index: 3;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .node-circle {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      background: #1e293b;
+      border: 2px solid #475569;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.85rem;
+      color: var(--text-dim);
+      transition: all 0.3s ease;
+    }
+
+    .escrow-node.active .node-circle {
+      background: var(--emerald-900);
+      border-color: var(--emerald-400);
+      color: var(--emerald-400);
+      box-shadow: 0 0 15px rgba(16, 185, 129, 0.5);
+    }
+
+    .escrow-node.completed .node-circle {
+      background: var(--emerald-500);
+      border-color: var(--emerald-400);
+      color: #000;
+    }
+
+    .node-label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .escrow-node.active .node-label {
+      color: var(--emerald-400);
+    }
+
+    .sim-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 1.5rem;
+      align-items: center;
+    }
+
+    .sim-btn {
+      background: #1e293b;
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+      padding: 0.6rem 1.2rem;
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .sim-btn:hover {
+      background: #334155;
+    }
+
+    .sim-btn-primary {
+      background: var(--emerald-500);
+      color: #042f2e;
+      border-color: var(--emerald-400);
+    }
+
+    .sim-btn-primary:hover {
+      background: var(--emerald-400);
+    }
+
+    .sim-log {
+      margin-top: 1rem;
+      background: #070b12;
+      border: 1px solid #1e293b;
+      border-radius: var(--radius-sm);
+      padding: 0.75rem 1rem;
+      font-family: monospace;
+      font-size: 0.82rem;
+      color: #38bdf8;
+      min-height: 48px;
+      display: flex;
+      align-items: center;
+    }
+
+    /* Filter Controls */
+    .filter-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .filter-chip {
+      background: #1e293b;
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      padding: 0.4rem 0.9rem;
+      border-radius: 9999px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .filter-chip.active {
+      background: rgba(16, 185, 129, 0.15);
+      border-color: var(--emerald-400);
+      color: var(--emerald-400);
+    }
+
+    .boundary-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+      transition: all 0.2s ease;
+    }
+
+    .boundary-card.now {
+      border-left: 4px solid var(--emerald-400);
+    }
+
+    .boundary-card.later {
+      border-left: 4px solid var(--cyan-400);
+    }
+
+    .boundary-card.cut {
+      border-left: 4px solid var(--rose-400);
+      opacity: 0.85;
+    }
+
+    .boundary-badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 0.2rem 0.6rem;
+      border-radius: 4px;
+      margin-bottom: 0.5rem;
+    }
+
+    .now .boundary-badge {
+      background: rgba(16, 185, 129, 0.2);
+      color: var(--emerald-400);
+    }
+
+    .later .boundary-badge {
+      background: rgba(6, 182, 212, 0.2);
+      color: var(--cyan-400);
+    }
+
+    .cut .boundary-badge {
+      background: rgba(251, 113, 133, 0.2);
+      color: var(--rose-400);
+    }
+
+    /* Markdown Table Simulation */
+    .markdown-card-preview {
+      background: #070b12;
+      border: 1px solid #1e293b;
+      border-radius: var(--radius-md);
+      padding: 1.25rem;
+      margin-top: 1rem;
+      font-family: monospace;
+      font-size: 0.85rem;
+    }
+
+    .table-container {
+      width: 100%;
+      overflow-x: auto;
+      margin-top: 0.5rem;
+    }
+
+    table.cost-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      text-align: left;
+    }
+
+    table.cost-table th, table.cost-table td {
+      padding: 0.6rem 0.75rem;
+      border-bottom: 1px solid #1e293b;
+    }
+
+    table.cost-table th {
+      background: #0f172a;
+      color: var(--text-main);
+      font-weight: 600;
+    }
+
+    table.cost-table tr:hover {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .highlight-price {
+      color: var(--emerald-400);
+      font-weight: bold;
+    }
+
+    /* Footer */
+    footer {
+      margin-top: 3rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      color: var(--text-dim);
+      font-size: 0.85rem;
+    }
+
+    footer a {
+      color: var(--emerald-400);
+      text-decoration: none;
+    }
+
+    footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <!-- Header -->
+    <header>
+      <div class="meta-bar">
+        <span class="badge badge-approved">● Approved Scope</span>
+        <span class="badge badge-stage">Stage 2: 2-scope</span>
+        <span class="badge badge-hackathon">Build With AI: Basics</span>
+      </div>
+      <h1>W-Commerce PayAI</h1>
+      <p class="tagline">
+        Cross-border AI commerce engine with cultural taste-matching, real-time price negotiation, and progressive milestone escrow protection.
+      </p>
+    </header>
+
+    <!-- Architecture & Core Loop Interactive SVG Diagram -->
+    <section class="diagram-panel">
+      <div class="section-title">
+        <span>⚡ System Flow & Economic Loop</span>
+      </div>
+      <div class="section-subtitle">
+        Click any node in the architectural flow to inspect its inputs, agentic behavior, and security boundaries.
+      </div>
+
+      <div class="svg-container">
+        <svg class="flow-svg" viewBox="0 0 920 180" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="gradEmerald" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#064e3b" />
+              <stop offset="100%" stop-color="#0f172a" />
+            </linearGradient>
+            <linearGradient id="gradCyan" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#083344" />
+              <stop offset="100%" stop-color="#0f172a" />
+            </linearGradient>
+            <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 1 L 8 5 L 0 9 z" fill="#10b981" />
+            </marker>
+          </defs>
+
+          <!-- Connecting Arrows -->
+          <line x1="180" y1="90" x2="250" y2="90" stroke="#10b981" stroke-width="2.5" marker-end="url(#arrow)" stroke-dasharray="4 2" />
+          <line x1="430" y1="90" x2="500" y2="90" stroke="#10b981" stroke-width="2.5" marker-end="url(#arrow)" stroke-dasharray="4 2" />
+          <line x1="680" y1="90" x2="750" y2="90" stroke="#10b981" stroke-width="2.5" marker-end="url(#arrow)" stroke-dasharray="4 2" />
+
+          <!-- Node 1: User / Cultural Prompt -->
+          <g id="node-user" onclick="selectNode('user')">
+            <rect class="node-rect node-active" x="20" y="40" width="160" height="100" fill="url(#gradCyan)" stroke="#06b6d4" stroke-width="1.5" />
+            <text x="100" y="75" fill="#22d3ee" font-size="14" font-weight="700" text-anchor="middle">1. Buyer Input</text>
+            <text x="100" y="98" fill="#cbd5e1" font-size="11" text-anchor="middle">Cultural Palate Prompt</text>
+            <text x="100" y="115" fill="#94a3b8" font-size="10" text-anchor="middle">"Lagos x Tokyo Techwear"</text>
+          </g>
+
+          <!-- Node 2: TasteMatch Engine -->
+          <g id="node-tastematch" onclick="selectNode('tastematch')">
+            <rect class="node-rect" x="250" y="40" width="180" height="100" fill="url(#gradEmerald)" stroke="#334155" stroke-width="1.5" />
+            <text x="340" y="75" fill="#34d399" font-size="14" font-weight="700" text-anchor="middle">2. TasteMatch AI</text>
+            <text x="340" y="98" fill="#cbd5e1" font-size="11" text-anchor="middle">Qloo-style Cross-Domain</text>
+            <text x="340" y="115" fill="#94a3b8" font-size="10" text-anchor="middle">Catalog Affinity Scoring (94%)</text>
+          </g>
+
+          <!-- Node 3: AI Negotiator -->
+          <g id="node-negotiator" onclick="selectNode('negotiator')">
+            <rect class="node-rect" x="500" y="40" width="180" height="100" fill="url(#gradEmerald)" stroke="#334155" stroke-width="1.5" />
+            <text x="590" y="75" fill="#34d399" font-size="14" font-weight="700" text-anchor="middle">3. AI Negotiator</text>
+            <text x="590" y="98" fill="#cbd5e1" font-size="11" text-anchor="middle">Bounded Sales Agent</text>
+            <text x="590" y="115" fill="#94a3b8" font-size="10" text-anchor="middle">Landed-Cost MD Generator</text>
+          </g>
+
+          <!-- Node 4: Milestone Escrow -->
+          <g id="node-escrow" onclick="selectNode('escrow')">
+            <rect class="node-rect" x="750" y="40" width="150" height="100" fill="url(#gradCyan)" stroke="#334155" stroke-width="1.5" />
+            <text x="825" y="75" fill="#22d3ee" font-size="14" font-weight="700" text-anchor="middle">4. Escrow Lock</text>
+            <text x="825" y="98" fill="#cbd5e1" font-size="11" text-anchor="middle">Progressive Settlement</text>
+            <text x="825" y="115" fill="#94a3b8" font-size="10" text-anchor="middle">Locked -> Disbursed</text>
+          </g>
+        </svg>
+      </div>
+
+      <!-- Inspector Display -->
+      <div id="diagram-inspector" class="diagram-inspector">
+        <div id="inspector-title" class="inspector-title">
+          <span>📍 Node 1: Buyer Cultural Palate Prompt</span>
+        </div>
+        <div id="inspector-body" class="inspector-body">
+          Captures unstructured qualitative aesthetic or regional palate preferences (e.g., "Lagos street style meets Tokyo minimalist techwear") rather than static keyword filters. Initiates the cultural taste discovery cycle.
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab Navigation -->
+    <nav class="tab-nav">
+      <button class="tab-btn active" onclick="switchTab('kernel')">🌟 The Unique Kernel</button>
+      <button class="tab-btn" onclick="switchTab('core-loop')">🔄 The Core Loop</button>
+      <button class="tab-btn" onclick="switchTab('working')">🚀 What "Working" Looks Like</button>
+      <button class="tab-btn" onclick="switchTab('boundary')">🎯 POC Boundary (Now / Later / Cut)</button>
+      <button class="tab-btn" onclick="switchTab('escrow-sim')">🛡️ Escrow Simulator</button>
+    </nav>
+
+    <!-- Tab 1: The Kernel & Vision -->
+    <div id="tab-kernel" class="tab-content active">
+      <div class="grid-2">
+        <div class="card card-highlight">
+          <div class="card-title">💎 The Unique Kernel</div>
+          <div class="card-body">
+            <p>
+              Cross-domain <strong>Cultural TasteMatch</strong> (inspired by Qloo) coupled with an autonomous <strong>AI sales negotiator</strong> that dynamically binds agreed prices and multi-day delivery milestones directly to smart escrow locking and disbursement.
+            </p>
+            <p>
+              In traditional e-commerce, recommendations are keyword-rigid, prices are non-negotiable, and buyers carry all shipping risk. PayAI unites cultural exploration, agentic pricing flexibility, and fraud-proof progressive milestone disbursement into a unified commercial loop.
+            </p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">🎯 Who It's For</div>
+          <div class="card-body">
+            <p><strong>Discerning Global Buyers:</strong> Shoppers seeking authentic regional creations (African textiles, Japanese bespoke ceramic ware, Nordic heritage apparel) who fear surprise landed tariffs, counterfeit goods, or lost shipments.</p>
+            <p><strong>Cross-Border Artisans & Merchants:</strong> Independent makers who lack 24/7 multi-lingual sales teams and struggle with foreign buyer skepticism. PayAI provides an autonomous sales agent with protected profit-floors and guaranteed delivery milestone escrow payouts.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">💡 Why This Matters to the Learner</div>
+          <div class="card-body">
+            <p>
+              Proves that AI agents can evolve beyond conversational chatbots into dependable economic agents that mediate real commercial transactions.
+            </p>
+            <p>
+              By fusing generative language reasoning with deterministic margin constraints and a stateful escrow ledger, this project addresses the core friction points of cross-border trade with architectural discipline.
+            </p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">🔗 Inspiration & Visual Identity</div>
+          <div class="card-body">
+            <p><strong><a href="https://qloo.com" target="_blank" style="color:var(--emerald-400);">Qloo:</a></strong> Cultural AI intelligence that connects tastes across disparate domains.</p>
+            <p><strong><a href="https://shopify.com" target="_blank" style="color:var(--emerald-400);">Shopify:</a></strong> Merchant autonomy and high-trust catalog integrity.</p>
+            <p><strong><a href="https://escrow.com" target="_blank" style="color:var(--emerald-400);">Escrow.com:</a></strong> Progressive milestone security that prevents fraud.</p>
+            <p><strong>Aesthetic:</strong> High-trust dark slate (`#0f172a`), emerald accents (`#10b981`), glowing badges, monospaced landed cost tables, and responsive Framer Motion-style physics.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 2: The Core Loop -->
+    <div id="tab-core-loop" class="tab-content">
+      <div class="loop-track">
+        <div class="loop-step">
+          <div class="step-number">1</div>
+          <div class="step-info">
+            <h4>Cultural Palate Prompting</h4>
+            <p>Buyer inputs qualitative aesthetic descriptors (e.g., <em>"Lagos street style meets Tokyo minimalist techwear"</em>) instead of rigid category dropdowns.</p>
+          </div>
+        </div>
+
+        <div class="loop-step">
+          <div class="step-number">2</div>
+          <div class="step-info">
+            <h4>Cross-Domain Affinity Scoring</h4>
+            <p>PayAI computes contextual affinity scores against catalog items, returning curated cultural matches with transparent cultural rationale tags.</p>
+          </div>
+        </div>
+
+        <div class="loop-step">
+          <div class="step-number">3</div>
+          <div class="step-info">
+            <h4>Agentic Real-Time Negotiation</h4>
+            <p>Buyer chats with the merchant's AI sales representative to negotiate bundle pricing, discounts, and delivery deadlines within merchant-defined margin floors.</p>
+          </div>
+        </div>
+
+        <div class="loop-step">
+          <div class="step-number">4</div>
+          <div class="step-info">
+            <h4>Landed-Cost Markdown Generator</h4>
+            <p>Agent generates an itemized Markdown quotation card detailing unit prices, estimated import duties, airfreight costs, and calculated savings.</p>
+          </div>
+        </div>
+
+        <div class="loop-step">
+          <div class="step-number">5</div>
+          <div class="step-info">
+            <h4>Milestone Escrow Locking</h4>
+            <p>Upon buyer confirmation, funds are authorized and locked in a 3-stage milestone escrow via PayPal Sandbox or internal wallet.</p>
+          </div>
+        </div>
+
+        <div class="loop-step">
+          <div class="step-number">6</div>
+          <div class="step-info">
+            <h4>Progressive Milestone Disbursement</h4>
+            <p>Funds advance from `LOCKED` -> `IN_TRANSIT` -> `DELIVERED` -> `DISBURSED`, eliminating buyer non-delivery risk and seller non-payment anxiety.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 3: What "Working" Looks Like -->
+    <div id="tab-working" class="tab-content">
+      <div class="card card-highlight" style="margin-bottom: 1.5rem;">
+        <div class="card-title">🎬 The 60-Second Proof of Concept Experience</div>
+        <div class="card-body">
+          <p>
+            A buyer opens W-Commerce PayAI in their browser and submits: <em>"Lagos street style meets Tokyo minimalist techwear."</em>
+          </p>
+          <ul class="check-list">
+            <li><strong>Taste Discovery:</strong> Curated items display instantly with 90%+ Cultural TasteMatch badges and contextual styling notes.</li>
+            <li><strong>Bargaining Session:</strong> Buyer clicks "Negotiate Bundle" on a 2-item set ($280 list price) and offers $230.</li>
+            <li><strong>Autonomous Counter:</strong> AI agent calculates merchant floor margin, counters at $245, and outputs an itemized landed-cost table.</li>
+            <li><strong>Escrow Lock:</strong> Buyer accepts; funds lock into the milestone escrow contract (`LOCKED`).</li>
+            <li><strong>Logistics Progression:</strong> In the dashboard, the user triggers milestone transitions (`IN_TRANSIT` -> `DELIVERED`), confirming seller wallet payout on delivery.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Markdown Output Preview -->
+      <div class="markdown-card-preview">
+        <div style="color: var(--emerald-400); font-weight: 700; margin-bottom: 0.5rem;">
+          // Simulated PayAI Negotiation Offer & Landed Cost Card
+        </div>
+        <div class="table-container">
+          <table class="cost-table">
+            <thead>
+              <tr>
+                <th>Item / Service</th>
+                <th>Origin</th>
+                <th>List Price</th>
+                <th>Negotiated</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Hand-Dyed Indigo Utility Kimono</td>
+                <td>Lagos, NG</td>
+                <td>$160.00</td>
+                <td>$140.00</td>
+                <td>Agreed</td>
+              </tr>
+              <tr>
+                <td>Tokyo Waterproof Tech Cargo Pant</td>
+                <td>Tokyo, JP</td>
+                <td>$120.00</td>
+                <td>$105.00</td>
+                <td>Agreed</td>
+              </tr>
+              <tr>
+                <td>Harmonized Tariff / Duties (Est. 8%)</td>
+                <td>International</td>
+                <td>$22.40</td>
+                <td>$19.60</td>
+                <td>Itemized</td>
+              </tr>
+              <tr>
+                <td>Express Air Cargo (6-Day Milestone)</td>
+                <td>Cross-Border</td>
+                <td>$28.00</td>
+                <td>$20.00</td>
+                <td>Discounted</td>
+              </tr>
+              <tr style="border-top: 2px solid var(--emerald-500); font-weight: bold;">
+                <td colspan="3">Total Landed Cost in Escrow:</td>
+                <td class="highlight-price" colspan="2">$284.60 (Saved $45.80)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="margin-top: 0.75rem; color: var(--text-muted); font-size: 0.78rem;">
+          🔐 Escrow Contract #PAYAI-88392: Status = <span style="color: var(--emerald-400);">LOCKED</span> (Disbursement bound to Milestone #3 Delivery confirmation)
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 4: POC Boundary -->
+    <div id="tab-boundary" class="tab-content">
+      <div class="filter-bar">
+        <button class="filter-chip active" onclick="filterBoundary('all')">All Items</button>
+        <button class="filter-chip" onclick="filterBoundary('now')">Now (In POC)</button>
+        <button class="filter-chip" onclick="filterBoundary('later')">Later (Roadmap)</button>
+        <button class="filter-chip" onclick="filterBoundary('cut')">Explicitly Cut</button>
+      </div>
+
+      <div class="boundary-list">
+        <!-- In POC -->
+        <div class="boundary-card now">
+          <span class="boundary-badge">Now (In POC)</span>
+          <h4 style="color:var(--text-main); margin-bottom:0.25rem;">Cultural TasteMatch Affinity Engine</h4>
+          <p style="font-size:0.88rem; color:var(--text-muted);">
+            Multi-attribute cultural recommendation scoring linking unstructured aesthetic/regional prompts to curated cross-border items.
+          </p>
+        </div>
+
+        <div class="boundary-card now">
+          <span class="boundary-badge">Now (In POC)</span>
+          <h4 style="color:var(--text-main); margin-bottom:0.25rem;">Autonomous Negotiation Agent with Pricing Bounds</h4>
+          <p style="font-size:0.88rem; color:var(--text-muted);">
+            Conversational LLM-driven negotiation loop with strict deterministic floor pricing, counter-offer logic, and bundle discounts.
+          </p>
+        </div>
+
+        <div class="boundary-card now">
+          <span class="boundary-badge">Now (In POC)</span>
+          <h4 style="color:var(--text-main); margin-bottom:0.25rem;">Landed-Cost Markdown Table Generator</h4>
+          <p style="font-size:0.88rem; color:var(--text-muted);">
+            Dynamic parsing and rendering of itemized landed-cost breakdown tables with shipping and tariff estimations.
+          </p>
+        </div>
+
+        <div class="boundary-card now">
+          <span class="boundary-badge">Now (In POC)</span>
+          <h4 style="color:var(--text-main); margin-bottom:0.25rem;">4-State Milestone Escrow Ledger</h4>
+          <p style="font-size:0.88rem; color:var(--text-muted);">
+            Deterministic finite state machine (`LOCKED` -> `IN_TRANSIT` -> `DELIVERED` -> `DISBURSED`) with state transition verification.
+          </p>
+        </div>
+
+        <div class="boundary-card now">
+          <span class="boundary-badge">Now (In POC)</span>
+          <h4 style="color:var(--text-main); margin-bottom:0.25rem;">PayPal Sandbox & Wallet Simulation</h4>
+          <p style="font-size:0.88rem; color:var(--text-muted);">
+            Dual-mode checkout with PayPal Sandbox integration and internal simulated merchant/buyer ledger for instant verification.
+          </p>
+        </div>
+
+        <!-- Later -->
+        <div class="boundary-card later">
+          <span class="boundary-badge">Later</span>
+          <h4 style="color:var(--text-main); margin-bottom:0.25rem;">Multi-Currency Crypto Smart Contracts</h4>
+          <p style="font-size:0.88rem; color:var(--text-muted);">
+            USDC smart contract escrow vaults deployed on high-speed Layer 2 blockchains (Solana or Base).
+          </p>
+        </div>
+
+        <div class="boundary-card later">
+          <span class="boundary-badge">Later</span>
+          <h4 style="color:var(--text-main); margin-bottom:0.25rem;">Live Government Customs Tariff APIs</h4>
+          <p style="font-size:0.88rem; color:var(--text-muted);">
+            Real-time Harmonized System (HS) code lookup and automated import duty calculation via official customs registry APIs.
+          </p>
+        </div>
+
+        <div class="boundary-card later">
+          <span class="boundary-badge">Later</span>
+          <h4 style="color:var(--text-main); margin-bottom:0.25rem;">Native iOS & Android Mobile Apps</h4>
+          <p style="font-size:0.88rem; color:var(--text-muted);">
+            Push notifications for real-time seller counter-offers and milestone shipment status changes.
+          </p>
+        </div>
+
+        <!-- Cut -->
+        <div class="boundary-card cut">
+          <span class="boundary-badge">Explicitly Cut</span>
+          <h4 style="color:var(--text-main); margin-bottom:0.25rem;">Multi-Party Legal Arbitration Tribunal</h4>
+          <p style="font-size:0.88rem; color:var(--text-muted);">
+            <strong>Reason:</strong> Out of scope for a 2–4 hour hackathon build. Replaced with an automated buyer/seller dispute resolution window.
+          </p>
+        </div>
+
+        <div class="boundary-card cut">
+          <span class="boundary-badge">Explicitly Cut</span>
+          <h4 style="color:var(--text-main); margin-bottom:0.25rem;">Live Hardware GPS Courier Tracking</h4>
+          <p style="font-size:0.88rem; color:var(--text-muted);">
+            <strong>Reason:</strong> High telematics complexity and API credential friction. Replaced with realistic carrier webhook event triggers.
+          </p>
+        </div>
+
+        <div class="boundary-card cut">
+          <span class="boundary-badge">Explicitly Cut</span>
+          <h4 style="color:var(--text-main); margin-bottom:0.25rem;">Legacy Fiat Wire Transfers (ACH/SWIFT)</h4>
+          <p style="font-size:0.88rem; color:var(--text-muted);">
+            <strong>Reason:</strong> Multi-day bank settlement delays break immediate PoC demonstrability. Focused strictly on instant digital authorization.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 5: Escrow Simulator -->
+    <div id="tab-escrow-sim" class="tab-content">
+      <div class="simulator-box">
+        <div class="section-title">
+          <span>🛡️ Interactive Milestone Escrow Ledger Demo</span>
+        </div>
+        <div class="section-subtitle">
+          Experience the 4-state deterministic ledger that binds payment release to verified logistics milestones.
+        </div>
+
+        <div class="escrow-pipeline">
+          <div class="pipeline-line"></div>
+          <div id="pipeline-progress" class="pipeline-progress"></div>
+
+          <div id="escrow-step-1" class="escrow-node active">
+            <div class="node-circle">1</div>
+            <div class="node-label">Locked</div>
+          </div>
+
+          <div id="escrow-step-2" class="escrow-node">
+            <div class="node-circle">2</div>
+            <div class="node-label">In Transit</div>
+          </div>
+
+          <div id="escrow-step-3" class="escrow-node">
+            <div class="node-circle">3</div>
+            <div class="node-label">Delivered</div>
+          </div>
+
+          <div id="escrow-step-4" class="escrow-node">
+            <div class="node-circle">4</div>
+            <div class="node-label">Disbursed</div>
+          </div>
+        </div>
+
+        <div class="sim-controls">
+          <button id="sim-next-btn" class="sim-btn sim-btn-primary" onclick="advanceEscrow()">Advance to In Transit →</button>
+          <button class="sim-btn" onclick="resetEscrow()">Reset Simulation</button>
+          <span style="font-size: 0.85rem; color: var(--text-muted); margin-left: auto;" id="escrow-balance-display">
+            Vault Balance: <strong>$284.60 USD</strong> (Locked)
+          </span>
+        </div>
+
+        <div id="sim-log" class="sim-log">
+          [ESCROW #PAYAI-88392] State: LOCKED | $284.60 secured in vault. Awaiting carrier pickup.
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer>
+      <div>
+        Artifact: <a href="scope.md">devpost/scope.md</a> (Canonical Specification)
+      </div>
+      <div>
+        Status: <strong style="color:var(--emerald-400);">Approved</strong> &bull; Next Stage: <a href="../.agents/skills/3-prd/SKILL.md">3-prd</a>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    // Tab switching
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+      const activeBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.getAttribute('onclick').includes(tabId));
+      if (activeBtn) activeBtn.classList.add('active');
+
+      const target = document.getElementById('tab-' + tabId);
+      if (target) target.classList.add('active');
+    }
+
+    // Node inspection in diagram
+    const nodeDetails = {
+      user: {
+        title: "📍 Node 1: Buyer Cultural Palate Prompt",
+        body: "Captures unstructured qualitative aesthetic or regional palate preferences (e.g., 'Lagos street style meets Tokyo minimalist techwear') rather than static keyword filters. Initiates the cultural taste discovery cycle."
+      },
+      tastematch: {
+        title: "🧠 Node 2: TasteMatch AI Recommendation Engine",
+        body: "Inspired by Qloo's cultural AI. Maps multi-domain preferences (fashion, craft, culinary, geography) to calculate a unified affinity score (e.g. 94%), outputting curated items with cultural reasoning notes."
+      },
+      negotiator: {
+        title: "🤝 Node 3: Autonomous AI Sales Negotiator",
+        body: "A bounded conversational agent acting on behalf of the merchant. Evaluates buyer offers against deterministic minimum margin floors, dynamically generating itemized landed-cost Markdown comparison tables."
+      },
+      escrow: {
+        title: "🔐 Node 4: Progressive Milestone Escrow Ledger",
+        body: "Deterministic state machine preventing payment risk. Holds buyer funds in escrow (via PayPal Sandbox / internal wallet) and triggers progressive disbursement only as logistics milestones are verified."
+      }
+    };
+
+    function selectNode(nodeKey) {
+      document.querySelectorAll('.node-rect').forEach(rect => rect.classList.remove('node-active'));
+      const group = document.getElementById('node-' + nodeKey);
+      if (group) {
+        const rect = group.querySelector('.node-rect');
+        if (rect) rect.classList.add('node-active');
+      }
+
+      const data = nodeDetails[nodeKey];
+      if (data) {
+        document.getElementById('inspector-title').innerHTML = `<span>${data.title}</span>`;
+        document.getElementById('inspector-body').innerText = data.body;
+      }
+    }
+
+    // Boundary Filter
+    function filterBoundary(category) {
+      document.querySelectorAll('.filter-chip').forEach(chip => chip.classList.remove('active'));
+      const activeChip = Array.from(document.querySelectorAll('.filter-chip')).find(c => c.getAttribute('onclick').includes(category));
+      if (activeChip) activeChip.classList.add('active');
+
+      const cards = document.querySelectorAll('.boundary-card');
+      cards.forEach(card => {
+        if (category === 'all') {
+          card.style.display = 'block';
+        } else if (card.classList.contains(category)) {
+          card.style.display = 'block';
+        } else {
+          card.style.display = 'none';
+        }
+      });
+    }
+
+    // Interactive Escrow Simulator
+    let escrowState = 0; // 0: Locked, 1: In Transit, 2: Delivered, 3: Disbursed
+    const escrowSteps = [
+      { name: "Locked", pct: "0%", log: "[ESCROW #PAYAI-88392] State: LOCKED | $284.60 secured in vault. Awaiting carrier pickup.", btn: "Advance to In Transit →", balance: "Vault Balance: <strong>$284.60 USD</strong> (Locked)" },
+      { name: "In Transit", pct: "33%", log: "[ESCROW #PAYAI-88392] State: IN_TRANSIT | Tracking #PAYAI-LOS-NRT verified. Goods in flight.", btn: "Advance to Delivered →", balance: "Vault Balance: <strong>$284.60 USD</strong> (In Transit)" },
+      { name: "Delivered", pct: "66%", log: "[ESCROW #PAYAI-88392] State: DELIVERED | Delivery receipt signed by buyer. Awaiting release approval.", btn: "Disburse Escrow Funds →", balance: "Vault Balance: <strong>$284.60 USD</strong> (Awaiting Release)" },
+      { name: "Disbursed", pct: "100%", log: "[ESCROW #PAYAI-88392] State: DISBURSED | Funds transferred to Merchant wallet. Transaction complete!", btn: "Simulation Complete ✓", balance: "Merchant Wallet: <strong>+$284.60 USD</strong> (Settled)" }
+    ];
+
+    function updateEscrowUI() {
+      const step = escrowSteps[escrowState];
+      document.getElementById('pipeline-progress').style.width = step.pct;
+      document.getElementById('sim-log').innerText = step.log;
+      document.getElementById('sim-next-btn').innerText = step.btn;
+      document.getElementById('escrow-balance-display').innerHTML = step.balance;
+
+      for (let i = 1; i <= 4; i++) {
+        const node = document.getElementById('escrow-step-' + i);
+        node.classList.remove('active', 'completed');
+        if (i - 1 === escrowState) {
+          node.classList.add('active');
+        } else if (i - 1 < escrowState) {
+          node.classList.add('completed');
+        }
+      }
+
+      const nextBtn = document.getElementById('sim-next-btn');
+      if (escrowState === 3) {
+        nextBtn.classList.remove('sim-btn-primary');
+        nextBtn.disabled = true;
+        nextBtn.style.opacity = '0.6';
+      } else {
+        nextBtn.classList.add('sim-btn-primary');
+        nextBtn.disabled = false;
+        nextBtn.style.opacity = '1';
+      }
+    }
+
+    function advanceEscrow() {
+      if (escrowState < 3) {
+        escrowState++;
+        updateEscrowUI();
+      }
+    }
+
+    function resetEscrow() {
+      escrowState = 0;
+      updateEscrowUI();
+    }
+  </script>
+</body>
+</html>

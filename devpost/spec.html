@@ -1,0 +1,1515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>W-Commerce PayAI — Technical Specification & Interactive Architecture Companion</title>
+  <style>
+    :root {
+      --bg-dark: #090d16;
+      --bg-card: #0f172a;
+      --bg-card-hover: #1e293b;
+      --border-color: #334155;
+      --border-focus: #475569;
+      --emerald-500: #10b981;
+      --emerald-400: #34d399;
+      --emerald-600: #059669;
+      --emerald-900: #064e3b;
+      --cyan-400: #22d3ee;
+      --cyan-500: #06b6d4;
+      --amber-400: #fbbf24;
+      --amber-500: #f59e0b;
+      --rose-400: #fb7185;
+      --rose-500: #f43f5e;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 18px;
+      --shadow-glow: 0 0 25px rgba(16, 185, 129, 0.16);
+      --shadow-cyan: 0 0 20px rgba(6, 182, 212, 0.16);
+      --font-mono: "JetBrains Mono", "SF Mono", "Fira Code", monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      line-height: 1.6;
+      padding: 2rem 1rem;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1240px;
+      margin: 0 auto;
+    }
+
+    header {
+      background: linear-gradient(145deg, #0f172a 0%, #111e38 100%);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 2.25rem;
+      margin-bottom: 2rem;
+      box-shadow: var(--shadow-glow);
+      position: relative;
+      overflow: hidden;
+    }
+
+    header::before {
+      content: "";
+      position: absolute;
+      top: -60px;
+      right: -60px;
+      width: 260px;
+      height: 260px;
+      background: radial-gradient(circle, rgba(16, 185, 129, 0.22) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .meta-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+      margin-bottom: 1.25rem;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.35rem 0.8rem;
+      border-radius: 9999px;
+      border: 1px solid transparent;
+    }
+
+    .badge-approved {
+      background-color: rgba(16, 185, 129, 0.15);
+      color: var(--emerald-400);
+      border-color: rgba(16, 185, 129, 0.4);
+    }
+
+    .badge-stage {
+      background-color: rgba(6, 182, 212, 0.12);
+      color: var(--cyan-400);
+      border-color: rgba(6, 182, 212, 0.35);
+    }
+
+    .badge-mono {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      background: rgba(148, 163, 184, 0.1);
+      color: var(--text-muted);
+      border-color: var(--border-color);
+    }
+
+    h1 {
+      font-size: 2.25rem;
+      font-weight: 800;
+      letter-spacing: -0.025em;
+      margin-bottom: 0.6rem;
+      background: linear-gradient(to right, #f8fafc, #cbd5e1);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .tagline {
+      font-size: 1.15rem;
+      color: var(--text-muted);
+      max-width: 960px;
+      line-height: 1.5;
+      margin-bottom: 1rem;
+    }
+
+    .source-cite {
+      font-size: 0.82rem;
+      color: var(--text-dim);
+      font-family: var(--font-mono);
+      background: rgba(15, 23, 42, 0.7);
+      display: inline-block;
+      padding: 0.3rem 0.6rem;
+      border-radius: 6px;
+      border: 1px solid rgba(51, 65, 85, 0.6);
+    }
+
+    /* Tabs */
+    .tab-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1.75rem;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 0.5rem;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      padding: 0.65rem 1.15rem;
+      border-radius: var(--radius-md);
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.2s ease;
+    }
+
+    .tab-btn:hover {
+      color: var(--text-main);
+      background: rgba(30, 41, 59, 0.6);
+    }
+
+    .tab-btn.active {
+      color: var(--emerald-400);
+      background: rgba(16, 185, 129, 0.12);
+      border-color: rgba(16, 185, 129, 0.35);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    .tab-content {
+      display: none;
+      animation: fadeIn 0.25s ease-out;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Card Panels */
+    .card {
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 1.75rem;
+      margin-bottom: 1.75rem;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    }
+
+    .card-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .card-subtitle {
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      margin-bottom: 1.25rem;
+    }
+
+    /* SVG Architecture Visualizer */
+    .arch-diagram-wrapper {
+      background: #020617;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 1rem;
+      overflow-x: auto;
+      text-align: center;
+      position: relative;
+    }
+
+    svg.arch-svg {
+      width: 100%;
+      min-width: 860px;
+      max-width: 1050px;
+      height: 480px;
+      display: inline-block;
+    }
+
+    .svg-node {
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .svg-node:hover rect {
+      stroke: var(--emerald-400);
+      stroke-width: 2.5;
+      filter: drop-shadow(0 0 10px rgba(16, 185, 129, 0.4));
+    }
+
+    .node-selected rect {
+      stroke: var(--cyan-400) !important;
+      stroke-width: 3 !important;
+      filter: drop-shadow(0 0 12px rgba(6, 182, 212, 0.5)) !important;
+    }
+
+    .inspector-panel {
+      margin-top: 1.25rem;
+      background: #0b1120;
+      border: 1px solid rgba(51, 65, 85, 0.8);
+      border-radius: var(--radius-md);
+      padding: 1.25rem;
+      border-left: 4px solid var(--emerald-500);
+    }
+
+    .inspector-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--emerald-400);
+      margin-bottom: 0.4rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .inspector-body {
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    .inspector-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+      margin-top: 0.85rem;
+    }
+
+    .inspector-item {
+      background: rgba(15, 23, 42, 0.6);
+      padding: 0.75rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid rgba(51, 65, 85, 0.5);
+    }
+
+    .inspector-item-label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-dim);
+      margin-bottom: 0.25rem;
+    }
+
+    .inspector-item-val {
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      color: var(--text-main);
+    }
+
+    /* API Explorer */
+    .filter-bar {
+      display: flex;
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+      flex-wrap: wrap;
+    }
+
+    .search-input {
+      background: #020617;
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 0.5rem 0.9rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.88rem;
+      flex: 1;
+      min-width: 220px;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: var(--emerald-500);
+      box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+    }
+
+    .filter-btn {
+      background: #0b1120;
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      padding: 0.5rem 0.85rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .filter-btn.active {
+      background: rgba(6, 182, 212, 0.15);
+      color: var(--cyan-400);
+      border-color: rgba(6, 182, 212, 0.4);
+    }
+
+    .route-item {
+      background: #0b1324;
+      border: 1px solid rgba(51, 65, 85, 0.7);
+      border-radius: var(--radius-md);
+      margin-bottom: 0.75rem;
+      overflow: hidden;
+      transition: all 0.2s ease;
+    }
+
+    .route-item:hover {
+      border-color: rgba(148, 163, 184, 0.4);
+    }
+
+    .route-header {
+      padding: 0.85rem 1.15rem;
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .method-badge {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      font-weight: 800;
+      padding: 0.25rem 0.55rem;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .method-get { background: rgba(6, 182, 212, 0.2); color: var(--cyan-400); border: 1px solid rgba(6, 182, 212, 0.4); }
+    .method-post { background: rgba(16, 185, 129, 0.2); color: var(--emerald-400); border: 1px solid rgba(16, 185, 129, 0.4); }
+    .method-delete { background: rgba(244, 63, 94, 0.2); color: var(--rose-400); border: 1px solid rgba(244, 63, 94, 0.4); }
+
+    .route-path {
+      font-family: var(--font-mono);
+      font-size: 0.88rem;
+      color: var(--text-main);
+      font-weight: 600;
+      flex: 1;
+    }
+
+    .route-desc {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+
+    .route-body {
+      display: none;
+      padding: 1.15rem;
+      background: #030816;
+      border-top: 1px solid rgba(51, 65, 85, 0.6);
+      font-size: 0.85rem;
+    }
+
+    .route-body.open {
+      display: block;
+    }
+
+    .route-details-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+
+    pre.code-block {
+      background: #090d16;
+      border: 1px solid rgba(51, 65, 85, 0.7);
+      border-radius: var(--radius-sm);
+      padding: 0.75rem;
+      color: #cbd5e1;
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      overflow-x: auto;
+      max-height: 220px;
+    }
+
+    /* Escrow Simulator */
+    .escrow-sim-container {
+      background: #020617;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 1.75rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .pipeline-nodes {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: relative;
+      margin: 2rem 0;
+    }
+
+    .pipeline-track {
+      position: absolute;
+      top: 50%;
+      left: 3%;
+      right: 3%;
+      height: 4px;
+      background: #1e293b;
+      z-index: 1;
+      transform: translateY(-50%);
+    }
+
+    .pipeline-track-fill {
+      height: 100%;
+      background: linear-gradient(to right, var(--emerald-500), var(--cyan-400));
+      width: 0%;
+      transition: width 0.4s ease;
+    }
+
+    .p-node {
+      position: relative;
+      z-index: 2;
+      background: #0f172a;
+      border: 2px solid #334155;
+      border-radius: 9999px;
+      width: 52px;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: var(--text-muted);
+      transition: all 0.3s ease;
+    }
+
+    .p-node.active {
+      border-color: var(--emerald-400);
+      background: rgba(16, 185, 129, 0.2);
+      color: var(--emerald-400);
+      box-shadow: 0 0 18px rgba(16, 185, 129, 0.4);
+    }
+
+    .p-node.dispute {
+      border-color: var(--rose-400);
+      background: rgba(244, 63, 94, 0.2);
+      color: var(--rose-400);
+      box-shadow: 0 0 18px rgba(244, 63, 94, 0.4);
+    }
+
+    .p-node-caption {
+      position: absolute;
+      top: 58px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      white-space: nowrap;
+      text-align: center;
+      color: var(--text-muted);
+    }
+
+    .sim-controls {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      margin-top: 3.5rem;
+      justify-content: center;
+    }
+
+    .btn-sim {
+      padding: 0.65rem 1.25rem;
+      font-size: 0.88rem;
+      font-weight: 700;
+      border-radius: var(--radius-sm);
+      border: 1px solid transparent;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      transition: all 0.2s ease;
+    }
+
+    .btn-primary { background: var(--emerald-500); color: #020617; }
+    .btn-primary:hover { background: var(--emerald-400); }
+    .btn-warning { background: rgba(245, 158, 11, 0.15); color: var(--amber-400); border-color: rgba(245, 158, 11, 0.4); }
+    .btn-warning:hover { background: rgba(245, 158, 11, 0.25); }
+    .btn-danger { background: rgba(244, 63, 94, 0.15); color: var(--rose-400); border-color: rgba(244, 63, 94, 0.4); }
+    .btn-danger:hover { background: rgba(244, 63, 94, 0.25); }
+    .btn-secondary { background: #1e293b; color: var(--text-main); border-color: var(--border-color); }
+    .btn-secondary:hover { background: #334155; }
+
+    .ledger-tape {
+      margin-top: 1.5rem;
+      background: #030816;
+      border: 1px solid rgba(51, 65, 85, 0.7);
+      border-radius: var(--radius-sm);
+      padding: 1rem;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      text-align: center;
+    }
+
+    .ledger-metric-title {
+      font-size: 0.72rem;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .ledger-metric-val {
+      font-family: var(--font-mono);
+      font-size: 1.15rem;
+      font-weight: 800;
+      margin-top: 0.25rem;
+    }
+
+    /* Traceability Matrix Table */
+    .table-wrapper {
+      overflow-x: auto;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+    }
+
+    table.matrix-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      text-align: left;
+    }
+
+    table.matrix-table th {
+      background: #0b1120;
+      padding: 0.85rem 1rem;
+      font-weight: 700;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    table.matrix-table td {
+      padding: 0.85rem 1rem;
+      border-bottom: 1px solid rgba(51, 65, 85, 0.4);
+      color: var(--text-muted);
+    }
+
+    table.matrix-table tr:hover td {
+      background: rgba(30, 41, 59, 0.4);
+      color: var(--text-main);
+    }
+
+    .mono-cell {
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      color: var(--cyan-400);
+    }
+
+    /* Script Timeline */
+    .script-grid {
+      display: grid;
+      grid-template-columns: 120px 1fr 1.2fr;
+      gap: 1rem;
+      padding: 0.85rem 0;
+      border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+    }
+
+    .script-time {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      color: var(--emerald-400);
+      font-weight: 700;
+    }
+
+    .script-screen {
+      font-weight: 600;
+      color: var(--text-main);
+      font-size: 0.88rem;
+    }
+
+    .script-action {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .route-details-grid { grid-template-columns: 1fr; }
+      .ledger-tape { grid-template-columns: 1fr 1fr; }
+      .script-grid { grid-template-columns: 1fr; gap: 0.4rem; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- Header -->
+  <header>
+    <div class="meta-bar">
+      <span class="badge badge-stage">Stage 4: Specification</span>
+      <span class="badge badge-approved">Status: Approved</span>
+      <span class="badge badge-mono">Target: devpost/spec.md</span>
+      <span class="badge badge-mono">Ref: prd.md &gt; The Core Journey</span>
+    </div>
+    <h1>W-Commerce PayAI — Technical Specification Companion</h1>
+    <p class="tagline">
+      Interactive Architecture Visualizer, API Route Explorer, Milestone Escrow State Engine &amp; PRD Traceability Matrix.
+      The complete engineering blueprint powering Stage 5 Build.
+    </p>
+    <div class="source-cite">
+      Review Format: interactive html • Stack: React 19 + Express + Prisma + Socket.IO + PayPal Sandbox
+    </div>
+  </header>
+
+  <!-- Tab Navigation -->
+  <nav class="tab-nav">
+    <button class="tab-btn active" onclick="switchTab('arch')">
+      🏛️ Architecture &amp; Data Flow
+    </button>
+    <button class="tab-btn" onclick="switchTab('api')">
+      🔌 API Route &amp; Contract Explorer
+    </button>
+    <button class="tab-btn" onclick="switchTab('escrow')">
+      🛡️ Milestone Escrow State Engine
+    </button>
+    <button class="tab-btn" onclick="switchTab('matrix')">
+      🎯 Component-to-PRD Matrix
+    </button>
+    <button class="tab-btn" onclick="switchTab('demo')">
+      ⏱️ 90-Second Demo Simulator
+    </button>
+  </nav>
+
+  <!-- TAB 1: ARCHITECTURE -->
+  <div id="tab-arch" class="tab-content active">
+    <div class="card">
+      <div class="card-title">
+        <span>System Architecture &amp; Subsystem Interaction</span>
+      </div>
+      <div class="card-subtitle">
+        Click any subsystem node in the interactive diagram below to inspect its responsibilities, source files, protocols, and failure modes.
+      </div>
+
+      <div class="arch-diagram-wrapper">
+        <svg class="arch-svg" viewBox="0 0 1000 460" xmlns="http://www.w3.org/2000/svg">
+          <!-- Background Grid Lines -->
+          <defs>
+            <linearGradient id="emeraldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#059669" />
+              <stop offset="100%" stop-color="#10b981" />
+            </linearGradient>
+            <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#0891b2" />
+              <stop offset="100%" stop-color="#06b6d4" />
+            </linearGradient>
+            <linearGradient id="cardGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#1e293b" />
+              <stop offset="100%" stop-color="#0f172a" />
+            </linearGradient>
+            <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#38bdf8" />
+            </marker>
+            <marker id="arrowGreen" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#10b981" />
+            </marker>
+          </defs>
+
+          <!-- System Boundary Boxes -->
+          <rect x="20" y="20" width="220" height="420" rx="12" fill="#0f172a" stroke="#1e293b" stroke-dasharray="4" />
+          <text x="35" y="45" fill="#64748b" font-size="11" font-weight="700" letter-spacing="1">CLIENT TIER (REACT 19)</text>
+
+          <rect x="280" y="20" width="410" height="420" rx="12" fill="#0f172a" stroke="#1e293b" stroke-dasharray="4" />
+          <text x="295" y="45" fill="#64748b" font-size="11" font-weight="700" letter-spacing="1">API GATEWAY &amp; SERVICES (NODE / EXPRESS)</text>
+
+          <rect x="730" y="20" width="250" height="420" rx="12" fill="#0f172a" stroke="#1e293b" stroke-dasharray="4" />
+          <text x="745" y="45" fill="#64748b" font-size="11" font-weight="700" letter-spacing="1">PERSISTENCE &amp; EXTERNAL</text>
+
+          <!-- Connecting Lines -->
+          <!-- Client -> Gateway -->
+          <path d="M 210 100 L 320 100" stroke="#38bdf8" stroke-width="2" marker-end="url(#arrow)" />
+          <path d="M 210 220 L 320 220" stroke="#38bdf8" stroke-width="2" marker-end="url(#arrow)" />
+          <path d="M 210 340 L 320 340" stroke="#10b981" stroke-width="2" marker-end="url(#arrowGreen)" />
+
+          <!-- Gateway -> Services -->
+          <path d="M 450 130 L 450 170" stroke="#64748b" stroke-width="1.5" stroke-dasharray="2" />
+          <path d="M 450 250 L 450 290" stroke="#64748b" stroke-width="1.5" stroke-dasharray="2" />
+
+          <!-- Services -> DB / External -->
+          <path d="M 640 100 L 760 100" stroke="#38bdf8" stroke-width="2" marker-end="url(#arrow)" />
+          <path d="M 640 220 L 760 220" stroke="#38bdf8" stroke-width="2" marker-end="url(#arrow)" />
+          <path d="M 640 340 L 760 340" stroke="#10b981" stroke-width="2" marker-end="url(#arrowGreen)" />
+
+          <!-- Return WebSocket Socket.IO Line -->
+          <path d="M 760 390 Q 500 430 210 390" fill="none" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="4" marker-end="url(#arrow)" />
+          <text x="460" y="420" fill="#22d3ee" font-size="10" font-family="monospace">Socket.IO Broadcast Events</text>
+
+          <!-- NODES: CLIENT -->
+          <g class="svg-node node-selected" id="node-fe-workspace" onclick="inspectNode('fe-workspace')">
+            <rect x="35" y="70" width="175" height="60" rx="8" fill="url(#cardGrad)" stroke="#334155" stroke-width="1.5" />
+            <text x="45" y="95" fill="#f8fafc" font-size="12" font-weight="700">PayAI Workspace</text>
+            <text x="45" y="115" fill="#94a3b8" font-size="10">frontend/src/pages/PayAI.jsx</text>
+          </g>
+
+          <g class="svg-node" id="node-fe-negotiate" onclick="inspectNode('fe-negotiate')">
+            <rect x="35" y="190" width="175" height="60" rx="8" fill="url(#cardGrad)" stroke="#334155" stroke-width="1.5" />
+            <text x="45" y="215" fill="#f8fafc" font-size="12" font-weight="700">Negotiation Deck</text>
+            <text x="45" y="235" fill="#94a3b8" font-size="10">MarkdownTableCard Parser</text>
+          </g>
+
+          <g class="svg-node" id="node-fe-escrow" onclick="inspectNode('fe-escrow')">
+            <rect x="35" y="310" width="175" height="60" rx="8" fill="url(#cardGrad)" stroke="#334155" stroke-width="1.5" />
+            <text x="45" y="335" fill="#f8fafc" font-size="12" font-weight="700">Escrow Milestone Tracker</text>
+            <text x="45" y="355" fill="#94a3b8" font-size="10">PayAIOrderTracker.jsx</text>
+          </g>
+
+          <!-- NODES: GATEWAY & SERVICES -->
+          <g class="svg-node" id="node-be-dispatcher" onclick="inspectNode('be-dispatcher')">
+            <rect x="320" y="70" width="320" height="60" rx="8" fill="url(#cardGrad)" stroke="#334155" stroke-width="1.5" />
+            <text x="335" y="95" fill="#f8fafc" font-size="12" font-weight="700">API Gateway &amp; Router</text>
+            <text x="335" y="115" fill="#38bdf8" font-size="10">/api/v1/payai/* &amp; /api/v1/escrow/*</text>
+          </g>
+
+          <g class="svg-node" id="node-be-negotiator" onclick="inspectNode('be-negotiator')">
+            <rect x="320" y="190" width="320" height="60" rx="8" fill="url(#cardGrad)" stroke="#334155" stroke-width="1.5" />
+            <text x="335" y="215" fill="#f8fafc" font-size="12" font-weight="700">AI Negotiator &amp; Margin Guard</text>
+            <text x="335" y="235" fill="#fbbf24" font-size="10">negotiationEngineService &amp; Qloo Tool</text>
+          </g>
+
+          <g class="svg-node" id="node-be-escrow" onclick="inspectNode('be-escrow')">
+            <rect x="320" y="310" width="320" height="60" rx="8" fill="url(#cardGrad)" stroke="#334155" stroke-width="1.5" />
+            <text x="335" y="335" fill="#f8fafc" font-size="12" font-weight="700">Milestone Escrow Ledger</text>
+            <text x="335" y="355" fill="#10b981" font-size="10">escrowLedgerService &amp; Wallet Hold</text>
+          </g>
+
+          <!-- NODES: PERSISTENCE & EXTERNAL -->
+          <g class="svg-node" id="node-db-prisma" onclick="inspectNode('db-prisma')">
+            <rect x="760" y="70" width="200" height="60" rx="8" fill="url(#cardGrad)" stroke="#334155" stroke-width="1.5" />
+            <text x="775" y="95" fill="#f8fafc" font-size="12" font-weight="700">Prisma ORM &amp; SQLite</text>
+            <text x="775" y="115" fill="#94a3b8" font-size="10">schema.prisma (dev.db)</text>
+          </g>
+
+          <g class="svg-node" id="node-ext-paypal" onclick="inspectNode('ext-paypal')">
+            <rect x="760" y="190" width="200" height="60" rx="8" fill="url(#cardGrad)" stroke="#334155" stroke-width="1.5" />
+            <text x="775" y="215" fill="#f8fafc" font-size="12" font-weight="700">PayPal REST API v2</text>
+            <text x="775" y="235" fill="#38bdf8" font-size="10">Sandbox Orders &amp; Capture</text>
+          </g>
+
+          <g class="svg-node" id="node-ext-socket" onclick="inspectNode('ext-socket')">
+            <rect x="760" y="310" width="200" height="60" rx="8" fill="url(#cardGrad)" stroke="#334155" stroke-width="1.5" />
+            <text x="775" y="335" fill="#f8fafc" font-size="12" font-weight="700">Socket.IO Server</text>
+            <text x="775" y="355" fill="#22d3ee" font-size="10">Real-Time Event Bus</text>
+          </g>
+        </svg>
+      </div>
+
+      <!-- Node Inspector Panel -->
+      <div id="inspector-panel" class="inspector-panel">
+        <div id="insp-title" class="inspector-title">
+          <span>PayAI Workspace Page</span>
+        </div>
+        <div id="insp-desc" class="inspector-body">
+          Houses the Cultural Palate Bar, product catalog grid, split-pane negotiation chat feed, and dynamic Markdown table financial quote cards. Coordinates client state and handles user interaction.
+        </div>
+        <div class="inspector-grid">
+          <div class="inspector-item">
+            <div class="inspector-item-label">Primary Source File</div>
+            <div id="insp-file" class="inspector-item-val">frontend/src/pages/PayAI.jsx</div>
+          </div>
+          <div class="inspector-item">
+            <div class="inspector-item-label">Communication Protocol</div>
+            <div id="insp-proto" class="inspector-item-val">Axios HTTP + Socket.IO Client</div>
+          </div>
+          <div class="inspector-item">
+            <div class="inspector-item-label">PRD Cross-Reference</div>
+            <div id="insp-prd" class="inspector-item-val">prd.md &gt; Screens and Layout</div>
+          </div>
+          <div class="inspector-item">
+            <div class="inspector-item-label">Resilience Fallback</div>
+            <div id="insp-fail" class="inspector-item-val">Cached catalog fallback + offline wallet</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 2: API EXPLORER -->
+  <div id="tab-api" class="tab-content">
+    <div class="card">
+      <div class="card-title">
+        <span>API Route &amp; Contract Explorer</span>
+      </div>
+      <div class="card-subtitle">
+        Inspect endpoints for Cultural TasteMatch, LLM bargaining turns, landed-cost quotes, and milestone escrow transitions.
+      </div>
+
+      <div class="filter-bar">
+        <input type="text" id="route-search" class="search-input" placeholder="Filter by endpoint path, method, or keyword..." oninput="filterRoutes()">
+        <button class="filter-btn active" onclick="setRouteFilter('all')">All Routes</button>
+        <button class="filter-btn" onclick="setRouteFilter('POST')">POST</button>
+        <button class="filter-btn" onclick="setRouteFilter('GET')">GET</button>
+        <button class="filter-btn" onclick="setRouteFilter('escrow')">Escrow Only</button>
+        <button class="filter-btn" onclick="setRouteFilter('negotiate')">Negotiate Only</button>
+      </div>
+
+      <!-- Route 1 -->
+      <div class="route-item" data-method="POST" data-tag="discovery" onclick="toggleRoute(this)">
+        <div class="route-header">
+          <span class="method-badge method-post">POST</span>
+          <span class="route-path">/api/v1/payai/catalog/search</span>
+          <span class="route-desc">Evaluate aesthetic prompt &amp; return affinity-ranked products</span>
+        </div>
+        <div class="route-body">
+          <div class="route-details-grid">
+            <div>
+              <p style="font-weight:700; margin-bottom:0.35rem; color:var(--text-dim);">REQUEST BODY</p>
+              <pre class="code-block">{
+  "prompt": "Lagos street style meets Tokyo minimalist techwear",
+  "category": "fashion",
+  "currency": "USD"
+}</pre>
+            </div>
+            <div>
+              <p style="font-weight:700; margin-bottom:0.35rem; color:var(--emerald-400);">RESPONSE PAYLOAD</p>
+              <pre class="code-block">{
+  "success": true,
+  "count": 6,
+  "products": [
+    {
+      "id": "prod-shibori-kimono",
+      "title": "Indigo Shibori Street Kimono",
+      "culturalAffinity": 94,
+      "provenance": "Kyoto x Lagos",
+      "price": 185.00
+    }
+  ]
+}</pre>
+            </div>
+          </div>
+          <div style="margin-top:0.75rem; color:var(--text-dim); font-size:0.75rem;">
+            Implements: <code style="color:var(--cyan-400);">prd.md &gt; Cultural TasteMatch Engine</code> • Controller: <code style="color:#cbd5e1;">payaiController.searchCatalog</code>
+          </div>
+        </div>
+      </div>
+
+      <!-- Route 2 -->
+      <div class="route-item" data-method="POST" data-tag="negotiate" onclick="toggleRoute(this)">
+        <div class="route-header">
+          <span class="method-badge method-post">POST</span>
+          <span class="route-path">/api/v1/payai/negotiate/turn</span>
+          <span class="route-desc">Submit bargaining counter-offer within seller margin bounds</span>
+        </div>
+        <div class="route-body">
+          <div class="route-details-grid">
+            <div>
+              <p style="font-weight:700; margin-bottom:0.35rem; color:var(--text-dim);">REQUEST BODY</p>
+              <pre class="code-block">{
+  "sessionId": "sess-98213",
+  "productId": "prod-shibori-kimono",
+  "proposedPrice": 150.00,
+  "userMessage": "Can I get this for $150 instead of $185?",
+  "currency": "USD"
+}</pre>
+            </div>
+            <div>
+              <p style="font-weight:700; margin-bottom:0.35rem; color:var(--emerald-400);">RESPONSE PAYLOAD</p>
+              <pre class="code-block">{
+  "accepted": false,
+  "counterPrice": 165.00,
+  "agentMessage": "I appreciate your appreciation for Kyoto shibori. While $150 breaches our artisan floor, I can lock $165 for you today.",
+  "quoteId": "quote-8912",
+  "bounded": true
+}</pre>
+            </div>
+          </div>
+          <div style="margin-top:0.75rem; color:var(--text-dim); font-size:0.75rem;">
+            Implements: <code style="color:var(--cyan-400);">prd.md &gt; Conversational AI Sales Negotiator</code> • Controller: <code style="color:#cbd5e1;">payaiController.negotiateTurn</code>
+          </div>
+        </div>
+      </div>
+
+      <!-- Route 3 -->
+      <div class="route-item" data-method="POST" data-tag="quotes" onclick="toggleRoute(this)">
+        <div class="route-header">
+          <span class="method-badge method-post">POST</span>
+          <span class="route-path">/api/v1/payai/quotes</span>
+          <span class="route-desc">Generate itemized landed-cost quote &amp; Markdown table card</span>
+        </div>
+        <div class="route-body">
+          <div class="route-details-grid">
+            <div>
+              <p style="font-weight:700; margin-bottom:0.35rem; color:var(--text-dim);">REQUEST BODY</p>
+              <pre class="code-block">{
+  "productId": "prod-shibori-kimono",
+  "agreedPrice": 165.00,
+  "destinationCountry": "NG",
+  "targetCurrency": "USD"
+}</pre>
+            </div>
+            <div>
+              <p style="font-weight:700; margin-bottom:0.35rem; color:var(--emerald-400);">RESPONSE PAYLOAD</p>
+              <pre class="code-block">{
+  "quoteNumber": "QUOTE-ESC-8921",
+  "subtotal": 165.00,
+  "discount": 20.00,
+  "duties": 12.00,
+  "shipping": 15.00,
+  "total": 192.00,
+  "expiresAt": "2026-10-26T01:15:00Z"
+}</pre>
+            </div>
+          </div>
+          <div style="margin-top:0.75rem; color:var(--text-dim); font-size:0.75rem;">
+            Implements: <code style="color:var(--cyan-400);">prd.md &gt; Itemized Landed-Cost Quotes &amp; Markdown Table Cards</code> • Service: <code style="color:#cbd5e1;">pricingService.js</code>
+          </div>
+        </div>
+      </div>
+
+      <!-- Route 4 -->
+      <div class="route-item" data-method="POST" data-tag="escrow" onclick="toggleRoute(this)">
+        <div class="route-header">
+          <span class="method-badge method-post">POST</span>
+          <span class="route-path">/api/v1/payai/checkout/wallet</span>
+          <span class="route-desc">Instant atomic escrow lock via Internal Ledger Wallet</span>
+        </div>
+        <div class="route-body">
+          <div class="route-details-grid">
+            <div>
+              <p style="font-weight:700; margin-bottom:0.35rem; color:var(--text-dim);">REQUEST BODY</p>
+              <pre class="code-block">{
+  "quoteId": "quote-8912",
+  "currency": "USD",
+  "buyerId": "buyer-test-01"
+}</pre>
+            </div>
+            <div>
+              <p style="font-weight:700; margin-bottom:0.35rem; color:var(--emerald-400);">RESPONSE PAYLOAD</p>
+              <pre class="code-block">{
+  "success": true,
+  "orderId": "ord-78192",
+  "orderNumber": "W-INT-78192-NG",
+  "escrowId": "esc-4401",
+  "escrowStatus": "ESCROW_LOCKED",
+  "lockedAmount": 192.00,
+  "buyerRemainingBalance": 308.00
+}</pre>
+            </div>
+          </div>
+          <div style="margin-top:0.75rem; color:var(--text-dim); font-size:0.75rem;">
+            Implements: <code style="color:var(--cyan-400);">prd.md &gt; Dual Payment Gateways</code> • Controller: <code style="color:#cbd5e1;">payaiController.checkoutWithWallet</code>
+          </div>
+        </div>
+      </div>
+
+      <!-- Route 5 -->
+      <div class="route-item" data-method="POST" data-tag="escrow" onclick="toggleRoute(this)">
+        <div class="route-header">
+          <span class="method-badge method-post">POST</span>
+          <span class="route-path">/api/v1/escrow/confirm-delivery</span>
+          <span class="route-desc">Confirm parcel arrival &amp; trigger atomic 100% merchant disbursement</span>
+        </div>
+        <div class="route-body">
+          <div class="route-details-grid">
+            <div>
+              <p style="font-weight:700; margin-bottom:0.35rem; color:var(--text-dim);">REQUEST BODY</p>
+              <pre class="code-block">{
+  "orderId": "ord-78192",
+  "buyerConfirmation": true,
+  "inspectionPassed": true
+}</pre>
+            </div>
+            <div>
+              <p style="font-weight:700; margin-bottom:0.35rem; color:var(--emerald-400);">RESPONSE PAYLOAD</p>
+              <pre class="code-block">{
+  "success": true,
+  "escrowStatus": "DISBURSED",
+  "totalAmount": 192.00,
+  "commissionAmount": 19.20,
+  "sellerDisbursedAmount": 172.80,
+  "disbursedAt": "2026-10-26T01:30:00Z"
+}</pre>
+            </div>
+          </div>
+          <div style="margin-top:0.75rem; color:var(--text-dim); font-size:0.75rem;">
+            Implements: <code style="color:var(--cyan-400);">prd.md &gt; Multi-Day Milestone Escrow State Machine</code> • Service: <code style="color:#cbd5e1;">escrowLedgerService.js</code>
+          </div>
+        </div>
+      </div>
+
+      <!-- Route 6 -->
+      <div class="route-item" data-method="GET" data-tag="rates" onclick="toggleRoute(this)">
+        <div class="route-header">
+          <span class="method-badge method-get">GET</span>
+          <span class="route-path">/api/v1/payai/rates</span>
+          <span class="route-desc">Fetch multi-currency exchange rates with static cache fallback</span>
+        </div>
+        <div class="route-body">
+          <div class="route-details-grid">
+            <div>
+              <p style="font-weight:700; margin-bottom:0.35rem; color:var(--text-dim);">QUERY PARAMS</p>
+              <pre class="code-block">None (Returns full platform currency dictionary)</pre>
+            </div>
+            <div>
+              <p style="font-weight:700; margin-bottom:0.35rem; color:var(--emerald-400);">RESPONSE PAYLOAD</p>
+              <pre class="code-block">{
+  "base": "USD",
+  "rates": {
+    "USD": 1.0,
+    "NGN": 1480.0,
+    "GBP": 0.78,
+    "EUR": 0.92,
+    "KES": 130.0,
+    "GHS": 15.5
+  }
+}</pre>
+            </div>
+          </div>
+          <div style="margin-top:0.75rem; color:var(--text-dim); font-size:0.75rem;">
+            Implements: <code style="color:var(--cyan-400);">spec.md &gt; External Services and Dependencies</code> • Resilience: <code style="color:#cbd5e1;">Static in-memory fallback</code>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 3: ESCROW SIMULATOR -->
+  <div id="tab-escrow" class="tab-content">
+    <div class="card">
+      <div class="card-title">
+        <span>Milestone Escrow State Machine Simulator</span>
+      </div>
+      <div class="card-subtitle">
+        Test state transitions interactively. Watch how the database guarantees ledger atomicity, locking buyer funds and releasing merchant proceeds only upon verified delivery.
+      </div>
+
+      <div class="escrow-sim-container">
+        <!-- Visual Pipeline -->
+        <div class="pipeline-nodes">
+          <div class="pipeline-track">
+            <div id="sim-track-fill" class="pipeline-track-fill"></div>
+          </div>
+
+          <div class="p-node active" id="sim-node-1">
+            <span>1</span>
+            <div class="p-node-caption">LOCKED</div>
+          </div>
+
+          <div class="p-node" id="sim-node-2">
+            <span>2</span>
+            <div class="p-node-caption">IN_TRANSIT</div>
+          </div>
+
+          <div class="p-node" id="sim-node-3">
+            <span>3</span>
+            <div class="p-node-caption">DELIVERED</div>
+          </div>
+
+          <div class="p-node" id="sim-node-4">
+            <span>4</span>
+            <div class="p-node-caption">DISBURSED</div>
+          </div>
+        </div>
+
+        <!-- Simulator Buttons -->
+        <div class="sim-controls">
+          <button class="btn-sim btn-primary" id="btn-next-step" onclick="advanceSimStep()">
+            <span>Advance Step: Simulate Dispatch</span>
+          </button>
+          <button class="btn-sim btn-danger" onclick="triggerSimDispute()">
+            <span>Raise Dispute / Freeze Funds</span>
+          </button>
+          <button class="btn-sim btn-secondary" onclick="resetSim()">
+            <span>Reset Demo Contract</span>
+          </button>
+        </div>
+
+        <!-- Ledger Tape -->
+        <div class="ledger-tape">
+          <div>
+            <div class="ledger-metric-title">Buyer Balance</div>
+            <div id="sim-buyer-bal" class="ledger-metric-val" style="color:var(--cyan-400);">$308.00</div>
+          </div>
+          <div>
+            <div class="ledger-metric-title">Escrow Custody Vault</div>
+            <div id="sim-vault-bal" class="ledger-metric-val" style="color:var(--amber-400);">$192.00</div>
+          </div>
+          <div>
+            <div class="ledger-metric-title">Merchant Balance</div>
+            <div id="sim-seller-bal" class="ledger-metric-val" style="color:var(--emerald-400);">$0.00</div>
+          </div>
+          <div>
+            <div class="ledger-metric-title">Platform Fee (10%)</div>
+            <div id="sim-fee-bal" class="ledger-metric-val" style="color:var(--text-dim);">$0.00</div>
+          </div>
+        </div>
+
+        <!-- Log Output -->
+        <div style="margin-top:1.25rem;">
+          <div style="font-size:0.75rem; text-transform:uppercase; color:var(--text-dim); margin-bottom:0.4rem; font-weight:700;">Prisma Transaction &amp; Event Stream Log</div>
+          <pre id="sim-log" class="code-block" style="height:110px;">[00:00:00] CONTRACT CREATED: #ESC-8921 | Status: ESCROW_LOCKED ($192.00 held in custody)</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 4: COMPONENT-TO-PRD MATRIX -->
+  <div id="tab-matrix" class="tab-content">
+    <div class="card">
+      <div class="card-title">
+        <span>Component-to-PRD Traceability Matrix</span>
+      </div>
+      <div class="card-subtitle">
+        Every frontend view, backend controller, service module, and database model mapped directly to its PRD behavior requirement.
+      </div>
+
+      <div class="table-wrapper">
+        <table class="matrix-table">
+          <thead>
+            <tr>
+              <th>Subsystem / Component</th>
+              <th>Source File Path</th>
+              <th>Tier</th>
+              <th>Implements PRD Requirement</th>
+              <th>Key Invariant / Guard</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="font-weight:700; color:var(--text-main);">PayAI Workspace Shell</td>
+              <td class="mono-cell">frontend/src/pages/PayAI.jsx</td>
+              <td>Frontend</td>
+              <td><code>prd.md &gt; Screens and Layout</code></td>
+              <td>Split-pane responsive layout without full-page refreshes</td>
+            </tr>
+            <tr>
+              <td style="font-weight:700; color:var(--text-main);">Cultural TasteMatch Card</td>
+              <td class="mono-cell">frontend/src/components/payai/PayAITasteMatchCard.jsx</td>
+              <td>Frontend</td>
+              <td><code>prd.md &gt; Cultural TasteMatch Engine</code></td>
+              <td>Renders 0-100% normalized affinity gauge and provenance tag</td>
+            </tr>
+            <tr>
+              <td style="font-weight:700; color:var(--text-main);">Markdown Table Financial Card</td>
+              <td class="mono-cell">frontend/src/pages/PayAI.jsx (MarkdownTableCard)</td>
+              <td>Frontend</td>
+              <td><code>prd.md &gt; Itemized Landed-Cost Quotes</code></td>
+              <td>Verifies `(Base - Disc) + Customs + Ship == Total`</td>
+            </tr>
+            <tr>
+              <td style="font-weight:700; color:var(--text-main);">Escrow Milestone Tracker</td>
+              <td class="mono-cell">frontend/src/components/payai/PayAIOrderTracker.jsx</td>
+              <td>Frontend</td>
+              <td><code>prd.md &gt; Multi-Day Milestone Escrow</code></td>
+              <td>Visual 4-stage stepper with simulated dispatch controls</td>
+            </tr>
+            <tr>
+              <td style="font-weight:700; color:var(--text-main);">Seller Control Room Drawer</td>
+              <td class="mono-cell">frontend/src/components/seller/.../SellerControlRoom.jsx</td>
+              <td>Frontend</td>
+              <td><code>prd.md &gt; Seller Negotiation Bounds</code></td>
+              <td>Enforces floor margin % (5-30%) and max discount %</td>
+            </tr>
+            <tr>
+              <td style="font-weight:700; color:var(--text-main);">PayAI Route Dispatcher</td>
+              <td class="mono-cell">backend/src/routes/payaiRoutes.js</td>
+              <td>Backend API</td>
+              <td><code>prd.md &gt; Conversational AI Sales Negotiator</code></td>
+              <td>Guarded with `optionalAuth` and `sellerAuth`</td>
+            </tr>
+            <tr>
+              <td style="font-weight:700; color:var(--text-main);">Negotiation Bounds Service</td>
+              <td class="mono-cell">backend/src/services/payai/negotiationEngineService.js</td>
+              <td>Backend Service</td>
+              <td><code>prd.md &gt; Seller Negotiation Bounds</code></td>
+              <td>Deterministic math override; never accepts below floor</td>
+            </tr>
+            <tr>
+              <td style="font-weight:700; color:var(--text-main);">Milestone Escrow Ledger</td>
+              <td class="mono-cell">backend/src/services/escrowLedgerService.js</td>
+              <td>Backend Service</td>
+              <td><code>prd.md &gt; Multi-Day Milestone Escrow</code></td>
+              <td>Atomic `prisma.$transaction` with unique idempotency key</td>
+            </tr>
+            <tr>
+              <td style="font-weight:700; color:var(--text-main);">Escrow Payment Model</td>
+              <td class="mono-cell">database/prisma/schema.prisma (EscrowPayment)</td>
+              <td>Database</td>
+              <td><code>prd.md &gt; Multi-Day Milestone Escrow</code></td>
+              <td>FSM states: HELD -&gt; RELEASE_PENDING -&gt; RELEASED</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 5: 90-SECOND DEMO SCRIPT -->
+  <div id="tab-demo" class="tab-content">
+    <div class="card">
+      <div class="card-title">
+        <span>Step-by-Step 90-Second Demo Simulator</span>
+      </div>
+      <div class="card-subtitle">
+        Visual timeline and narration script for the required Devpost video submission.
+      </div>
+
+      <div style="background:#020617; border:1px solid var(--border-color); border-radius:var(--radius-md); padding:1.25rem;">
+        
+        <div class="script-grid">
+          <div class="script-time">0:00 – 0:15</div>
+          <div class="script-screen">Cultural Palate Discovery</div>
+          <div class="script-action">
+            Type <em>"Lagos street style meets Tokyo minimalist techwear"</em>. Highlight catalog re-ranking and the 94% Cultural Affinity badge on the Shibori Kimono jacket.
+          </div>
+        </div>
+
+        <div class="script-grid">
+          <div class="script-time">0:15 – 0:40</div>
+          <div class="script-screen">Live Conversational Bargaining</div>
+          <div class="script-action">
+            Click <strong>"Negotiate Deal"</strong>. Propose $150 against $185 retail. Observe AI agent check seller margin floor and counter with $165.00 bundle deal.
+          </div>
+        </div>
+
+        <div class="script-grid">
+          <div class="script-time">0:40 – 0:55</div>
+          <div class="script-screen">Markdown Financial Card</div>
+          <div class="script-action">
+            Showcase the generated Markdown landed-cost card inside chat. Point out item price, discount, international insured freight, customs tariffs, and guaranteed total.
+          </div>
+        </div>
+
+        <div class="script-grid">
+          <div class="script-time">0:55 – 1:15</div>
+          <div class="script-screen">Atomic Escrow Lock</div>
+          <div class="script-action">
+            Click <strong>"Accept Offer &amp; Lock Escrow"</strong>. Select Internal Wallet ($500 balance). Watch right pane transition to Escrow Milestone Pipeline with contract #ESC-8921 locked.
+          </div>
+        </div>
+
+        <div class="script-grid" style="border-bottom:none;">
+          <div class="script-time">1:15 – 1:30</div>
+          <div class="script-screen">Carrier Dispatch &amp; Payout</div>
+          <div class="script-action">
+            Click <strong>"Simulate Dispatch"</strong> (status IN_TRANSIT with tracking code), then <strong>"Confirm Delivery"</strong>. Funds automatically disburse to merchant wallet with confetti celebration.
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- JavaScript Interactivity -->
+<script>
+  // Tab Switching
+  function switchTab(tabId) {
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+    const btn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.getAttribute('onclick').includes(tabId));
+    if (btn) btn.classList.add('active');
+
+    const content = document.getElementById('tab-' + tabId);
+    if (content) content.classList.add('active');
+  }
+
+  // Node Inspector Data
+  const nodeData = {
+    'fe-workspace': {
+      title: 'PayAI Workspace Page',
+      desc: 'Houses the Cultural Palate Bar, product catalog grid, split-pane negotiation chat feed, and dynamic Markdown table financial quote cards. Coordinates client state and handles user interaction.',
+      file: 'frontend/src/pages/PayAI.jsx',
+      proto: 'Axios HTTP + Socket.IO Client',
+      prd: 'prd.md > Screens and Layout',
+      fail: 'Cached catalog fallback + offline wallet mode'
+    },
+    'fe-negotiate': {
+      title: 'Negotiation Deck & Markdown Table Card',
+      desc: 'Renders the conversational bargaining stream between buyer and AI sales agent. Dynamically parses Markdown table cards for itemized landed costs and provides interactive quote acceptance CTA buttons.',
+      file: 'frontend/src/pages/PayAI.jsx (MarkdownTableCard)',
+      proto: 'React Props + Internal State',
+      prd: 'prd.md > Itemized Landed-Cost Quotes',
+      fail: 'Standard plain text card fallback on syntax error'
+    },
+    'fe-escrow': {
+      title: 'Escrow Milestone Pipeline Tracker',
+      desc: 'Visual 4-stage deterministic stepper (LOCKED -> IN_TRANSIT -> DELIVERED -> DISBURSED). Renders active contract hash, simulated logistics action triggers, and dispute hold status.',
+      file: 'frontend/src/components/payai/PayAIOrderTracker.jsx',
+      proto: 'REST Polling + WebSocket Events',
+      prd: 'prd.md > Multi-Day Milestone Escrow State Machine',
+      fail: 'Local storage tracking fallback'
+    },
+    'be-dispatcher': {
+      title: 'PayAI & Escrow Route Dispatcher',
+      desc: 'Express route aggregator defining public, optional-auth, and seller-protected endpoints. Performs request payload sanitization and routes commands to appropriate domain services.',
+      file: 'backend/src/routes/payaiRoutes.js & escrowRoutes.js',
+      proto: 'RESTful JSON over HTTP / Express.js',
+      prd: 'prd.md > Conversational AI Sales Negotiator',
+      fail: 'Graceful JSON error handling via express-async-errors'
+    },
+    'be-negotiator': {
+      title: 'AI Negotiator & Deterministic Margin Guard',
+      desc: 'Evaluates buyer bargaining offers against merchant-configured profitability floors. Dynamically overrides LLM hallucinated discounts to guarantee the seller never sells at a loss.',
+      file: 'backend/src/services/payai/negotiationEngineService.js',
+      proto: 'Internal Service Call / Qloo Agent Tool',
+      prd: 'prd.md > Seller Negotiation Bounds & Control Room',
+      fail: 'Deterministic rule-based counter if LLM timeouts (>3500ms)'
+    },
+    'be-escrow': {
+      title: 'Milestone Escrow Ledger Service',
+      desc: 'Executes atomic fund custody and disbursements using Prisma transactions. Deducts platform commissions (10%), manages buyer wallet holds, and credits merchant balances upon verified delivery.',
+      file: 'backend/src/services/escrowLedgerService.js',
+      proto: 'Prisma Client $transaction',
+      prd: 'prd.md > Multi-Day Milestone Escrow State Machine',
+      fail: 'Compound idempotency key prevents double-spending'
+    },
+    'db-prisma': {
+      title: 'Prisma ORM & SQLite Persistence',
+      desc: 'Relational storage engine holding models for User, Store, Product, PayAIOrder, EscrowPayment, and WalletHold. Enforces foreign key constraints and transactional integrity.',
+      file: 'database/prisma/schema.prisma (dev.db)',
+      proto: 'Native SQLite Driver / Prisma Query Engine',
+      prd: 'spec.md > Data Model',
+      fail: 'ACID database rollbacks on transaction failure'
+    },
+    'ext-paypal': {
+      title: 'PayPal REST API v2 Sandbox',
+      desc: 'External payment authorization gateway supporting international credit card and PayPal checkout simulation for cross-border transactions.',
+      file: 'backend/src/services/payai/paypalPaymentService.js',
+      proto: 'HTTPS / OAuth 2.0 Bearer Token',
+      prd: 'prd.md > Dual Payment Gateways',
+      fail: 'Instant fallback to internal pre-funded ledger wallet'
+    },
+    'ext-socket': {
+      title: 'Socket.IO Real-Time Event Bus',
+      desc: 'Bidirectional WebSocket connection broadcasting counter-offers, shipping airway bill updates, and milestone disbursement events to connected browsers.',
+      file: 'backend/src/services/socketService.js',
+      proto: 'WebSocket / Engine.IO Polling Fallback',
+      prd: 'spec.md > External Services and Dependencies',
+      fail: 'Automatic HTTP reconnection & status polling'
+    }
+  };
+
+  function inspectNode(nodeKey) {
+    document.querySelectorAll('.svg-node').forEach(n => n.classList.remove('node-selected'));
+    const el = document.getElementById('node-' + nodeKey);
+    if (el) el.classList.add('node-selected');
+
+    const data = nodeData[nodeKey];
+    if (!data) return;
+
+    document.getElementById('insp-title').innerHTML = `<span>${data.title}</span>`;
+    document.getElementById('insp-desc').textContent = data.desc;
+    document.getElementById('insp-file').textContent = data.file;
+    document.getElementById('insp-proto').textContent = data.proto;
+    document.getElementById('insp-prd').textContent = data.prd;
+    document.getElementById('insp-fail').textContent = data.fail;
+  }
+
+  // API Route Explorer
+  function toggleRoute(el) {
+    const body = el.querySelector('.route-body');
+    if (body) body.classList.toggle('open');
+  }
+
+  function setRouteFilter(filter) {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+
+    const items = document.querySelectorAll('.route-item');
+    items.forEach(item => {
+      const method = item.getAttribute('data-method');
+      const tag = item.getAttribute('data-tag');
+      if (filter === 'all') {
+        item.style.display = 'block';
+      } else if (filter === 'GET' || filter === 'POST') {
+        item.style.display = method === filter ? 'block' : 'none';
+      } else {
+        item.style.display = tag === filter ? 'block' : 'none';
+      }
+    });
+  }
+
+  function filterRoutes() {
+    const q = document.getElementById('route-search').value.toLowerCase();
+    document.querySelectorAll('.route-item').forEach(item => {
+      const text = item.textContent.toLowerCase();
+      item.style.display = text.includes(q) ? 'block' : 'none';
+    });
+  }
+
+  // Escrow State Machine Simulator
+  let simStep = 1; // 1: LOCKED, 2: IN_TRANSIT, 3: DELIVERED, 4: DISBURSED, 5: DISPUTE
+  function advanceSimStep() {
+    if (simStep === 1) {
+      simStep = 2;
+      document.getElementById('sim-node-2').classList.add('active');
+      document.getElementById('sim-track-fill').style.width = '33%';
+      document.getElementById('btn-next-step').innerHTML = '<span>Advance Step: Confirm Delivery</span>';
+      appendLog('[00:00:25] CARRIER PICKUP: Tracking #DHL-EXP-4402-NIG assigned | Status: IN_TRANSIT');
+    } else if (simStep === 2) {
+      simStep = 3;
+      document.getElementById('sim-node-3').classList.add('active');
+      document.getElementById('sim-track-fill').style.width = '66%';
+      document.getElementById('btn-next-step').innerHTML = '<span>Execute Auto-Disbursement</span>';
+      appendLog('[00:00:50] BUYER CONFIRMATION: Parcel received in good order | Status: DELIVERED');
+    } else if (simStep === 3) {
+      simStep = 4;
+      document.getElementById('sim-node-4').classList.add('active');
+      document.getElementById('sim-track-fill').style.width = '100%';
+      document.getElementById('btn-next-step').innerHTML = '<span>Transaction Completed</span>';
+      document.getElementById('btn-next-step').disabled = true;
+
+      // Update Ledger
+      document.getElementById('sim-vault-bal').textContent = '$0.00';
+      document.getElementById('sim-seller-bal').textContent = '$172.80';
+      document.getElementById('sim-fee-bal').textContent = '$19.20';
+
+      appendLog('[00:01:10] ATOMIC PRISMA RELEASE: $172.80 credited to Artisan Store (90%) | Platform fee $19.20 (10%) | Status: DISBURSED');
+    }
+  }
+
+  function triggerSimDispute() {
+    simStep = 5;
+    document.querySelectorAll('.p-node').forEach(n => {
+      n.classList.remove('active');
+      n.classList.add('dispute');
+    });
+    document.getElementById('sim-track-fill').style.background = 'var(--rose-500)';
+    document.getElementById('btn-next-step').innerHTML = '<span>Funds Frozen in Dispute</span>';
+    document.getElementById('btn-next-step').disabled = true;
+    appendLog('[00:00:35] DISPUTE TRIGGERED: Buyer flagged transit delay | Status: DISPUTE_HOLD | Timers paused');
+  }
+
+  function resetSim() {
+    simStep = 1;
+    document.querySelectorAll('.p-node').forEach(n => {
+      n.classList.remove('active', 'dispute');
+    });
+    document.getElementById('sim-node-1').classList.add('active');
+    document.getElementById('sim-track-fill').style.width = '0%';
+    document.getElementById('sim-track-fill').style.background = 'linear-gradient(to right, var(--emerald-500), var(--cyan-400))';
+    
+    document.getElementById('btn-next-step').innerHTML = '<span>Advance Step: Simulate Dispatch</span>';
+    document.getElementById('btn-next-step').disabled = false;
+
+    document.getElementById('sim-buyer-bal').textContent = '$308.00';
+    document.getElementById('sim-vault-bal').textContent = '$192.00';
+    document.getElementById('sim-seller-bal').textContent = '$0.00';
+    document.getElementById('sim-fee-bal').textContent = '$0.00';
+
+    document.getElementById('sim-log').textContent = '[00:00:00] CONTRACT CREATED: #ESC-8921 | Status: ESCROW_LOCKED ($192.00 held in custody)';
+  }
+
+  function appendLog(msg) {
+    const log = document.getElementById('sim-log');
+    log.textContent = log.textContent + '\n' + msg;
+    log.scrollTop = log.scrollHeight;
+  }
+</script>
+
+</body>
+</html>
