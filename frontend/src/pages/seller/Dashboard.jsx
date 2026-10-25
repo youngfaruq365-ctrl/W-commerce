@@ -3,7 +3,7 @@ import React, { useState, useCallback } from 'react';
 import QRCode from 'react-qr-code';
 import { gxDelete } from '../../components/shared/ui/GXDialog';
 
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { apiClient as axios } from '@/utils/apiClient';
 import toast from 'react-hot-toast';
 import { 
@@ -72,10 +72,33 @@ class SellerDashboardErrorBoundary extends React.Component {
   }
 }
 
-const SellerDashboard = () => {
+const SellerDashboard = ({ initialTab }) => {
   const { logout, user } = useAuthStore();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('analytics');
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
+
+  const getEffectiveTab = useCallback(() => {
+    if (initialTab) return initialTab;
+    const tabParam = searchParams.get('tab');
+    if (tabParam) return tabParam;
+    if (location.pathname.includes('/seller/orders')) return 'orders';
+    if (location.pathname.includes('/seller/products')) return 'products';
+    if (location.pathname.includes('/seller/analytics')) return 'analytics';
+    if (location.pathname.includes('/seller/settings')) return 'settings';
+    if (location.pathname.includes('/seller/external-site')) return 'external-site';
+    if (location.pathname.includes('/seller/negotiate-hub')) return 'negotiate-hub';
+    return 'analytics';
+  }, [initialTab, searchParams, location.pathname]);
+
+  const [activeTab, setActiveTab] = useState(getEffectiveTab);
+
+  React.useEffect(() => {
+    const effective = getEffectiveTab();
+    if (effective && effective !== activeTab) {
+      setActiveTab(effective);
+    }
+  }, [getEffectiveTab, activeTab]);
 
   const handleLogout = async () => {
     try {

@@ -259,6 +259,12 @@ const AnimatedRoutes = () => {
           <Route element={<ProtectedRoute roles={['SELLER', 'ADMIN']} />}>
             <Route element={<SellerShell />}>
               <Route path={ROUTES.SELLER_DASHBOARD} element={<SellerDashboard />} />
+              <Route path={ROUTES.SELLER_ORDERS || "/seller/orders"} element={<SellerDashboard initialTab="orders" />} />
+              <Route path={ROUTES.SELLER_PRODUCTS || "/seller/products"} element={<SellerDashboard initialTab="products" />} />
+              <Route path="/seller/analytics" element={<SellerDashboard initialTab="analytics" />} />
+              <Route path="/seller/settings" element={<SellerDashboard initialTab="settings" />} />
+              <Route path="/seller/external-site" element={<SellerDashboard initialTab="external-site" />} />
+              <Route path="/seller/negotiate-hub" element={<SellerDashboard initialTab="negotiate-hub" />} />
               <Route path={ROUTES.SELLER_ONBOARDING} element={<SellerOnboarding />} />
               <Route path={ROUTES.SELLER_SUBSCRIPTION} element={<SubscriptionPlans />} />
               <Route path={ROUTES.SELLER_WALLET}>

@@ -139,3 +139,7 @@ aws-cds-solution/
 # Archives
 *.zip
 *.tar.gz
+
+# Devpost Learn — Keep personal learner profile out of public commits
+/devpost/learner-profile.md
+

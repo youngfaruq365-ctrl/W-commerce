@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, Navigate } from 'react-router-dom';
 import { apiClient as axios } from '@/utils/apiClient';
 import { MapPin, Star, Package, MessageCircle, UserPlus, CheckCircle2, ChevronLeft, Store as StoreIcon, ShieldCheck, Clock, TrendingUp } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -11,6 +11,19 @@ import { showNotification } from '../../utils/notifications';
 const SellerProfile = () => {
   const { sellerId } = useParams();
   const navigate = useNavigate();
+
+  const KNOWN_SELLER_TABS = [
+    'orders', 'products', 'analytics', 'settings', 'wallet',
+    'dashboard', 'onboarding', 'subscription', 'external-site', 'negotiate-hub'
+  ];
+
+  if (sellerId && KNOWN_SELLER_TABS.includes(sellerId.toLowerCase())) {
+    const target = sellerId.toLowerCase();
+    if (target === 'wallet') return <Navigate to="/seller/wallet" replace />;
+    if (target === 'onboarding') return <Navigate to="/seller/onboarding" replace />;
+    if (target === 'subscription') return <Navigate to="/seller/subscription" replace />;
+    return <Navigate to={`/seller/dashboard?tab=${target}`} replace />;
+  }
   const { user } = useAuthStore();
   const [seller, setSeller] = useState(null);
   const [loading, setLoading] = useState(true);

@@ -37,6 +37,8 @@ export const ROUTES = {
 
   // Seller
   SELLER_DASHBOARD: '/seller/dashboard',
+  SELLER_ORDERS: '/seller/orders',
+  SELLER_PRODUCTS: '/seller/products',
   SELLER_WALLET: '/seller/wallet',
   SELLER_PROFILE: '/seller/:sellerId',
   SELLER_ONBOARDING: '/seller/onboarding',
