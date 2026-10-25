@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { apiClient as axios } from '@/utils/apiClient';
 import DOMPurify from 'dompurify';
-import { Settings, Package, CheckCircle2, Ruler, AlertTriangle } from 'lucide-react';
+import { Settings, Package, CheckCircle2, Ruler, AlertTriangle, Sparkles, Brain } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { useAuthStore } from '../store/authStore';
 import BanningRateCard from '../components/storefront/BanningRateCard';
@@ -917,6 +917,33 @@ const ProductDetails = () => {
                 ) : (
                   <><span className="text-2xl emoji-icon drop-shadow-[0_0_10px_rgba(0,0,0,0.2)]">📦</span> Secure with Escrow</>
                 )}
+              </motion.button>
+
+              {/* 🧠 TasteMatch & Negotiate with PayAI Action Button */}
+              <motion.button 
+                whileHover={{ scale: 1.02 }} 
+                whileTap={{ scale: 0.98 }}
+                onClick={() => {
+                  const prodId = product.id || id;
+                  const prodTitle = product.title || '';
+                  const prodPrice = product.price ?? currentPrice ?? 0;
+                  const prodCat = product.category || '';
+                  const firstImg = product.images?.[0] ? resolveImageUrl(product.images[0]) : '';
+                  const imgQuery = firstImg ? `&image=${encodeURIComponent(firstImg)}` : '';
+                  navigate(`/payai?action=tastematch&productId=${prodId}&title=${encodeURIComponent(prodTitle)}&price=${prodPrice}&category=${encodeURIComponent(prodCat)}${imgQuery}`);
+                }}
+                className="w-full relative group overflow-hidden rounded-xl p-[2px] transition-all duration-300 shadow-lg shadow-purple-500/20 hover:shadow-purple-500/35 border border-purple-500/40 bg-gradient-to-r from-purple-900/40 via-indigo-900/40 to-blue-900/40 backdrop-blur-md cursor-pointer"
+              >
+                <div className="absolute inset-0 bg-gradient-to-r from-purple-500/20 via-pink-500/20 to-blue-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+                <div className="relative py-4 px-5 rounded-[10px] flex items-center justify-center gap-3 text-center">
+                  <span className="text-2xl filter drop-shadow">🧠</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-extrabold text-base md:text-lg text-white tracking-wide">
+                      TasteMatch & Negotiate with PayAI
+                    </span>
+                    <Sparkles className="w-5 h-5 text-amber-300 animate-pulse shrink-0" />
+                  </div>
+                </div>
               </motion.button>
 
                 <div className="flex gap-4">

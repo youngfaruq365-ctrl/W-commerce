@@ -5,7 +5,8 @@ import {
   Clock, ArrowRight, ExternalLink, Plane, RefreshCw, X, ChevronRight, ChevronDown, ChevronLeft, ChevronUp, Check, Info, Box, Package,
   Search, PackageCheck, Copy, Eye, Star, ShoppingBag, Link2, Tag, AlertTriangle, Store, Wallet, MessageSquarePlus, Compass,
   Lock, CreditCard, Camera, Mic, Volume2, Maximize2,
-  PanelLeft, PanelLeftClose, Plus, Trash2, History, MessageSquare, User
+  PanelLeft, PanelLeftClose, Plus, Trash2, History, MessageSquare, User,
+  Receipt, Table, Calculator
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
@@ -26,9 +27,12 @@ import AILazyResponseSkeleton from '../components/payai/AILazyResponseSkeleton';
 import StoreLogoAvatar from '../components/payai/StoreLogoAvatar';
 import TopUpModal from '../components/buyer/TopUpModal';
 import OfficialReceiptCard, { parseReceiptData } from '../components/payai/OfficialReceiptCard';
+import PayAITasteMatchCard from '../components/payai/PayAITasteMatchCard';
 import { useWalletStore } from '../store/walletStore';
 
 const QUICK_PROMPTS = [
+  { label: '🧠 TasteMatch Plan (₦6k • 3 Days Food)', text: 'Plan a 3-day food basket for me under ₦6,000 using TasteMatch AI based on spicy comfort palate' },
+  { label: '🎨 Vibe Match: Streetwear & Indie', text: 'Show me trending streetwear and indie fashion matching my cultural aesthetic and vibe' },
   { label: '💳 Pay with PayPal', text: 'Can I pay using PayPal?' },
   { label: '💰 Check Wallet Balance', text: 'How much am I having in my wallet?' },
   { label: '📸 Warehouse Photo & Voice Note', text: 'Can you share a live warehouse photo and seller voice note confirming the product condition before I buy?' },
@@ -151,6 +155,216 @@ function hasPaymentOrCheckoutIntent(content) {
 }
 
 // Rich inline markdown renderer for chat responses with interactive action button conversion
+// Specialized Premium Table Component for Markdown Tables (Financial breakdowns, itemized plans, specs)
+function MarkdownTableCard({ headers = [], alignments = [], rows = [], renderInline, onAction }) {
+  const [copied, setCopied] = useState(false);
+
+  if (!headers.length && !rows.length) return null;
+
+  // Determine if this is a financial, pricing, or budget table
+  const allText = (headers.join(' ') + ' ' + rows.map(r => r.join(' ')).join(' ')).toLowerCase();
+  const isFinancialTable = /(?:financial|breakdown|budget|price|cost|amount|total|summary|drink|meal|breakfast|lunch|dinner|item|day|fee|subtotal|₦|\$|ngn|usd)/i.test(allText) ||
+    rows.some(r => r.some(c => /(?:₦|\$|NGN|USD)/i.test(c)));
+
+  // Identify numeric / currency columns for right-alignment
+  const isNumericColumn = (colIdx) => {
+    let numCount = 0;
+    let totalCells = 0;
+    rows.forEach(r => {
+      const cell = r[colIdx]?.trim();
+      if (cell) {
+        totalCells++;
+        if (/(?:₦|\$|€|£|NGN|USD|\d+[\d,.]*)/i.test(cell)) numCount++;
+      }
+    });
+    return totalCells > 0 && (numCount / totalCells) >= 0.5;
+  };
+
+  // Find grand total amount if present
+  let grandTotalCell = null;
+  const totalRow = rows.find(r => r.some(c => /^(total|total planned|grand total)/i.test(c.trim())));
+  if (totalRow) {
+    grandTotalCell = totalRow.find(c => /(?:₦|\$|NGN|USD|\d+[\d,.]*)/i.test(c) && !/total/i.test(c));
+  }
+
+  const handleCopyTable = () => {
+    try {
+      const headerLine = `| ${headers.join(' | ')} |`;
+      const sepLine = `| ${headers.map(() => '---').join(' | ')} |`;
+      const rowLines = rows.map(r => `| ${r.join(' | ')} |`).join('\n');
+      const textToCopy = `${headerLine}\n${sepLine}\n${rowLines}`;
+      navigator.clipboard.writeText(textToCopy);
+      setCopied(true);
+      toast.success('Table copied to clipboard!');
+      setTimeout(() => setCopied(false), 2000);
+    } catch (_) {
+      toast.error('Failed to copy table');
+    }
+  };
+
+  return (
+    <div className="my-3.5 w-full rounded-2xl border border-slate-200/90 dark:border-white/10 bg-white/80 dark:bg-[#121829]/90 shadow-[0_8px_30px_rgb(0,0,0,0.06)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.35)] backdrop-blur-xl overflow-hidden transition-all duration-200">
+      {/* Top accent bar */}
+      <div className={`h-1 w-full ${isFinancialTable ? 'bg-gradient-to-r from-blue-600 via-indigo-500 to-emerald-500' : 'bg-gradient-to-r from-slate-300 to-slate-400 dark:from-white/10 dark:to-white/20'}`} />
+
+      {/* Card Header Top Bar */}
+      <div className="flex items-center justify-between px-3.5 sm:px-4 py-2.5 bg-gradient-to-r from-slate-50/90 via-blue-50/30 to-slate-50/90 dark:from-white/[0.04] dark:via-blue-500/[0.04] dark:to-white/[0.02] border-b border-slate-200/80 dark:border-white/10 flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <div className={`w-6 h-6 rounded-lg flex items-center justify-center shadow-xs ${
+            isFinancialTable
+              ? 'bg-blue-600/10 dark:bg-blue-400/20 text-blue-600 dark:text-blue-400'
+              : 'bg-slate-500/10 dark:bg-white/10 text-slate-600 dark:text-zinc-300'
+          }`}>
+            {isFinancialTable ? <Receipt size={13} /> : <Table size={13} />}
+          </div>
+          <span className="text-xs font-black tracking-wide text-slate-800 dark:text-zinc-100">
+            {isFinancialTable ? 'Financial Breakdown' : 'Structured Data Summary'}
+          </span>
+          <span className="text-[10px] font-bold text-slate-500 dark:text-zinc-400 font-mono hidden sm:inline">
+            ({rows.length} {rows.length === 1 ? 'row' : 'rows'})
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {isFinancialTable && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+              <ShieldCheck size={10} /> Escrow Protected
+            </span>
+          )}
+
+          <button
+            type="button"
+            onClick={handleCopyTable}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white bg-black/[0.03] dark:bg-white/[0.05] hover:bg-black/[0.06] dark:hover:bg-white/[0.1] transition-all cursor-pointer"
+            title="Copy table to clipboard"
+          >
+            {copied ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+          </button>
+        </div>
+      </div>
+
+      {/* Responsive Table Wrapper */}
+      <div className="overflow-x-auto w-full hide-scrollbar">
+        <table className="w-full text-left border-collapse min-w-[320px]">
+          <thead>
+            <tr className="bg-slate-50/90 dark:bg-white/[0.03] border-b border-slate-200/80 dark:border-white/10">
+              {headers.map((h, hIdx) => {
+                const align = alignments[hIdx] || (isNumericColumn(hIdx) ? 'right' : 'left');
+                return (
+                  <th
+                    key={hIdx}
+                    className={`py-2.5 px-3.5 text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-zinc-400 select-none ${
+                      align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'
+                    }`}
+                  >
+                    {renderInline(h)}
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-white/[0.04] text-xs">
+            {rows.map((row, rIdx) => {
+              const isTotalRow = row.some(c => /^(total|total planned|grand total|subtotal)/i.test(c.trim()));
+
+              if (isTotalRow) {
+                return (
+                  <tr
+                    key={rIdx}
+                    className="bg-emerald-500/[0.07] dark:bg-emerald-500/[0.12] border-t-2 border-emerald-500/30 dark:border-emerald-500/40 font-black"
+                  >
+                    {row.map((cell, cIdx) => {
+                      const align = alignments[cIdx] || (isNumericColumn(cIdx) ? 'right' : 'left');
+                      const isCurrency = /(?:₦|\$|NGN|USD)/i.test(cell);
+                      const isLabel = /total/i.test(cell);
+
+                      return (
+                        <td
+                          key={cIdx}
+                          className={`py-3 px-3.5 ${
+                            align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'
+                          }`}
+                        >
+                          {isCurrency ? (
+                            <span className="inline-flex items-center font-mono font-black text-xs sm:text-sm px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 shadow-xs tabular-nums">
+                              {renderInline(cell)}
+                            </span>
+                          ) : isLabel ? (
+                            <span className="flex items-center gap-1.5 text-xs font-black text-emerald-800 dark:text-emerald-200 uppercase tracking-wide">
+                              <Calculator size={13} className="text-emerald-500 shrink-0" />
+                              {renderInline(cell)}
+                            </span>
+                          ) : cell.trim() ? (
+                            <span className="font-bold text-slate-800 dark:text-zinc-200">{renderInline(cell)}</span>
+                          ) : (
+                            <span className="text-slate-300 dark:text-zinc-600">—</span>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              }
+
+              return (
+                <tr
+                  key={rIdx}
+                  className="hover:bg-blue-500/[0.03] dark:hover:bg-blue-400/[0.04] transition-colors group"
+                >
+                  {row.map((cell, cIdx) => {
+                    const align = alignments[cIdx] || (isNumericColumn(cIdx) ? 'right' : 'left');
+                    const isCurrency = /(?:₦|\$|NGN|USD)/i.test(cell);
+                    const isDayOrCategory = /^(day\s*\d+|day|date|breakfast|lunch|dinner|week\s*\d+)/i.test(cell.trim());
+
+                    return (
+                      <td
+                        key={cIdx}
+                        className={`py-2.5 px-3.5 text-slate-800 dark:text-zinc-200 ${
+                          align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'
+                        }`}
+                      >
+                        {isCurrency ? (
+                          <span className="inline-flex items-center font-mono font-semibold text-[11.5px] px-2 py-0.5 rounded-md bg-slate-100/80 dark:bg-white/[0.06] border border-slate-200/60 dark:border-white/[0.08] text-slate-900 dark:text-zinc-100 tabular-nums">
+                            {renderInline(cell)}
+                          </span>
+                        ) : isDayOrCategory ? (
+                          <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500/60 dark:bg-blue-400/80 group-hover:scale-125 transition-transform shrink-0" />
+                            {renderInline(cell)}
+                          </span>
+                        ) : cell.trim() ? (
+                          <span className="text-slate-700 dark:text-zinc-300">
+                            {renderInline(cell)}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300 dark:text-zinc-600">—</span>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Optional Financial Escrow Footer Note */}
+      {isFinancialTable && grandTotalCell && (
+        <div className="px-3.5 sm:px-4 py-2 bg-slate-50/60 dark:bg-white/[0.02] border-t border-slate-200/60 dark:border-white/[0.06] flex items-center justify-between text-[11px] text-slate-500 dark:text-zinc-400 flex-wrap gap-2">
+          <span className="flex items-center gap-1.5 font-medium">
+            <Lock size={11} className="text-emerald-500 shrink-0" />
+            <span>Escrow lock for total: <strong className="font-mono text-emerald-600 dark:text-emerald-400">{grandTotalCell}</strong></span>
+          </span>
+          <span className="text-[10px] text-slate-400 dark:text-zinc-500">
+            Progressive release upon daily confirmation
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MarkdownContent({ content, onAction, isSending = false }) {
   if (!content) return null;
 
@@ -433,19 +647,64 @@ function MarkdownContent({ content, onAction, isSending = false }) {
     });
   };
 
-  lines.forEach((line, idx) => {
-    const trimmed = line.trim();
+  const isTableSeparator = (s) => /^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?$/.test((s || '').trim());
+  const splitTableRow = (r) => {
+    let s = (r || '').trim();
+    if (s.startsWith('|')) s = s.slice(1);
+    if (s.endsWith('|')) s = s.slice(0, -1);
+    return s.split('|').map(c => c.trim());
+  };
 
-    // Horizontal Divider
+  for (let idx = 0; idx < lines.length; idx++) {
+    const line = lines[idx];
+    const trimmed = (line || '').trim();
+
+    // 1. Markdown Table Check
+    if (trimmed.includes('|') && idx + 1 < lines.length && isTableSeparator(lines[idx + 1])) {
+      flushLists();
+      const rawHeaders = splitTableRow(trimmed);
+      const sepRow = lines[idx + 1];
+      const alignments = splitTableRow(sepRow).map(c => {
+        const cell = c.trim();
+        if (cell.startsWith(':') && cell.endsWith(':')) return 'center';
+        if (cell.endsWith(':')) return 'right';
+        if (cell.startsWith(':')) return 'left';
+        return null;
+      });
+
+      idx += 2; // Advance past header and separator rows
+      const tableRows = [];
+      while (idx < lines.length && lines[idx].trim().includes('|') && !isTableSeparator(lines[idx])) {
+        const rowCells = splitTableRow(lines[idx]);
+        while (rowCells.length < rawHeaders.length) rowCells.push('');
+        tableRows.push(rowCells.slice(0, Math.max(rawHeaders.length, rowCells.length)));
+        idx++;
+      }
+      idx--; // Balance the loop increment
+
+      elements.push(
+        <MarkdownTableCard
+          key={`table-${keyIdx++}`}
+          headers={rawHeaders}
+          alignments={alignments}
+          rows={tableRows}
+          renderInline={renderInline}
+          onAction={onAction}
+        />
+      );
+      continue;
+    }
+
+    // 2. Horizontal Divider
     if (trimmed === '---' || trimmed === '***' || trimmed === '___') {
       flushLists();
       elements.push(
         <hr key={`hr-${keyIdx++}`} className="my-2.5 border-slate-200 dark:border-zinc-800" />
       );
-      return;
+      continue;
     }
 
-    // Standalone Image or Video Line: ![alt](url)
+    // 3. Standalone Image or Video Line: ![alt](url)
     const imgLineMatch = trimmed.match(/^!\[([^\]]*)\]\(([^)]*)\)$/);
     if (imgLineMatch) {
       flushLists();
@@ -483,10 +742,10 @@ function MarkdownContent({ content, onAction, isSending = false }) {
           </div>
         );
       }
-      return;
+      continue;
     }
 
-    // Headings
+    // 4. Headings
     if (trimmed.startsWith('### ')) {
       flushLists();
       elements.push(
@@ -494,7 +753,7 @@ function MarkdownContent({ content, onAction, isSending = false }) {
           {renderInline(trimmed.slice(4))}
         </h4>
       );
-      return;
+      continue;
     }
     if (trimmed.startsWith('## ')) {
       flushLists();
@@ -503,7 +762,7 @@ function MarkdownContent({ content, onAction, isSending = false }) {
           {renderInline(trimmed.slice(3))}
         </h3>
       );
-      return;
+      continue;
     }
     if (trimmed.startsWith('# ')) {
       flushLists();
@@ -512,13 +771,24 @@ function MarkdownContent({ content, onAction, isSending = false }) {
           {renderInline(trimmed.slice(2))}
         </h2>
       );
-      return;
+      continue;
     }
 
-    // Unordered List Items: - or *
+    // 5. Short Emoji Section Headers (e.g. 📊 Itemized Financial Summary, 💡 Recommended Choices, 📦 Shipping Details)
+    const isEmojiHeader = /^(?:[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]\s*)+[A-Za-z0-9\s&:-]+$/u.test(trimmed) && trimmed.length < 60;
+    if (isEmojiHeader) {
+      flushLists();
+      elements.push(
+        <div key={`section-${keyIdx++}`} className="font-black text-xs sm:text-sm text-slate-900 dark:text-white flex items-center gap-2 mt-3.5 mb-1">
+          {renderInline(trimmed)}
+        </div>
+      );
+      continue;
+    }
+
+    // 6. Unordered List Items: - or *
     if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
       const itemText = trimmed.slice(2);
-      // If the list item STARTS with an image, extract it and render as a block card outside the list
       const leadingImgMatch = itemText.match(/^!\[([^\]]*)\]\(([^)]*)\)\s*(.*)/s);
       if (leadingImgMatch) {
         if (currentUnorderedList.length > 0) flushLists();
@@ -547,7 +817,6 @@ function MarkdownContent({ content, onAction, isSending = false }) {
             </div>
           );
         }
-        // If there's trailing text after the image, render it as a paragraph
         if (afterText) {
           elements.push(
             <p key={`imgafter-${keyIdx++}`} className="text-xs sm:text-sm leading-relaxed text-slate-800 dark:text-zinc-100">
@@ -555,7 +824,7 @@ function MarkdownContent({ content, onAction, isSending = false }) {
             </p>
           );
         }
-        return;
+        continue;
       }
       if (currentOrderedList.length > 0) flushLists();
       currentUnorderedList.push(
@@ -563,14 +832,13 @@ function MarkdownContent({ content, onAction, isSending = false }) {
           {renderInline(itemText)}
         </li>
       );
-      return;
+      continue;
     }
 
-    // Ordered List Items: e.g. 1. Item
+    // 7. Ordered List Items: e.g. 1. Item
     const numMatch = trimmed.match(/^(\d+)\.\s+(.*)$/s);
     if (numMatch) {
       const itemText = numMatch[2];
-      // If the list item STARTS with an image, extract it and render as a block card outside the list
       const leadingImgMatch = itemText.match(/^!\[([^\]]*)\]\(([^)]*)\)\s*(.*)/s);
       if (leadingImgMatch) {
         if (currentUnorderedList.length > 0) flushLists();
@@ -606,7 +874,7 @@ function MarkdownContent({ content, onAction, isSending = false }) {
             </p>
           );
         }
-        return;
+        continue;
       }
       if (currentUnorderedList.length > 0) flushLists();
       currentOrderedList.push(
@@ -614,10 +882,10 @@ function MarkdownContent({ content, onAction, isSending = false }) {
           {renderInline(itemText)}
         </li>
       );
-      return;
+      continue;
     }
 
-    // Paragraph or empty spacing line
+    // 8. Paragraph or empty spacing line
     flushLists();
     if (trimmed === '') {
       elements.push(<div key={`br-${keyIdx++}`} className="h-1.5" />);
@@ -628,7 +896,7 @@ function MarkdownContent({ content, onAction, isSending = false }) {
         </p>
       );
     }
-  });
+  }
 
   flushLists();
 
@@ -736,6 +1004,7 @@ export default function PayAI() {
   // 1-Click Attached Product in Chat State
   const [attachedChatProduct, setAttachedChatProduct] = useState(null);
   const [isQuickChattingSeller, setIsQuickChattingSeller] = useState(false);
+  const tasteMatchHandledRef = useRef(false);
 
   // Live Seller Quick-Chat & Presence States
   const [activeQuickChatSeller, setActiveQuickChatSeller] = useState(null);
@@ -1447,6 +1716,11 @@ export default function PayAI() {
             }
           });
         }
+        if (res.data.toolCall?.toolName === 'plan_tastematch_basket' && res.data.toolCall.result) {
+          if (!res.data.message.tasteMatchPlan) {
+            res.data.message.tasteMatchPlan = res.data.toolCall.result;
+          }
+        }
         if (res.data.toolCall?.toolName === 'checkout_with_wallet' && res.data.toolCall.result?.success) {
           toast.success('Paid with W-Commerce Wallet! Funds locked in Escrow.');
           handleOrderCompleted(res.data.toolCall.result);
@@ -1649,6 +1923,95 @@ export default function PayAI() {
     }
     toast.success(`"${item.title.slice(0, 28)}..." attached to chat! Add an optional message or pick an action.`);
   };
+
+  // Seamless TasteMatch & Negotiate Entry from Product Details Bridge
+  useEffect(() => {
+    const action = searchParams.get('action');
+    const productId = searchParams.get('productId');
+    const rawTitle = searchParams.get('title') || 'Product';
+    const rawPrice = Number(searchParams.get('price')) || 0;
+    const rawCategory = searchParams.get('category') || '';
+    const rawImage = searchParams.get('image') || '';
+
+    if (action === 'tastematch' && productId) {
+      if (activeTab !== 'chat') {
+        setActiveTab('chat');
+      }
+
+      const decodedTitle = decodeURIComponent(rawTitle);
+      const decodedCategory = decodeURIComponent(rawCategory);
+      const decodedImage = rawImage ? decodeURIComponent(rawImage) : '';
+
+      // Attach immediately to chat context if not already attached
+      if (!attachedChatProduct || (attachedChatProduct.id !== productId && attachedChatProduct.productId !== productId)) {
+        const { priceUSD, priceNGN } = resolveOfferPrices({
+          id: productId,
+          productId,
+          title: decodedTitle,
+          price: rawPrice,
+          currency: 'NGN',
+          imageUrl: decodedImage
+        });
+
+        const initialProduct = {
+          id: productId,
+          productId,
+          title: decodedTitle,
+          price: priceUSD,
+          priceUSD,
+          priceNGN,
+          category: decodedCategory,
+          imageUrl: decodedImage,
+          currency: 'USD_NORMALIZED',
+          _normalizedPrices: true,
+          isTasteMatch: true,
+          sellerName: 'Verified W-Commerce Merchant'
+        };
+
+        setAttachedChatProduct(initialProduct);
+
+        // Fetch complete product details in the background to enrich images/store
+        apiClient.get(`/api/v1/products/${productId}`)
+          .then(res => {
+            if (res.data?.success && res.data.product) {
+              const p = res.data.product;
+              const pPrices = resolveOfferPrices(p);
+              const pImg = p.images?.[0]?.url || decodedImage;
+              setAttachedChatProduct(prev => ({
+                ...(prev || initialProduct),
+                ...p,
+                id: productId,
+                productId,
+                title: p.title || decodedTitle,
+                price: pPrices.priceUSD,
+                priceUSD: pPrices.priceUSD,
+                priceNGN: pPrices.priceNGN,
+                imageUrl: pImg ? (pImg.startsWith('http') || pImg.startsWith('/') ? pImg : `/${pImg}`) : decodedImage,
+                sellerName: p.store?.storeName || prev?.sellerName || 'Verified W-Commerce Merchant',
+                isTasteMatch: true,
+                _normalizedPrices: true
+              }));
+            }
+          })
+          .catch(e => console.debug('TasteMatch product enrichment notice:', e.message));
+      }
+
+      // Auto-trigger agentic TasteMatch prompt once session is active
+      const promptText = `I'm checking out "${decodedTitle}". Can you find matching items for my vibe and negotiate the best deal within my budget?`;
+
+      if (!isInitializing && sessionId && !tasteMatchHandledRef.current) {
+        tasteMatchHandledRef.current = true;
+        toast.success(`🧠 TasteMatch Activated for "${decodedTitle.slice(0, 22)}..."`, { icon: '✨', duration: 4000 });
+        handleSendMessage(promptText, {
+          productId,
+          actionType: 'TASTEMATCH'
+        });
+      } else if (!tasteMatchHandledRef.current) {
+        // Pre-populate input in case session initialization is pending
+        setInputText(promptText);
+      }
+    }
+  }, [searchParams, isInitializing, sessionId]);
 
   // Quick Chat Seller (checks if product owner is online & relays buyer message in real-time)
   const handleQuickChatSeller = async (productItem = attachedChatProduct, optionalMsg = inputText) => {
@@ -2210,6 +2573,41 @@ export default function PayAI() {
   };
 
   // Helper: Parse Added Cart Items / Combo Data from AI message tool results
+  // Helper: Parse TasteMatch Plan & Basket from AI message or tool results
+  const getTasteMatchPlan = (message) => {
+    if (!message) return null;
+    if (message.tasteMatchPlan) return message.tasteMatchPlan;
+    if (message.toolResults) {
+      try {
+        const parsed = typeof message.toolResults === 'string' ? JSON.parse(message.toolResults) : message.toolResults;
+        if (parsed?.plan_tastematch_basket) return parsed.plan_tastematch_basket;
+        if (parsed?.tasteMatchPlan) return parsed.tasteMatchPlan;
+        if (parsed?.taste_match_plan) return parsed.taste_match_plan;
+        if (parsed?.tool === 'plan_tastematch_basket') return parsed.result || parsed.data || parsed;
+        if (parsed?.action === 'TASTEMATCH_PLAN' || parsed?.isTasteMatch) return parsed;
+        if (parsed?.budgetLimit && (parsed?.days || parsed?.schedule || parsed?.items)) return parsed;
+      } catch (e) {
+        // continue
+      }
+    }
+    if (typeof message.content === 'string' && message.role !== 'user') {
+      const c = message.content;
+      if (
+        c.includes('TasteMatch™ Plan') ||
+        c.includes('TasteMatch Plan') ||
+        (c.includes('TasteMatch') && (c.includes('Budget') || c.includes('Basket') || c.includes('6,000') || c.includes('5,400')))
+      ) {
+        return {
+          budgetLimit: 6000,
+          totalPrice: 5400,
+          currency: 'NGN',
+          tasteTags: ['🌶️ Spicy Palate', '🍲 Suya / Peppered Variety', '⚡ Comfort Dining']
+        };
+      }
+    }
+    return null;
+  };
+
   const getToolCartData = (message) => {
     if (!message) return null;
     if (message.toolResults) {
@@ -2743,13 +3141,13 @@ export default function PayAI() {
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
                             {[
                               {
-                                label: 'Smart Discovery',
-                                title: 'Breakfast & Meals',
-                                sub: 'Fresh verified food & snacks',
-                                badge: 'Popular',
+                                label: 'TasteMatch AI',
+                                title: 'TasteMatch Food Plan',
+                                sub: '3-Day food basket under ₦6k',
+                                badge: 'Qloo Taste',
                                 icon: ShoppingBag,
-                                color: 'text-[#006cff]',
-                                prompt: 'What food or breakfast options can I get right now?'
+                                color: 'text-amber-500',
+                                prompt: 'Plan a 3-day food basket for me under ₦6,000 using TasteMatch AI based on spicy comfort palate'
                               },
                               {
                                 label: 'Live AI Haggle',
@@ -2814,6 +3212,7 @@ export default function PayAI() {
                       const offers = getToolOffers(msg);
                       const deal = getNegotiationDeal(msg);
                       const warehouseInsp = getWarehouseInspection(msg);
+                      const tasteMatchPlan = getTasteMatchPlan(msg);
                       const cartData = getToolCartData(msg);
                       const cartItem = cartData?.item || getToolCartItem(msg);
                       const checkoutGuidance = getCheckoutGuidance(msg);
@@ -3386,6 +3785,25 @@ export default function PayAI() {
                               </div>
                             )}
 
+                            {/* Interactive PayAI TasteMatch Plan & Basket Card */}
+                            {!isUser && tasteMatchPlan && (
+                              <PayAITasteMatchCard
+                                plan={tasteMatchPlan}
+                                formatLocalPrice={formatLocalPrice}
+                                onSendMessage={handleSendMessage}
+                                onOpenCart={() => setIsCartDrawerOpen(true)}
+                                onLockEscrowCheckout={({ totalNGN, totalUSD, items, planTitle }) => {
+                                  handleProceedToCheckout({
+                                    total: totalUSD || Number((totalNGN / 1480).toFixed(2)),
+                                    totalNGN: totalNGN,
+                                    productTitle: planTitle || 'PayAI TasteMatch™ 3-Day Plan',
+                                    storeName: 'Verified Kitchen Vendors',
+                                    items: items || []
+                                  });
+                                }}
+                              />
+                            )}
+
                             {/* Dedicated Interactive Card when an Item or Combo is Added to Cart */}
                             {(cartData || cartItem) && (() => {
                               const isCombo = Boolean(cartData?.isCombo);
@@ -3590,11 +4008,28 @@ export default function PayAI() {
                               const validExtractedProduct = rawProductMatch && !genericBlacklist.includes(rawProductMatch[1]?.trim())
                                 ? rawProductMatch[1].trim()
                                 : null;
-                              const displayProductTitle = checkoutGuidance?.productTitle || validExtractedProduct;
+                              const effectiveItems = (checkoutGuidance?.items && checkoutGuidance.items.length > 0)
+                                ? checkoutGuidance.items
+                                : (cart?.items && cart.items.length > 0)
+                                  ? cart.items
+                                  : null;
+                              const cartTotalNGN = (cart?.items && cart.items.length > 0)
+                                ? cart.items.reduce((s, it) => s + (Number(it.price || 0) * (it.quantity || 1)), 0)
+                                : 0;
                               const isPayPal = Boolean(checkoutGuidance?.isPayPalCheckout || /paypal|pay\s*pal/i.test(msg.content));
                               const rawExtractedNGN = extractAmountFromText(msg.content)?.numeric;
-                              const totalNGNAmt = Number(checkoutGuidance?.amountNGN || rawExtractedNGN || 18000);
-                              const totalUSDAmt = checkoutGuidance?.amountUSD || Number((totalNGNAmt / 1480).toFixed(2));
+
+                              const totalNGNAmt = Number(
+                                (checkoutGuidance?.items && checkoutGuidance.items.length > 0)
+                                  ? (checkoutGuidance.amountNGN || checkoutGuidance.items.reduce((s, it) => s + (Number(it.price || 0) * (it.quantity || 1)), 0))
+                                  : (cartTotalNGN > 0 && (!rawExtractedNGN || rawExtractedNGN < cartTotalNGN)
+                                      ? cartTotalNGN
+                                      : (checkoutGuidance?.amountNGN || rawExtractedNGN || 18000))
+                              );
+                              const totalUSDAmt = (checkoutGuidance?.amountUSD && checkoutGuidance.amountNGN === totalNGNAmt)
+                                ? checkoutGuidance.amountUSD
+                                : Number((totalNGNAmt / 1480).toFixed(2));
+                              const displayProductTitle = checkoutGuidance?.productTitle || validExtractedProduct;
 
                               return (
                               <div className="w-full mt-3 p-5 rounded-3xl neu-card border border-[var(--border-subtle)] space-y-3.5">
@@ -3610,7 +4045,7 @@ export default function PayAI() {
                                   </div>
                                   <div className="text-right">
                                     <div className="text-base font-black text-[var(--text-main)]">
-                                      {isPayPal ? `$${totalUSDAmt} USD` : `₦${Number(totalNGNAmt).toLocaleString()} NGN`}
+                                      {isPayPal ? `${totalUSDAmt} USD` : `₦${Number(totalNGNAmt).toLocaleString()} NGN`}
                                     </div>
                                     {isPayPal && (
                                       <div className="text-[10px] font-medium text-[var(--text-muted)]">
@@ -3620,7 +4055,50 @@ export default function PayAI() {
                                   </div>
                                 </div>
 
-                                {displayProductTitle && (
+                                {effectiveItems && effectiveItems.length > 1 ? (
+                                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-0.5">
+                                    {effectiveItems.map((it, idx) => {
+                                      const itemImg = it.imageUrl || it.image || '';
+                                      const resolvedImg = resolveProductImage(itemImg, it.title || '', it.category || '');
+                                      return (
+                                        <div key={it.id || it.productId || idx} className="text-xs font-bold text-[var(--text-main)] flex items-center justify-between gap-2 px-3 py-2 rounded-xl neu-card-pressed">
+                                          <div className="flex items-center gap-2 min-w-0">
+                                            {isVideoUrl(itemImg) ? (
+                                              <video
+                                                src={getImageUrl(itemImg)}
+                                                className="w-8 h-8 rounded-lg object-cover shrink-0"
+                                                muted
+                                                playsInline
+                                                preload="metadata"
+                                              />
+                                            ) : (
+                                              <img
+                                                src={resolvedImg}
+                                                alt={it.title || 'Product'}
+                                                className="w-8 h-8 rounded-lg object-cover shrink-0"
+                                                onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = FALLBACK_PACKAGE_BOX_IMG; }}
+                                              />
+                                            )}
+                                            <div className="min-w-0">
+                                              <span className="truncate block font-semibold">{it.title}</span>
+                                              {(it.sellerName || it.storeName) && (
+                                                <span className="text-[10px] text-[var(--text-muted)] shrink-0 block">{it.sellerName || it.storeName}</span>
+                                              )}
+                                            </div>
+                                          </div>
+                                          <div className="text-right shrink-0">
+                                            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                                              {it.currency === 'USD' ? `${Number(it.price).toFixed(2)}` : `₦${Number(it.price || 0).toLocaleString()}`}
+                                            </span>
+                                            {it.quantity > 1 && (
+                                              <span className="text-[10px] text-[var(--text-muted)] block font-mono">Qty: {it.quantity}</span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                ) : displayProductTitle ? (
                                   <div className="text-xs font-bold text-[var(--text-main)] flex items-center gap-2 px-3 py-2 rounded-xl neu-card-pressed">
                                     {isVideoUrl(checkoutGuidance?.imageUrl) ? (
                                       <video
@@ -3643,7 +4121,7 @@ export default function PayAI() {
                                       <span className="text-[10px] text-[var(--text-muted)] shrink-0">• {checkoutGuidance.storeName}</span>
                                     )}
                                   </div>
-                                )}
+                                ) : null}
 
                                 <p className="text-[11px] font-medium text-[var(--text-muted)] leading-snug">
                                   {isPayPal ? (
@@ -3658,8 +4136,8 @@ export default function PayAI() {
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      const defaultItems = (cart?.items && cart.items.length > 0)
-                                        ? cart.items
+                                      const defaultItems = (effectiveItems && effectiveItems.length > 0)
+                                        ? effectiveItems
                                         : [{
                                             title: displayProductTitle || 'W-Commerce Order',
                                             price: totalUSDAmt,
@@ -3669,9 +4147,9 @@ export default function PayAI() {
                                       handleProceedToCheckout({
                                         total: totalUSDAmt,
                                         totalNGN: totalNGNAmt,
-                                        productTitle: displayProductTitle || 'W-Commerce Order',
-                                        storeName: checkoutGuidance?.storeName || 'Verified Merchant',
-                                        imageUrl: checkoutGuidance?.imageUrl || '',
+                                        productTitle: displayProductTitle || (defaultItems.length > 1 ? `${defaultItems.length} Items Order` : 'W-Commerce Order'),
+                                        storeName: checkoutGuidance?.storeName || defaultItems[0]?.storeName || defaultItems[0]?.sellerName || 'Verified Merchant',
+                                        imageUrl: checkoutGuidance?.imageUrl || defaultItems[0]?.imageUrl || '',
                                         items: defaultItems
                                       });
                                     }}
@@ -3845,9 +4323,15 @@ export default function PayAI() {
                               />
                               <div className="min-w-0">
                                 <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-[#006cff]/10 text-[#006cff] border border-[#006cff]/20">
-                                    Attached Item
-                                  </span>
+                                  {attachedChatProduct.isTasteMatch ? (
+                                    <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-purple-600/15 text-purple-600 dark:text-purple-300 border border-purple-500/30 flex items-center gap-1">
+                                      <span>🧠</span> TasteMatch Mode
+                                    </span>
+                                  ) : (
+                                    <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-[#006cff]/10 text-[#006cff] border border-[#006cff]/20">
+                                      Attached Item
+                                    </span>
+                                  )}
                                   <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
                                     • Live Negotiation Ready
                                   </span>
@@ -3870,6 +4354,21 @@ export default function PayAI() {
 
                           {/* 1-Click Quick Negotiation & Checkout Chips */}
                           <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar">
+                            {attachedChatProduct.isTasteMatch && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const prompt = `Find complementary fashion/style items and bundle matches for "${attachedChatProduct.title}" within my budget.`;
+                                  handleSendMessage(prompt, {
+                                    productId: attachedChatProduct.id || attachedChatProduct.productId,
+                                    actionType: 'TASTEMATCH_BUNDLE'
+                                  });
+                                }}
+                                className="px-3 py-1.5 rounded-xl bg-purple-600/15 hover:bg-purple-600/25 border border-purple-500/30 text-[11px] font-bold text-purple-600 dark:text-purple-300 shrink-0 flex items-center gap-1 cursor-pointer transition-all"
+                              >
+                                <span>🧠</span> Match My Vibe
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => {
