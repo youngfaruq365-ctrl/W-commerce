@@ -109,6 +109,9 @@ class PaypalPaymentService {
     });
 
     if (!approval) {
+      if (quoteId) {
+        throw new Error('Customer approval is required before creating PayPal order.');
+      }
       approval = await prisma.payAIPurchaseApproval.create({
         data: {
           quoteId: quote.id,
