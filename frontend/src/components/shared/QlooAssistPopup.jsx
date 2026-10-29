@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Sparkles, X, Search, ArrowRight, Loader2, Lightbulb, ShoppingBag, Wrench, Salad } from 'lucide-react';
+import { Sparkles, X, Search, ArrowRight, Loader2, Lightbulb, ShoppingBag, Wrench, Salad, Globe, ExternalLink } from 'lucide-react';
 import { apiClient } from '@/utils/apiClient';
 import { PLACEHOLDER_IMAGE } from '@/constants/placeholders';
 import { QLOO_ASSIST_EVENT, dismissAssistFor } from '../../utils/qlooAssistSignals';
@@ -228,6 +228,37 @@ const QlooAssistPopup = () => {
                       <span key={t} className="text-[10px] font-bold px-2 py-1 rounded-full bg-indigo-500/10 text-indigo-500 capitalize">{t}</span>
                     ))}
                   </div>
+                )}
+
+                {data.externalLinks?.length > 0 && (
+                  <section className="rounded-2xl border border-[var(--border-color)] bg-[var(--bg-tertiary,rgba(127,127,127,0.06))] p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h4 className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wide">
+                        <Globe size={13} className="text-blue-500" /> External Stores
+                      </h4>
+                      <span className="text-[10px] text-[var(--text-muted)] font-medium">Link & Escrow</span>
+                    </div>
+                    <p className="text-[11px] text-[var(--text-muted)] leading-snug">
+                      Not in local inventory? Find on these verified marketplaces and paste the link in PayAI to import:
+                    </p>
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      {data.externalLinks.map((ext) => (
+                        <a
+                          key={ext.site}
+                          href={ext.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex flex-col p-2 rounded-xl border border-[var(--border-color)] hover:border-indigo-500 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] transition-all group"
+                        >
+                          <div className="flex items-center justify-between text-xs font-bold text-[var(--text-main)] group-hover:text-indigo-500">
+                            <span>{ext.name}</span>
+                            <ExternalLink size={12} className="opacity-60 group-hover:opacity-100 shrink-0 ml-1" />
+                          </div>
+                          <span className="text-[10px] text-[var(--text-muted)] mt-0.5 truncate">{ext.badge}</span>
+                        </a>
+                      ))}
+                    </div>
+                  </section>
                 )}
               </>
             )}

@@ -3,6 +3,7 @@
 const prisma = require('../../utils/prismaClient');
 const logger = require('../../utils/logger');
 const qlooAgentTool = require('./qlooAgentTool');
+const { buildExternalMarketplaceLinks } = require('./externalSourcingHelper');
 
 /**
  * Qloo Sourcing Assistant
@@ -317,6 +318,8 @@ async function assist({ query = '', reason = 'manual', resultCount = null, recen
     || substitutes.some(s => s.products.length > 0)
     || relatedProducts.length > 0;
 
+  const externalLinks = buildExternalMarketplaceLinks(cleanQuery);
+
   const message = primary
     ? `${label} can be hard to track down. Here is what I found in the marketplace, plus trusted alternatives.`
     : `I couldn't find an exact match for "${cleanQuery}", so I checked related items and asked Qloo what shoppers with similar taste buy.`;
@@ -333,6 +336,7 @@ async function assist({ query = '', reason = 'manual', resultCount = null, recen
     directProducts,
     substitutes,
     relatedProducts,
+    externalLinks,
     qloo,
     foundAnything,
     followUps: [

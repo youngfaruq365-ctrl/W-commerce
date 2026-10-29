@@ -2533,6 +2533,18 @@ export default function PayAI() {
     }
   };
 
+  // Helper: Parse External Marketplace Sourcing Links from AI message
+  const getExternalLinks = (message) => {
+    if (!message?.toolResults) return [];
+    try {
+      const parsed = typeof message.toolResults === 'string' ? JSON.parse(message.toolResults) : message.toolResults;
+      if (Array.isArray(parsed?.externalLinks) && parsed.externalLinks.length > 0) return parsed.externalLinks;
+      return [];
+    } catch (e) {
+      return [];
+    }
+  };
+
   // Helper: Parse Tool Result Offers from AI message
   const getToolOffers = (message) => {
     if (!message?.toolResults) return [];
@@ -3226,6 +3238,7 @@ export default function PayAI() {
                       {messages.map((msg, idx) => {
                       const isUser = msg.role === 'user';
                       const offers = getToolOffers(msg);
+                      const externalLinks = getExternalLinks(msg);
                       const deal = getNegotiationDeal(msg);
                       const warehouseInsp = getWarehouseInspection(msg);
                       const tasteMatchPlan = getTasteMatchPlan(msg);
@@ -4243,6 +4256,69 @@ export default function PayAI() {
                                     </motion.div>
                                   );
                                 })}
+                              </div>
+                            )}
+
+                            {/* Verified External Marketplaces Sourcing Card */}
+                            {!isUser && (!offers || offers.length === 0) && externalLinks && externalLinks.length > 0 && (
+                              <div className="w-full mt-3.5 p-4 sm:p-5 rounded-3xl neu-card border border-[var(--border-subtle)] space-y-3.5">
+                                <div className="flex items-center justify-between gap-2 flex-wrap">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center">
+                                      <Globe size={16} />
+                                    </div>
+                                    <div>
+                                      <span className="text-xs font-black text-[var(--text-main)] block">
+                                        Verified External Sourcing
+                                      </span>
+                                      <span className="text-[10px] text-[var(--text-muted)] font-medium">
+                                        Not in local stock • Import with Escrow protection
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                                    Partner Stores
+                                  </span>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                                  {externalLinks.map((ext) => (
+                                    <a
+                                      key={ext.site}
+                                      href={ext.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="p-3 rounded-2xl neu-card-pressed hover:border-blue-500/40 border border-transparent transition-all group flex flex-col justify-between"
+                                    >
+                                      <div className="flex items-start justify-between gap-2">
+                                        <div className="min-w-0">
+                                          <span className="text-xs font-bold text-[var(--text-main)] group-hover:text-blue-500 transition-colors block truncate">
+                                            {ext.name}
+                                          </span>
+                                          <span className="text-[10px] text-[var(--text-muted)] mt-0.5 line-clamp-1">
+                                            {ext.description}
+                                          </span>
+                                        </div>
+                                        <ExternalLink size={13} className="text-[var(--text-muted)] group-hover:text-blue-500 shrink-0 mt-0.5" />
+                                      </div>
+                                      <div className="mt-2 flex items-center justify-between">
+                                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-black/5 dark:bg-white/5 text-[var(--text-muted)]">
+                                          {ext.badge}
+                                        </span>
+                                        <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 group-hover:underline">
+                                          View offers &rarr;
+                                        </span>
+                                      </div>
+                                    </a>
+                                  ))}
+                                </div>
+
+                                <div className="p-3 rounded-2xl bg-blue-500/5 border border-blue-500/15 flex items-center gap-2.5 text-xs text-[var(--text-muted)]">
+                                  <Link2 size={16} className="text-blue-500 shrink-0" />
+                                  <span className="text-[11px] leading-relaxed">
+                                    <strong className="text-[var(--text-main)]">Found this item on an external site?</strong> Paste the link right here into PayAI. We will import the specs, estimate landed delivery fees, and protect your order with 100% W-Commerce Escrow!
+                                  </span>
+                                </div>
                               </div>
                             )}
                           </div>

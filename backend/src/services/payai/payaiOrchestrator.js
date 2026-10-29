@@ -10,6 +10,8 @@ const orderService = require('./orderService');
 const negotiationEngineService = require('./negotiationEngineService');
 const aiService = require('../aiService');
 const qlooAgentTool = require('./qlooAgentTool');
+const qlooSourcingAssistant = require('./qlooSourcingAssistant');
+const { buildExternalMarketplaceLinks, formatExternalSourcingMarkdown } = require('./externalSourcingHelper');
 const { resolveBackendProductImage, convertVideoToImageUrl, isVideoUrl } = require('../../utils/productImageHelper');
 
 // Returns a safe image URL — converts video URLs to thumbnails so the AI never embeds .mp4 links
@@ -250,6 +252,7 @@ class PayAIOrchestrator {
             : deterministicReply;
 
           try {
+            const isZeroItems = !toolResult?.items || toolResult.items.length === 0;
             const aiGenerated = await aiService.generateChatResponse(formattedMessages, {
               user: userId ? { id: userId } : null,
               productId: productId || toolResult?.productId || toolResult?.item?.productId || lastSessionProductId,
@@ -257,15 +260,17 @@ class PayAIOrchestrator {
               extraContext: [
                 `PayAI Shopping Session (Market=${session.marketCode}, Destination=${session.destinationCountry}).`,
                 `Tool Executed: ${toolName}`,
-                `Verified Tool Result Summary:\n${itemsSummary}`,
-                `CRITICAL PRODUCT IMAGE INSTRUCTION: Whenever listing, introducing, or recommending products, you MUST include the product's image using markdown format: ![Product Title](ImageUrl). Place each image prominently with the product title and price so the buyer can visually see each item.`,
-                `CRITICAL AI SUGGESTIONS & PAIRINGS INSTRUCTION: You MUST include the section "### 💡 PayAI Smart Suggestions & Perfect Pairings" below the product list with matching combos, meal/drink pairings, fashion outfit pairings, and 1-click suggestion prompt links: [Label](prompt:UserMessage).`,
+                isZeroItems
+                  ? `ZERO LOCAL INVENTORY FOUND (CRITICAL ANTI-HALLUCINATION DIRECTIVE):\nNo products found in W-Commerce catalog for "${finalMessage}". DO NOT INVENT fake products, fake prices, or fake merchants (e.g. "Mama's Garden Fresh"). Provide the verified external marketplace links (Jumia, Konga, Amazon, AliExpress) and remind the buyer they can paste any external product link to import it via W-Commerce Escrow.\n\nVerified External Links:\n${deterministicReply}`
+                  : `Verified Tool Result Summary:\n${itemsSummary}`,
+                !isZeroItems ? `CRITICAL PRODUCT IMAGE INSTRUCTION: Whenever listing, introducing, or recommending products, you MUST include the product's image using markdown format: ![Product Title](ImageUrl). Place each image prominently with the product title and price so the buyer can visually see each item.` : '',
+                !isZeroItems ? `CRITICAL AI SUGGESTIONS & PAIRINGS INSTRUCTION: You MUST include the section "### 💡 PayAI Smart Suggestions & Perfect Pairings" below the product list with matching combos, meal/drink pairings, fashion outfit pairings, and 1-click suggestion prompt links: [Label](prompt:UserMessage).` : '',
                 sessionItemsContext
               ].filter(Boolean).join('\n\n')
             });
 
             let finalAi = aiGenerated;
-            if (finalAi && !finalAi.includes('### 💡 PayAI Smart Suggestions') && !finalAi.includes('Smart Suggestions')) {
+            if (!isZeroItems && finalAi && !finalAi.includes('### 💡 PayAI Smart Suggestions') && !finalAi.includes('Smart Suggestions')) {
               const suggestions = this._generateSmartSuggestions(toolResult, finalMessage, toolResult?.pairingContext);
               finalAi = `${finalAi}${suggestions}`;
             }
@@ -273,6 +278,10 @@ class PayAIOrchestrator {
             if (
               !finalAi ||
               finalAi.includes("I'm your PayAI Sales & Discovery Assistant") ||
+              (isZeroItems && (
+                /(Add to Cart|Mama's|Merchant:|Price:\s*₦|\d+\.\s*[\*\*_]+[A-Za-z]+[\*\*_]+.*₦)/i.test(finalAi) ||
+                !finalAi.includes('http')
+              )) ||
               (toolResult?.items?.length > 0 && !finalAi.includes('₦') && !finalAi.includes('$') && finalAi.length < 150)
             ) {
               assistantResponse = deterministicReply;
@@ -746,6 +755,15 @@ class PayAIOrchestrator {
           maxDeliveryDays: toolArgs.maxDeliveryDays,
           sortBy: toolArgs.sortBy
         });
+        if (!results.items || results.items.length === 0) {
+          results.externalLinks = buildExternalMarketplaceLinks(query, marketCode);
+          try {
+            const matches = qlooSourcingAssistant.matchKnowledge(query);
+            if (matches?.[0]?.substitutes) {
+              results.substitutes = matches[0].substitutes;
+            }
+          } catch (_) {}
+        }
         return results;
       }
 
@@ -761,6 +779,15 @@ class PayAIOrchestrator {
           destinationCountry,
           limit: toolArgs.limit || 8
         });
+        if (!results.items || results.items.length === 0) {
+          results.externalLinks = buildExternalMarketplaceLinks(query, 'INTERNATIONAL');
+          try {
+            const matches = qlooSourcingAssistant.matchKnowledge(query);
+            if (matches?.[0]?.substitutes) {
+              results.substitutes = matches[0].substitutes;
+            }
+          } catch (_) {}
+        }
         return results;
       }
 
@@ -771,6 +798,15 @@ class PayAIOrchestrator {
           category: toolArgs.category,
           limit: toolArgs.limit || 8
         });
+        if (!results.items || results.items.length === 0) {
+          results.externalLinks = buildExternalMarketplaceLinks(toolArgs.query || '', 'NIGERIA');
+          try {
+            const matches = qlooSourcingAssistant.matchKnowledge(toolArgs.query || '');
+            if (matches?.[0]?.substitutes) {
+              results.substitutes = matches[0].substitutes;
+            }
+          } catch (_) {}
+        }
         return results;
       }
 
@@ -1680,42 +1716,82 @@ class PayAIOrchestrator {
         if (itemPhrases.length >= 2) {
           const matchedProducts = [];
           for (const phrase of itemPhrases) {
-            // Direct substring match
+            // Direct substring match (excluding combo packs so individual items are selected)
             let prod = await prisma.product.findFirst({
               where: {
                 title: { contains: phrase },
-                isArchived: false
+                isArchived: false,
+                NOT: { title: { contains: 'Combo' } }
               },
               include: { store: true, images: true }
             });
 
-            // Token search across title
             if (!prod) {
-              const tokens = phrase.split(/\s+/).filter(w => w.length >= 3 && !['pack', 'and', 'the', 'for', 'with', 'box'].includes(w.toLowerCase()));
+              prod = await prisma.product.findFirst({
+                where: {
+                  title: { contains: phrase },
+                  isArchived: false
+                },
+                include: { store: true, images: true }
+              });
+            }
+
+            // Token search across title (ignoring stop words, preferring non-combo items)
+            if (!prod) {
+              const COMBO_STOP_WORDS = new Set(['and', 'the', 'for', 'with', 'pack', 'into', 'cart', 'please', 'also', 'plus', 'some', 'this', 'that', 'from', 'all', 'item', 'items', 'large', 'small', 'bundle', 'food', 'meal', 'combo']);
+              const tokens = phrase.split(/\s+/).map(t => t.replace(/[^a-zA-Z0-9]/g, '').trim()).filter(w => w.length >= 3 && !COMBO_STOP_WORDS.has(w.toLowerCase()));
               if (tokens.length > 0) {
                 prod = await prisma.product.findFirst({
                   where: {
                     AND: tokens.map(tok => ({ title: { contains: tok } })),
-                    isArchived: false
+                    isArchived: false,
+                    NOT: { title: { contains: 'Combo' } }
                   },
                   include: { store: true, images: true }
                 });
+                if (!prod) {
+                  prod = await prisma.product.findFirst({
+                    where: {
+                      AND: tokens.map(tok => ({ title: { contains: tok } })),
+                      isArchived: false
+                    },
+                    include: { store: true, images: true }
+                  });
+                }
               }
             }
 
-            // Fallback token search
+            // Fallback token search by scoring distinctive tokens
             if (!prod) {
+              const COMBO_STOP_WORDS = new Set(['and', 'the', 'for', 'with', 'pack', 'into', 'cart', 'please', 'also', 'plus', 'some', 'this', 'that', 'from', 'all', 'item', 'items', 'large', 'small', 'bundle', 'food', 'meal', 'combo']);
               const cleanPhrase = phrase.replace(/[^a-zA-Z0-9\s]/g, '').trim();
-              const tokens = cleanPhrase.split(/\s+/).filter(w => w.length >= 3);
+              const tokens = cleanPhrase.split(/\s+/).map(t => t.trim().toLowerCase()).filter(w => w.length >= 3 && !COMBO_STOP_WORDS.has(w));
               if (tokens.length > 0) {
-                prod = await prisma.product.findFirst({
+                const candidates = await prisma.product.findMany({
                   where: {
                     OR: tokens.map(tok => ({ title: { contains: tok } })),
-                    isArchived: false
+                    isArchived: false,
+                    NOT: { title: { contains: 'Combo' } }
                   },
                   include: { store: true, images: true },
-                  orderBy: { createdAt: 'desc' }
+                  take: 6
                 });
+                let bestCand = null;
+                let bestScore = 0;
+                for (const cand of candidates) {
+                  const candTitle = cand.title.toLowerCase();
+                  let score = 0;
+                  for (const tok of tokens) {
+                    if (candTitle.includes(tok)) score++;
+                  }
+                  if (score > bestScore) {
+                    bestScore = score;
+                    bestCand = cand;
+                  }
+                }
+                if (bestCand && bestScore >= 1) {
+                  prod = bestCand;
+                }
               }
             }
 
@@ -1724,7 +1800,7 @@ class PayAIOrchestrator {
             }
           }
 
-          if (matchedProducts.length > 1) {
+          if (matchedProducts.length > 0) {
             const cart = await cartService.getOrCreateCart({ userId: effectiveUserId, sessionId, marketCode });
             let mainCart = null;
             if (effectiveUserId) {
@@ -1795,8 +1871,21 @@ class PayAIOrchestrator {
               item: addedItems[0],
               cart
             };
+          } else {
+            // Multi-item / combo was explicitly requested but none could be matched in catalog
+            return {
+              success: false,
+              message: `Could not find "${itemPhrases.join(' and ')}" in our marketplace inventory. Would you like me to recommend available items or combos?`
+            };
           }
         }
+
+        const COMMON_STOP_WORDS = new Set([
+          'and', 'the', 'for', 'with', 'pack', 'into', 'cart', 'please', 'also', 'plus',
+          'some', 'this', 'that', 'these', 'those', 'from', 'all', 'item', 'items', 'meals?',
+          'combos?', 'plate', 'plates', 'bowl', 'bowls', 'side', 'order', 'want', 'buy', 'add',
+          'can', 'you', 'give', 'get', 'put', 'large', 'small', 'bundle'
+        ]);
 
         // Strategy 1: Exact / phrase match in product title or description
         if (!targetProduct && cleanKeywords) {
@@ -1815,9 +1904,14 @@ class PayAIOrchestrator {
           }
         }
 
-        // Strategy 2: Multi-token match across title
+        // Strategy 2: Multi-token match across title (strictly ignoring stop words)
         if (!targetProduct && cleanKeywords) {
-          const tokens = cleanKeywords.split(' ').filter(w => w.length >= 3);
+          const tokens = cleanKeywords
+            .replace(/[^a-zA-Z0-9\s]/g, ' ')
+            .split(/\s+/)
+            .map(w => w.trim().toLowerCase())
+            .filter(w => w.length >= 3 && !COMMON_STOP_WORDS.has(w));
+
           if (tokens.length > 0) {
             targetProduct = await prisma.product.findFirst({
               where: {
@@ -1826,17 +1920,38 @@ class PayAIOrchestrator {
               },
               include: { store: true, images: true }
             });
+
             if (!targetProduct) {
-              targetProduct = await prisma.product.findFirst({
-                where: {
-                  OR: tokens.map(tok => ({ title: { contains: tok } })),
-                  isArchived: false
-                },
-                include: { store: true, images: true },
-                orderBy: { createdAt: 'desc' }
-              });
+              const distinctiveTokens = tokens.filter(tok => tok.length >= 4);
+              if (distinctiveTokens.length > 0) {
+                const candidates = await prisma.product.findMany({
+                  where: {
+                    OR: distinctiveTokens.map(tok => ({ title: { contains: tok } })),
+                    isArchived: false
+                  },
+                  include: { store: true, images: true },
+                  take: 8
+                });
+                let bestCand = null;
+                let bestScore = 0;
+                for (const cand of candidates) {
+                  const candTitle = cand.title.toLowerCase();
+                  let score = 0;
+                  for (const tok of tokens) {
+                    if (candTitle.includes(tok)) score++;
+                  }
+                  if (score > bestScore) {
+                    bestScore = score;
+                    bestCand = cand;
+                  }
+                }
+                if (bestCand && bestScore >= 1) {
+                  targetProduct = bestCand;
+                  priceToUse = bestCand.price;
+                }
+              }
             }
-            if (targetProduct) {
+            if (targetProduct && !priceToUse) {
               priceToUse = targetProduct.price;
             }
           }
@@ -1844,6 +1959,12 @@ class PayAIOrchestrator {
 
         // Strategy 3: Check recent assistant messages for toolResults containing items, offers, or negotiations
         if (!targetProduct) {
+          const isPronominal = /^(?:it|this|that|them|the\s+item|the\s+product|the\s+combo)$/i.test(cleanKeywords);
+          const searchTokens = cleanKeywords
+            .toLowerCase()
+            .split(/\s+/)
+            .filter(w => w.length >= 3 && !COMMON_STOP_WORDS.has(w));
+
           const recentAssistantMsgs = await prisma.payAIMessage.findMany({
             where: { sessionId, role: 'assistant' },
             orderBy: { createdAt: 'desc' },
@@ -1854,55 +1975,47 @@ class PayAIOrchestrator {
             if (msg.toolResults) {
               try {
                 const resObj = JSON.parse(msg.toolResults);
-                if (resObj.negotiatedPrice || resObj.offer) {
-                  targetProduct = resObj.offer || resObj;
-                  priceToUse = resObj.negotiatedPrice || resObj.newPrice || targetProduct.price;
-                  break;
-                }
-                if (resObj.item) {
-                  targetProduct = resObj.item;
-                  priceToUse = resObj.item.price;
-                  break;
-                }
-                if (Array.isArray(resObj.items) && resObj.items.length > 0) {
-                  targetProduct = resObj.items[0];
-                  priceToUse = targetProduct.price;
-                  break;
+                const candidateItem = resObj.offer || resObj.item || (Array.isArray(resObj.items) ? resObj.items[0] : null);
+                if (candidateItem) {
+                  const candTitle = (candidateItem.title || '').toLowerCase();
+                  const matchesPrompt = isPronominal || (searchTokens.length > 0 && searchTokens.some(t => candTitle.includes(t)));
+                  if (matchesPrompt) {
+                    targetProduct = candidateItem;
+                    priceToUse = resObj.negotiatedPrice || resObj.newPrice || targetProduct.price;
+                    break;
+                  }
                 }
               } catch (_) {}
             }
 
             // Also check for bold markdown product titles in message content
-            const boldMatch = msg.content?.match(/\*\*([A-Za-z0-9\s-]{3,40})\*\*/);
-            if (boldMatch) {
-              const candidateTitle = boldMatch[1].trim();
-              const found = await prisma.product.findFirst({
-                where: { title: { contains: candidateTitle }, isArchived: false },
-                include: { store: true, images: true }
-              });
-              if (found) {
-                targetProduct = found;
-                priceToUse = found.price;
-                break;
+            const boldMatches = [...(msg.content?.matchAll(/\*\*([A-Za-z0-9\s-]{3,40})\*\*/g) || [])];
+            for (const bm of boldMatches) {
+              const candidateTitle = bm[1].trim();
+              const candLow = candidateTitle.toLowerCase();
+              const matchesPrompt = isPronominal || (searchTokens.length > 0 && searchTokens.some(t => candLow.includes(t)));
+              if (matchesPrompt) {
+                const found = await prisma.product.findFirst({
+                  where: { title: { contains: candidateTitle }, isArchived: false },
+                  include: { store: true, images: true }
+                });
+                if (found) {
+                  targetProduct = found;
+                  priceToUse = found.price;
+                  break;
+                }
               }
             }
+            if (targetProduct) break;
           }
         }
 
-        // Last resort: find most recent in-stock product
+        // Strict validation: never fall back blindly to an arbitrary product
         if (!targetProduct) {
-          targetProduct = await prisma.product.findFirst({
-            where: { stock: { gt: 0 }, isArchived: false },
-            include: { store: true, images: true },
-            orderBy: { createdAt: 'desc' }
-          });
-          if (targetProduct) {
-            priceToUse = targetProduct.price;
-          }
-        }
-
-        if (!targetProduct) {
-          return { success: false, message: 'Could not determine which product to add. Please specify the product name.' };
+          return {
+            success: false,
+            message: `Could not find "${cleanKeywords || userPrompt}" in our marketplace catalog. Please check the spelling or ask PayAI to recommend available items.`
+          };
         }
 
         const targetProductId = String(targetProduct.id || targetProduct.productId);
@@ -3986,7 +4099,7 @@ class PayAIOrchestrator {
     }
 
     // 1.5. Food, Breakfast, Meal, Hunger & Grocery Intent (Runs BEFORE negotiation to prevent false matches)
-    const foodKeywords = /\b(food|foods|breakfast|break\s*fast|lunch|dinner|meal|meals|snack|snacks|cereal|cereals|corn\s*flakes|cornflakes|oat|oats|porridge|bread|egg|eggs|milk|tea|coffee|juice|water|drinks?|beverage|softdrink|soft\s*drinks?|go-softdrink|soda|coke|fanta|sprite|noodle|noodles|pasta|biscuit|biscuits|cookies?|crisps?|chips?|rice|burger|burgers|sushi|fries|chicken|grocer(?:y|ies))\b/i;
+    const foodKeywords = /\b(food|foods|breakfast|break\s*fast|lunch|dinner|meal|meals|snack|snacks|cereal|cereals|corn\s*flakes|cornflakes|oat|oats|porridge|bread|egg|eggs|milk|tea|coffee|juice|water|drinks?|beverage|softdrink|soft\s*drinks?|go-softdrink|soda|coke|fanta|sprite|noodle|noodles|pasta|biscuit|biscuits|cookies?|crisps?|chips?|rice|burger|burgers|sushi|fries|chicken|grocer(?:y|ies)|ugu|fluted\s*pumpkin|yam|iyan|soup|catfish|peppers?|ata\s*rodo|egusi|jollof|plantain|vegetables?|greens)\b/i;
     const hungerKeywords = /\b(hungry|ungry|starving|crave|craving|appetite|what\s+to\s+eat|what\s+can\s+i\s+(?:eat|have|order)|food\s+i\s+can|something\s+to\s+eat|eat\s+something|list\s+any\s+food|list\s+food)\b/i;
 
     // Detect explicit price-offer signals — if present with food words, this is a negotiation, not a food search
@@ -4054,7 +4167,7 @@ class PayAIOrchestrator {
         // Single part food query
         maxPrice = this._extractBudgetFromText(lower);
 
-        const specificFoodMatch = lower.match(/\b(corn\s*flakes?|instant\s+oats?|oats?|eggs?|milk|noodles?|pasta|biscuits?|cookies?|crisps?|chips?|rice|burgers?|fries|chicken|sushi|hungry\s+box|crunch\s+box|feast\s+box)\b/i);
+        const specificFoodMatch = lower.match(/\b(corn\s*flakes?|instant\s+oats?|oats?|eggs?|milk|noodles?|pasta|biscuits?|cookies?|crisps?|chips?|rice|burgers?|fries|chicken|sushi|hungry\s+box|crunch\s+box|feast\s+box|ugu|fluted\s*pumpkin|yam|iyan|soup|catfish|peppers?|ata\s*rodo|egusi|jollof|plantain)\b/i);
         if (specificFoodMatch) {
           primaryQuery = specificFoodMatch[0];
         } else if (/break\s*fast|morning/i.test(lower)) {
@@ -4319,8 +4432,8 @@ class PayAIOrchestrator {
     }
 
     // 5. Product Search (Triggered when user exhibits shopping search intent or mentions products)
-    const searchVerbs = /\b(find|search|show\s+me|look\s+for|looking\s+for|can\s+you\s+get|get\s+me|buy|buyer|i\s+want\s+to\s+buy|i\s+want|i\s+need\s+a|i\s+need\s+an|i\s+need\s+some|do\s+you\s+have|where\s+can\s+i\s+get|price\s+of|how\s+much\s+is|recommend|suggest|list\s+any|list\s+some|list|fetch|give\s+me|give|display|what\s+do\s+you\s+have|what\s+can\s+i\s+(?:buy|get|order|eat)|what\s+to\s+eat|options\s+for|menu|match|matching)\b/i;
-    const productKeywords = /\b(products?|items?|goods|gymshark|macbook|laptop|phone|iphone|samsung|headphones|earphones|wristwatch|watches|watch|smartwatch|timepiece|dress|shoes|sneakers|camera|charger|bag|jacket|keyboard|mouse|tshirt|shirt|hoodie|clothing|electronics|gadgets|clothes|suit|pants|trouser|trousers|trousher|troushers|pouch|pouchs|pauch|pauches|perfume|fragrance|cream|lotion|jewelry|necklace|bracelet|ring|sunglasses|monitor|tablet|ipad|speaker|ps5|xbox|uk\s*\d+|food|foods|breakfast|break\s*fast|lunch|dinner|meal|meals|snack|snacks|cereal|cereals|corn\s*flakes|cornflakes|oat|oats|porridge|bread|egg|eggs|milk|tea|coffee|juice|water|drinks?|beverage|softdrink|soda|noodle|noodles|pasta|biscuit|biscuits|cookies?|crisps?|chips?|rice|burger|burgers|sushi|fries|chicken|grocer(?:y|ies))\b/i;
+    const searchVerbs = /\b(find|search|show\s+me|look\s+for|looking\s+for|can\s+you\s+get|get\s+me|buy|buyer|i\s+want\s+to\s+buy|i\s+want|i\s+need\s+a|i\s+need\s+an|i\s+need\s+some|do\s+you\s+have|where\s+can\s+i\s+(?:find|found|get|buy|see)|where\s+to\s+(?:find|get|buy)|price\s+of|how\s+much\s+is|recommend|suggest|list\s+any|list\s+some|list|fetch|give\s+me|give|display|what\s+do\s+you\s+have|what\s+can\s+i\s+(?:buy|get|order|eat)|what\s+to\s+eat|options\s+for|menu|match|matching)\b/i;
+    const productKeywords = /\b(products?|items?|goods|gymshark|macbook|laptop|phone|iphone|samsung|headphones|earphones|wristwatch|watches|watch|smartwatch|timepiece|dress|shoes|sneakers|camera|charger|bag|jacket|keyboard|mouse|tshirt|shirt|hoodie|clothing|electronics|gadgets|clothes|suit|pants|trouser|trousers|trousher|troushers|pouch|pouchs|pauch|pauches|perfume|fragrance|cream|lotion|jewelry|necklace|bracelet|ring|sunglasses|monitor|tablet|ipad|speaker|ps5|xbox|uk\s*\d+|food|foods|breakfast|break\s*fast|lunch|dinner|meal|meals|snack|snacks|cereal|cereals|corn\s*flakes|cornflakes|oat|oats|porridge|bread|egg|eggs|milk|tea|coffee|juice|water|drinks?|beverage|softdrink|soda|noodle|noodles|pasta|biscuit|biscuits|cookies?|crisps?|chips?|rice|burger|burgers|sushi|fries|chicken|grocer(?:y|ies)|ugu|fluted\s*pumpkin|yam|iyan|soup|catfish|peppers?|ata\s*rodo|egusi|jollof|plantain|vegetables?|greens)\b/i;
 
     const hasSearchIntent = searchVerbs.test(lower) || productKeywords.test(lower) || lower.includes('match');
 
@@ -4328,7 +4441,7 @@ class PayAIOrchestrator {
       const maxPrice = this._extractBudgetFromText(lower);
       let query = text
         .replace(/^(nice|great|awesome|cool|okay|ok|hello|hi|hey|well|so|um)[,!.\s]+/gi, '')
-        .replace(/\b(find|search|show me|look for|looking for|can you get|get me|buy|buyer|i want to buy|i want|i need a|i need an|i need|need a|need an|do you have|where can i get|how much is|price of|recommend a|recommend|suggest a|suggest|list any|list some|list|can you list any|can you list|fetch and give|fetch and list|fetch|give me|give|display|it match|match the|match your|matches my|matches)\b/gi, '')
+        .replace(/\b(find|search|show me|look for|looking for|can you get|get me|buy|buyer|i want to buy|i want|i need a|i need an|i need|need a|need an|do you have|where can i get|where can i find|where can i found|where to find|where to get|how much is|price of|recommend a|recommend|suggest a|suggest|list any|list some|list|can you list any|can you list|fetch and give|fetch and list|fetch|give me|give|display|it match|match the|match your|matches my|matches)\b/gi, '')
         .replace(/\b(please|for me|on amazon|on aliexpress|on w-commerce|on ebay|on asos|right now|today|for break fast|for breakfast|this morning|with images?|product images?|the images?|images?|photos?|below|under|naira|ngn)\b/gi, '')
         .replace(/\b(a|an|some|the|any)\b/gi, ' ')
         .replace(/\s+/g, ' ')
@@ -4821,7 +4934,10 @@ class PayAIOrchestrator {
       case 'search_local_products': {
         const count = result.items ? result.items.length : 0;
         if (count === 0) {
-          return `I searched across verified W-Commerce sellers and linked stores for "${originalPrompt}", but didn't find any direct matches. You can try searching for keywords like "Corn Flakes", "Oats", "Gymshark", "MacBook", "headphones", "watch", or paste a direct product URL to link an external item!`;
+          const links = result.externalLinks?.length > 0
+            ? result.externalLinks
+            : buildExternalMarketplaceLinks(originalPrompt, this.marketCode);
+          return formatExternalSourcingMarkdown(originalPrompt, links, result.substitutes);
         }
 
         const lowerPrompt = (originalPrompt || '').toLowerCase();
