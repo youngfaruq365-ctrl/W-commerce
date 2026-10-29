@@ -1924,6 +1924,22 @@ export default function PayAI() {
     toast.success(`"${item.title.slice(0, 28)}..." attached to chat! Add an optional message or pick an action.`);
   };
 
+  // Qloo AI pop-up hand-off: PayAI sources an ingredient/material the shopper couldn't find
+  const sourcingHandledRef = useRef(false);
+  useEffect(() => {
+    if (searchParams.get('action') !== 'sourcing' || sourcingHandledRef.current) return;
+    const item = (searchParams.get('q') || '').trim().slice(0, 160);
+    if (!item) return;
+    if (activeTab !== 'chat') setActiveTab('chat');
+    const promptText = `I can't find "${item}". Please source it for me, suggest good substitutes, and show what's available in stock.`;
+    if (!isInitializing && sessionId) {
+      sourcingHandledRef.current = true;
+      handleSendMessage(promptText);
+    } else {
+      setInputText(promptText);
+    }
+  }, [searchParams, isInitializing, sessionId]);
+
   // Seamless TasteMatch & Negotiate Entry from Product Details Bridge
   useEffect(() => {
     const action = searchParams.get('action');

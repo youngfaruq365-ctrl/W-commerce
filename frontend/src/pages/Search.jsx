@@ -6,6 +6,7 @@ import { apiClient as axios } from '@/utils/apiClient';
 import { PLACEHOLDER_IMAGE } from '@/constants/placeholders';
 import { ErrorState } from '../components/shared/ErrorState';
 import { Spinner } from '../components/shared/LoadingState';
+import { reportSearch } from '../utils/qlooAssistSignals';
 
 export default function Search() {
   const location = useLocation();
@@ -31,9 +32,12 @@ export default function Search() {
       try {
         const res = await axios.get(`/api/v1/products?search=${encodeURIComponent(initialQuery)}&limit=50`);
         if (res.data.success) {
-          setResults(res.data.products || []);
+          const found = res.data.products || [];
+          setResults(found);
+          reportSearch(initialQuery, found.length);
         } else {
           setResults([]);
+          reportSearch(initialQuery, 0);
         }
       } catch (err) {
         const status = err?.response?.status;
@@ -41,6 +45,7 @@ export default function Search() {
           setFetchError('server');
         } else {
           setResults([]);
+          reportSearch(initialQuery, 0);
         }
       } finally {
         setLoading(false);

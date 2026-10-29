@@ -129,6 +129,18 @@ router.get('/payai/sessions/:id', optionalAuth, payaiController.getSession);
 router.post('/payai/sessions/:id/messages', optionalAuth, payaiController.sendMessage);
 router.post('/payai/sessions/:id/actions', optionalAuth, payaiController.executeToolAction);
 
+// 3b. Qloo Sourcing Assistant (proactive pop-up: ingredients, materials, substitutes)
+router.post('/payai/qloo/assist', optionalAuth, async (req, res) => {
+  try {
+    const qlooSourcingAssistant = require('../services/payai/qlooSourcingAssistant');
+    const { query, reason, resultCount, recentQueries } = req.body || {};
+    const result = await qlooSourcingAssistant.assist({ query, reason, resultCount, recentQueries });
+    return res.status(result.success ? 200 : 400).json(result);
+  } catch (err) {
+    return res.status(500).json({ success: false, message: 'Qloo assistant is temporarily unavailable.' });
+  }
+});
+
 // 4. Cart
 router.get('/payai/cart', optionalAuth, payaiController.getCart);
 router.post('/payai/cart/items', optionalAuth, payaiController.addCartItem);
