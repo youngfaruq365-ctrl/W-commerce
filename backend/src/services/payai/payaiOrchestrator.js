@@ -1716,7 +1716,10 @@ class PayAIOrchestrator {
         if (itemPhrases.length >= 2) {
           const matchedProducts = [];
           for (const phrase of itemPhrases) {
-            // Direct substring match (excluding combo packs so individual items are selected)
+            const COMBO_STOP_WORDS = new Set(['and', 'the', 'for', 'with', 'pack', 'into', 'cart', 'please', 'also', 'plus', 'some', 'this', 'that', 'from', 'all', 'item', 'items', 'large', 'small', 'bundle', 'food', 'meal', 'combo']);
+            const tokens = phrase.split(/\s+/).map(t => t.replace(/[^a-zA-Z0-9]/g, '').trim()).filter(w => w.length >= 3 && !COMBO_STOP_WORDS.has(w.toLowerCase()));
+
+            // 1. Direct substring match (preferring individual standalone products, not pre-bundled combos)
             let prod = await prisma.product.findFirst({
               where: {
                 title: { contains: phrase },
@@ -1726,6 +1729,48 @@ class PayAIOrchestrator {
               include: { store: true, images: true }
             });
 
+            // 2. Token search across title (preferring non-combo items)
+            if (!prod && tokens.length > 0) {
+              prod = await prisma.product.findFirst({
+                where: {
+                  AND: tokens.map(tok => ({ title: { contains: tok } })),
+                  isArchived: false,
+                  NOT: { title: { contains: 'Combo' } }
+                },
+                include: { store: true, images: true }
+              });
+            }
+
+            // 3. Fallback token search by scoring distinctive tokens (preferring non-combo items)
+            if (!prod && tokens.length > 0) {
+              const candidates = await prisma.product.findMany({
+                where: {
+                  OR: tokens.map(tok => ({ title: { contains: tok } })),
+                  isArchived: false,
+                  NOT: { title: { contains: 'Combo' } }
+                },
+                include: { store: true, images: true },
+                take: 6
+              });
+              let bestCand = null;
+              let bestScore = 0;
+              for (const cand of candidates) {
+                const candTitle = cand.title.toLowerCase();
+                let score = 0;
+                for (const tok of tokens) {
+                  if (candTitle.includes(tok)) score++;
+                }
+                if (score > bestScore) {
+                  bestScore = score;
+                  bestCand = cand;
+                }
+              }
+              if (bestCand && bestScore >= 1) {
+                prod = bestCand;
+              }
+            }
+
+            // 4. If no standalone product was found, check if a combo product matches
             if (!prod) {
               prod = await prisma.product.findFirst({
                 where: {
@@ -1736,63 +1781,14 @@ class PayAIOrchestrator {
               });
             }
 
-            // Token search across title (ignoring stop words, preferring non-combo items)
-            if (!prod) {
-              const COMBO_STOP_WORDS = new Set(['and', 'the', 'for', 'with', 'pack', 'into', 'cart', 'please', 'also', 'plus', 'some', 'this', 'that', 'from', 'all', 'item', 'items', 'large', 'small', 'bundle', 'food', 'meal', 'combo']);
-              const tokens = phrase.split(/\s+/).map(t => t.replace(/[^a-zA-Z0-9]/g, '').trim()).filter(w => w.length >= 3 && !COMBO_STOP_WORDS.has(w.toLowerCase()));
-              if (tokens.length > 0) {
-                prod = await prisma.product.findFirst({
-                  where: {
-                    AND: tokens.map(tok => ({ title: { contains: tok } })),
-                    isArchived: false,
-                    NOT: { title: { contains: 'Combo' } }
-                  },
-                  include: { store: true, images: true }
-                });
-                if (!prod) {
-                  prod = await prisma.product.findFirst({
-                    where: {
-                      AND: tokens.map(tok => ({ title: { contains: tok } })),
-                      isArchived: false
-                    },
-                    include: { store: true, images: true }
-                  });
-                }
-              }
-            }
-
-            // Fallback token search by scoring distinctive tokens
-            if (!prod) {
-              const COMBO_STOP_WORDS = new Set(['and', 'the', 'for', 'with', 'pack', 'into', 'cart', 'please', 'also', 'plus', 'some', 'this', 'that', 'from', 'all', 'item', 'items', 'large', 'small', 'bundle', 'food', 'meal', 'combo']);
-              const cleanPhrase = phrase.replace(/[^a-zA-Z0-9\s]/g, '').trim();
-              const tokens = cleanPhrase.split(/\s+/).map(t => t.trim().toLowerCase()).filter(w => w.length >= 3 && !COMBO_STOP_WORDS.has(w));
-              if (tokens.length > 0) {
-                const candidates = await prisma.product.findMany({
-                  where: {
-                    OR: tokens.map(tok => ({ title: { contains: tok } })),
-                    isArchived: false,
-                    NOT: { title: { contains: 'Combo' } }
-                  },
-                  include: { store: true, images: true },
-                  take: 6
-                });
-                let bestCand = null;
-                let bestScore = 0;
-                for (const cand of candidates) {
-                  const candTitle = cand.title.toLowerCase();
-                  let score = 0;
-                  for (const tok of tokens) {
-                    if (candTitle.includes(tok)) score++;
-                  }
-                  if (score > bestScore) {
-                    bestScore = score;
-                    bestCand = cand;
-                  }
-                }
-                if (bestCand && bestScore >= 1) {
-                  prod = bestCand;
-                }
-              }
+            if (!prod && tokens.length > 0) {
+              prod = await prisma.product.findFirst({
+                where: {
+                  AND: tokens.map(tok => ({ title: { contains: tok } })),
+                  isArchived: false
+                },
+                include: { store: true, images: true }
+              });
             }
 
             if (prod && !matchedProducts.some(p => p.id === prod.id)) {
