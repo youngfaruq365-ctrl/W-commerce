@@ -8,8 +8,16 @@ import { MapView } from '../../maps/MapView';
 import { useTrackingStore } from '../../store/trackingStore';
 import { isVideoUrl, getImageUrl } from '@/utils/imageHelpers';
 
-
 const fmt = (n) => Number(n || 0).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const getCurrencySymbol = (curr) => {
+  if (!curr) return '₦';
+  const c = String(curr).trim().toUpperCase();
+  if (c === 'USD' || c === '$') return '$';
+  if (c === 'EUR' || c === '€') return '€';
+  if (c === 'GBP' || c === '£') return '£';
+  return '₦';
+};
 
 const OrderDetail = () => {
   const { id } = useParams();
@@ -63,6 +71,8 @@ const OrderDetail = () => {
     }
   };
 
+  const currSym = getCurrencySymbol(order.currency || order.items?.[0]?.currency);
+
   return (
     <div className="max-w-4xl mx-auto py-8 px-4 text-[var(--text-main)]">
       <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-[var(--text-muted)] hover:text-white transition mb-6">
@@ -71,7 +81,9 @@ const OrderDetail = () => {
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-sans font-black tracking-tight mb-1">Order #{order?.id?.slice(-8).toUpperCase() || ''}</h1>
+          <h1 className="text-3xl font-sans font-black tracking-tight mb-1">
+            Order #{order?.orderNumber || order?.id?.slice(-8).toUpperCase() || ''}
+          </h1>
           <p className="text-[var(--text-muted)] text-sm">Placed on {format(new Date(order?.createdAt || Date.now()), 'MMM dd, yyyy h:mm a')}</p>
         </div>
         <div className={`px-4 py-2 rounded-full border font-sans font-bold tracking-widest uppercase text-xs ${getStatusColor(order.status)}`}>
@@ -85,11 +97,39 @@ const OrderDetail = () => {
           <h3 className="font-bold text-[var(--text-muted)] uppercase tracking-wider text-xs mb-4 flex items-center gap-2">
             <MapPin size={14} /> Shipping Address
           </h3>
-          <p className="font-medium text-sm mb-1">{order.shippingAddress?.fullName || 'Buyer'}</p>
-          <p className="text-[var(--text-muted)] text-sm">{order.shippingAddress?.street}</p>
-          <p className="text-[var(--text-muted)] text-sm">{order.shippingAddress?.city}, {order.shippingAddress?.state}</p>
-          <p className="text-[var(--text-muted)] text-sm">{order.shippingAddress?.zipCode}, {order.shippingAddress?.country}</p>
-          <p className="text-[var(--text-muted)] text-sm mt-2">{order.shippingAddress?.phone}</p>
+          {(() => {
+            let addr = order.shippingAddress;
+            if (typeof addr === 'string') {
+              try {
+                addr = JSON.parse(addr);
+              } catch (_) {
+                addr = { street: addr };
+              }
+            }
+            addr = addr || {};
+            const recipientName = addr.fullName || addr.name || order.buyer?.fullName || 'Buyer';
+            const street = addr.street || addr.addressLine1 || addr.address;
+            const cityState = [addr.city, addr.state].filter(Boolean).join(', ');
+            const zipCountry = [addr.zipCode || addr.postalCode, addr.country].filter(Boolean).join(', ');
+            const phone = addr.phone || order.buyer?.phone;
+
+            return (
+              <div className="space-y-1 text-sm">
+                <p className="font-semibold text-base mb-1">{recipientName}</p>
+                {street && <p className="text-[var(--text-muted)]">{street}</p>}
+                {cityState && <p className="text-[var(--text-muted)]">{cityState}</p>}
+                {zipCountry && <p className="text-[var(--text-muted)]">{zipCountry}</p>}
+                {!street && !cityState && !zipCountry && (
+                  <p className="text-[var(--text-muted)] italic">Verified delivery destination recorded at checkout</p>
+                )}
+                {phone && (
+                  <p className="text-[var(--text-muted)] pt-1 flex items-center gap-1.5">
+                    <Phone size={13} className="opacity-70" /> {phone}
+                  </p>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Payment Info */}
@@ -104,10 +144,16 @@ const OrderDetail = () => {
             </div>
             <div className="flex justify-between">
               <span className="text-[var(--text-muted)]">Status:</span>
-              <span className={`font-bold ${order.paymentStatus === 'PAID' ? 'text-green-400' : 'text-yellow-400'}`}>
+              <span className={`font-bold ${order.paymentStatus === 'PAID' || order.paymentStatus === 'VERIFIED' ? 'text-green-400' : 'text-yellow-400'}`}>
                 {order.paymentStatus}
               </span>
             </div>
+            {order.paymentProvider && (
+              <div className="flex justify-between text-xs text-[var(--text-muted)] pt-1">
+                <span>Provider:</span>
+                <span className="font-mono">{order.paymentProvider}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -121,10 +167,24 @@ const OrderDetail = () => {
               <Truck size={18} className="text-[var(--accent-gray)]" />
             </div>
             <div>
-              <p className="font-bold text-sm">3 - 5 Business Days</p>
-              <p className="text-xs text-[var(--text-muted)] mt-1">Via W-Commerce Hub</p>
+              <p className="font-bold text-sm">
+                {order.estimatedDelivery 
+                  ? format(new Date(order.estimatedDelivery), 'MMM dd, yyyy')
+                  : '3 - 5 Business Days'}
+              </p>
+              <p className="text-xs text-[var(--text-muted)] mt-1">
+                {order.carrierName ? `Via ${order.carrierName}` : 'Via W-Commerce Hub'}
+              </p>
             </div>
           </div>
+          {order.trackingNumber && (
+            <div className="bg-[var(--bg-tertiary)] p-3 rounded-lg border border-[var(--border-color)] mt-4">
+              <p className="text-xs text-[var(--text-muted)] mb-1 uppercase tracking-wider font-bold">Tracking #</p>
+              <p className="font-mono text-sm font-bold text-blue-400 break-all">
+                {order.trackingNumber}
+              </p>
+            </div>
+          )}
           {order.deliveryConfirmationCode && (
             <div className="bg-[var(--bg-tertiary)] p-3 rounded-lg border border-[var(--border-color)] mt-4 text-center">
               <p className="text-xs text-[var(--text-muted)] mb-1 uppercase tracking-wider font-bold">Delivery PIN</p>
@@ -167,7 +227,7 @@ const OrderDetail = () => {
                 pickupAddress: 'Seller Address',
                 dropoffLat: order.deliveryAssignment?.dropoffLat || 6.5400,
                 dropoffLng: order.deliveryAssignment?.dropoffLng || 3.4000,
-                dropoffAddress: order?.shippingAddress?.street || 'Delivery Address'
+                dropoffAddress: (typeof order?.shippingAddress === 'object' ? order?.shippingAddress?.street : order?.shippingAddress) || 'Delivery Address'
               }}
               couriers={Object.entries(courierLocations)
                 .filter(([cid]) => !order.deliveryAssignment || cid === order.deliveryAssignment.courierId)
@@ -190,18 +250,18 @@ const OrderDetail = () => {
               className="flex-1 flex items-center justify-center gap-2 bg-blue-600/20 text-blue-400 py-3 rounded-xl font-bold">
               <Phone size={18} /> Contact Courier
             </button>
-              <button 
-                onClick={() => {
-                  const courierUserId = order.deliveryAssignment?.courier?.userId;
-                  if (courierUserId) {
-                    navigate(`/messages?user=${courierUserId}`);
-                  } else {
-                    toast.success("Opening secure chat with courier...");
-                  }
-                }}
-                className="flex-1 flex items-center justify-center gap-2 bg-indigo-600/20 text-indigo-400 py-3 rounded-xl font-bold">
-                <MessageCircle size={18} /> Chat
-              </button>
+            <button 
+              onClick={() => {
+                const courierUserId = order.deliveryAssignment?.courier?.userId;
+                if (courierUserId) {
+                  navigate(`/messages?user=${courierUserId}`);
+                } else {
+                  toast.success("Opening secure chat with courier...");
+                }
+              }}
+              className="flex-1 flex items-center justify-center gap-2 bg-indigo-600/20 text-indigo-400 py-3 rounded-xl font-bold">
+              <MessageCircle size={18} /> Chat
+            </button>
           </div>
         </div>
       )}
@@ -214,61 +274,102 @@ const OrderDetail = () => {
           </h3>
         </div>
         <div className="divide-y divide-[var(--border-color)]">
-          {order.items?.map((item) => (
-            <div key={item.id} className="p-6 flex flex-col sm:flex-row gap-6 items-start sm:items-center transition-all duration-300 hover:bg-[var(--bg-tertiary)] group">
-              <div className="w-24 h-24 aspect-square rounded-xl overflow-hidden bg-white border border-[var(--border-color)] flex-shrink-0">
-                {(() => {
-                  const media = item.product?.images?.[0]?.url || item.product?.images?.[0];
-                  if (isVideoUrl(media)) {
-                    return (
+          {order.items?.map((item, idx) => {
+            const media = item.product?.images?.[0]?.url || item.product?.images?.[0] || item.imageUrl || item.image;
+            const isVideo = isVideoUrl(media);
+            const mediaUrl = media ? getImageUrl(media) : null;
+            const title = item.productName || item.product?.title || item.title || 'Marketplace Item';
+            const price = Number(item.price || 0);
+            const qty = Number(item.quantity || 1);
+
+            return (
+              <div key={item.id || idx} className="p-6 flex flex-col sm:flex-row gap-6 items-start sm:items-center transition-all duration-300 hover:bg-[var(--bg-tertiary)] group">
+                <div className="w-24 h-24 aspect-square rounded-xl overflow-hidden bg-[var(--bg-tertiary)] border border-[var(--border-color)] flex-shrink-0 relative flex items-center justify-center shadow-xs">
+                  {mediaUrl ? (
+                    isVideo ? (
                       <video
-                        src={getImageUrl(media)}
+                        src={mediaUrl}
                         className="w-full h-full object-cover"
                         muted
                         playsInline
                         preload="metadata"
                       />
-                    );
-                  }
-                  return (
-                    <img
-                      src={media ? getImageUrl(media) : 'https://via.placeholder.com/80'}
-                      alt={item.productName || item.product?.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    />
-                  );
-                })()}
-              </div>
-              <div className="flex-1">
-                <h4 className="font-sans font-bold tracking-tight text-lg mb-1">{item.productName || item.product?.title}</h4>
-                {item.variants && <p className="text-xs text-[var(--accent-gray)] mb-2 font-semibold">{item.variants}</p>}
-                <div className="flex items-center gap-4 text-sm text-[var(--text-muted)]">
-                  <span className="font-medium">Qty: {item.quantity}</span>
-                  <span className="font-medium">Price: ₦{fmt(item.price)}</span>
+                    ) : (
+                      <img
+                        src={mediaUrl}
+                        alt={title}
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                          const fallback = e.currentTarget.parentElement?.querySelector('.item-fallback');
+                          if (fallback) fallback.classList.remove('hidden');
+                        }}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      />
+                    )
+                  ) : null}
+                  <div className={`item-fallback w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-[var(--bg-secondary)] to-[var(--bg-tertiary)] text-[var(--text-muted)] p-2 text-center ${mediaUrl && !isVideo ? 'hidden' : ''}`}>
+                    <Package size={28} className="text-[var(--accent-gray)] mb-1 opacity-75 group-hover:scale-110 transition-transform" />
+                    <span className="text-[10px] font-semibold tracking-wider uppercase opacity-60 line-clamp-1">Item</span>
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <h4 className="font-sans font-bold tracking-tight text-lg mb-1">{title}</h4>
+                  {item.variants && <p className="text-xs text-[var(--accent-gray)] mb-2 font-semibold">{item.variants}</p>}
+                  <div className="flex items-center gap-4 text-sm text-[var(--text-muted)]">
+                    <span className="font-medium">Qty: {qty}</span>
+                    <span className="font-medium">Price: {currSym}{fmt(price)}</span>
+                  </div>
+                </div>
+                <div className="font-sans text-2xl font-black tracking-tight text-right">
+                  {currSym}{fmt(price * qty)}
                 </div>
               </div>
-              <div className="font-sans text-2xl font-black tracking-tight text-right">
-                ₦{fmt(item.price * item.quantity)}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
         
         {/* Totals */}
-        <div className="bg-[var(--bg-secondary)] p-6 space-y-3">
-          <div className="flex justify-between text-sm text-[var(--text-muted)]">
-            <span>Subtotal</span>
-            <span>₦{fmt(order.totalAmount - (order.shippingCost || 0))}</span>
-          </div>
-          <div className="flex justify-between text-sm text-[var(--text-muted)]">
-            <span>Shipping</span>
-            <span>₦{fmt(order.shippingCost || 0)}</span>
-          </div>
-          <div className="flex justify-between font-bold text-lg pt-4 border-t border-[var(--border-color)] mt-4">
-            <span>Total</span>
-            <span className="text-[var(--accent-gray)]">₦{fmt(order.totalAmount)}</span>
-          </div>
-        </div>
+        {(() => {
+          const itemsSubtotal = (order.items && order.items.length > 0)
+            ? order.items.reduce((sum, it) => sum + (Number(it.price || 0) * Number(it.quantity || 1)), 0)
+            : 0;
+          
+          const subtotal = Number(order.subtotal) > 0
+            ? Number(order.subtotal)
+            : (itemsSubtotal > 0 ? itemsSubtotal : Math.max(0, Number(order.totalAmount || order.grandTotal || 0) - Number(order.shippingCost || 0)));
+
+          const shippingCost = Number(order.shippingCost || order.shippingFee || 0);
+          const dutiesAndTaxes = Number(order.dutiesAndTaxes || 0);
+          
+          const totalAmount = Number(order.totalAmount) > 0
+            ? Number(order.totalAmount)
+            : (Number(order.grandTotal) > 0
+                ? Number(order.grandTotal)
+                : (Number(order.total) > 0 ? Number(order.total) : (subtotal + shippingCost + dutiesAndTaxes)));
+
+          return (
+            <div className="bg-[var(--bg-secondary)] p-6 space-y-3">
+              <div className="flex justify-between text-sm text-[var(--text-muted)]">
+                <span>Subtotal</span>
+                <span className="font-medium text-[var(--text-main)]">{currSym}{fmt(subtotal)}</span>
+              </div>
+              <div className="flex justify-between text-sm text-[var(--text-muted)]">
+                <span>Shipping</span>
+                <span className="font-medium text-[var(--text-main)]">{currSym}{fmt(shippingCost)}</span>
+              </div>
+              {dutiesAndTaxes > 0 && (
+                <div className="flex justify-between text-sm text-[var(--text-muted)]">
+                  <span>Duties & Taxes</span>
+                  <span className="font-medium text-[var(--text-main)]">{currSym}{fmt(dutiesAndTaxes)}</span>
+                </div>
+              )}
+              <div className="flex justify-between font-bold text-lg pt-4 border-t border-[var(--border-color)] mt-4">
+                <span>Total</span>
+                <span className="text-[var(--accent-gray)]">{currSym}{fmt(totalAmount)}</span>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

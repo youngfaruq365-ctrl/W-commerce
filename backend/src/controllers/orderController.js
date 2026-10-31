@@ -840,7 +840,7 @@ exports.getOrderById = async (req, res) => {
             where: { id },
             include: {
                 items: { include: { product: { include: { images: true } } } },
-                buyer: { select: { fullName: true, email: true } },
+                buyer: { select: { fullName: true, email: true, phone: true } },
             }
         });
 
@@ -854,7 +854,7 @@ exports.getOrderById = async (req, res) => {
                 },
                 include: {
                     items: { include: { product: { include: { images: true } } } },
-                    buyer: { select: { fullName: true, email: true } },
+                    buyer: { select: { fullName: true, email: true, phone: true } },
                 }
             });
         }
@@ -877,14 +877,114 @@ exports.getOrderById = async (req, res) => {
                 try {
                     items = typeof payAIOrder.itemsSnapshot === 'string' ? JSON.parse(payAIOrder.itemsSnapshot) : (payAIOrder.itemsSnapshot || []);
                 } catch (_) {}
+
+                // Attempt to resolve missing product images
+                for (const it of items) {
+                    if (!it.imageUrl && it.productId) {
+                        try {
+                            const prod = await prisma.product.findUnique({
+                                where: { id: it.productId },
+                                include: { images: true }
+                            });
+                            if (prod?.images?.[0]?.url) {
+                                it.imageUrl = prod.images[0].url;
+                            }
+                        } catch (_) {}
+                    }
+                    if (!it.imageUrl && it.title) {
+                        try {
+                            const prod = await prisma.product.findFirst({
+                                where: { title: { contains: it.title } },
+                                include: { images: true }
+                            });
+                            if (prod?.images?.[0]?.url) {
+                                it.imageUrl = prod.images[0].url;
+                            }
+                        } catch (_) {}
+                    }
+                }
+
+                // Resolve shipping address & buyer info
+                let shippingAddress = null;
+                if (payAIOrder.shippingAddress) {
+                    if (typeof payAIOrder.shippingAddress === 'object') {
+                        shippingAddress = payAIOrder.shippingAddress;
+                    } else {
+                        try {
+                            shippingAddress = JSON.parse(payAIOrder.shippingAddress);
+                        } catch (_) {
+                            shippingAddress = { street: payAIOrder.shippingAddress };
+                        }
+                    }
+                }
+
+                let buyer = null;
+                if (payAIOrder.userId) {
+                    const user = await prisma.user.findUnique({
+                        where: { id: payAIOrder.userId },
+                        include: { addresses: true }
+                    });
+                    if (user) {
+                        buyer = {
+                            id: user.id,
+                            fullName: user.fullName || user.username || 'Buyer',
+                            email: user.email,
+                            phone: user.phone
+                        };
+                        if (!shippingAddress) {
+                            const defaultAddress = user.addresses?.find(a => a.isDefault) || user.addresses?.[0];
+                            if (defaultAddress) {
+                                shippingAddress = {
+                                    fullName: user.fullName || 'Buyer',
+                                    phone: user.phone,
+                                    street: defaultAddress.street,
+                                    city: defaultAddress.city,
+                                    state: defaultAddress.state,
+                                    zipCode: defaultAddress.postalCode,
+                                    country: defaultAddress.country || 'Nigeria'
+                                };
+                            }
+                        }
+                    }
+                }
+
+                if (!shippingAddress) {
+                    shippingAddress = {
+                        fullName: buyer?.fullName || 'Buyer',
+                        phone: buyer?.phone || '',
+                        street: 'Verified Delivery Destination',
+                        city: 'Recorded at Checkout',
+                        state: '',
+                        zipCode: '',
+                        country: 'Nigeria'
+                    };
+                }
+
+                const subtotalNum = Number(payAIOrder.subtotal || 0);
+                const shippingCostNum = Number(payAIOrder.shippingCost || 0);
+                const dutiesAndTaxesNum = Number(payAIOrder.dutiesAndTaxes || 0);
+                const grandTotalNum = Number(payAIOrder.grandTotal || 0) || (subtotalNum + shippingCostNum + dutiesAndTaxesNum);
+
                 order = {
                     ...payAIOrder,
+                    buyer,
+                    shippingAddress,
+                    subtotal: subtotalNum,
+                    shippingCost: shippingCostNum,
+                    dutiesAndTaxes: dutiesAndTaxesNum,
+                    totalAmount: grandTotalNum,
+                    grandTotal: grandTotalNum,
+                    total: grandTotalNum,
+                    currency: payAIOrder.currency || 'USD',
+                    paymentMethod: payAIOrder.paymentProvider || 'PAYPAL',
+                    paymentStatus: payAIOrder.paymentStatus || 'PAID',
                     status: payAIOrder.fulfillmentStatus || 'CONFIRMED',
-                    total: Number(payAIOrder.grandTotal || 0),
-                    items: items.map(it => ({
-                        id: it.id || it.productId,
+                    items: items.map((it, idx) => ({
+                        id: it.id || it.productId || `item-${idx}`,
                         price: Number(it.price || 0),
                         quantity: Number(it.quantity || 1),
+                        imageUrl: it.imageUrl || null,
+                        productName: it.title || 'Marketplace Item',
                         product: {
                             id: it.productId,
                             title: it.title || 'Marketplace Item',
@@ -892,6 +992,54 @@ exports.getOrderById = async (req, res) => {
                         }
                     }))
                 };
+            }
+        }
+
+        if (order) {
+            // Standard order normalization
+            if (order.shippingAddress && typeof order.shippingAddress === 'string') {
+                try {
+                    order.shippingAddress = JSON.parse(order.shippingAddress);
+                } catch (_) {
+                    order.shippingAddress = { street: order.shippingAddress };
+                }
+            } else if (!order.shippingAddress && order.buyerId) {
+                const user = await prisma.user.findUnique({
+                    where: { id: order.buyerId },
+                    include: { addresses: true }
+                });
+                if (user) {
+                    const defaultAddress = user.addresses?.find(a => a.isDefault) || user.addresses?.[0];
+                    if (defaultAddress) {
+                        order.shippingAddress = {
+                            fullName: user.fullName || order.buyer?.fullName || 'Buyer',
+                            phone: user.phone || '',
+                            street: defaultAddress.street,
+                            city: defaultAddress.city,
+                            state: defaultAddress.state,
+                            zipCode: defaultAddress.postalCode,
+                            country: defaultAddress.country || 'Nigeria'
+                        };
+                    }
+                }
+            }
+            if (!order.shippingAddress) {
+                order.shippingAddress = {
+                    fullName: order.buyer?.fullName || 'Buyer',
+                    phone: order.buyer?.phone || '',
+                    street: 'Standard Delivery Destination',
+                    city: 'Recorded at Checkout',
+                    state: '',
+                    zipCode: '',
+                    country: 'Nigeria'
+                };
+            }
+            order.totalAmount = Number(order.totalAmount || order.grandTotal || order.total || 0);
+            order.shippingCost = Number(order.shippingCost || 0);
+            if (!order.subtotal) {
+                order.subtotal = order.items?.length > 0
+                    ? order.items.reduce((sum, it) => sum + (Number(it.price || 0) * Number(it.quantity || 1)), 0)
+                    : Math.max(0, order.totalAmount - order.shippingCost);
             }
         }
 
@@ -915,7 +1063,7 @@ exports.getOrderById = async (req, res) => {
 };
 
 // Get Order Tracking
- exports.getOrderTracking = async (req, res) => {
+exports.getOrderTracking = async (req, res) => {
      try {
          const { id } = req.params;
          const userId = req.user.id;
