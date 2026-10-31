@@ -259,7 +259,6 @@ class ConfigValidator {
         const allowSimInProd = process.env.ALLOW_SMS_SIMULATION_IN_PRODUCTION === 'true';
         const required = {
             TWILIO: ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_VERIFY_SID'],
-            NEXMO:  ['NEXMO_API_KEY', 'NEXMO_API_SECRET'],
             TERMII: ['TERMII_API_KEY'],
         };
 

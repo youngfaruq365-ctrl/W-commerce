@@ -164,7 +164,7 @@ Get credentials: [https://console.developers.google.com](https://console.develop
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `SMS_PROVIDER` | `SIMULATION` | Provider: `TWILIO` \| `NEXMO` \| `SIMULATION` |
+| `SMS_PROVIDER` | `SIMULATION` | Provider: `TWILIO` \| `TERMII` \| `SIMULATION` |
 | `SMS_FROM_NUMBER` | — | Sender number in E.164 format |
 | `ALLOW_SMS_SIMULATION` | `true` (dev) | When `true`, OTP codes logged to console |
 
@@ -176,12 +176,11 @@ Get credentials: [https://console.developers.google.com](https://console.develop
 | `TWILIO_VERIFY_SID` | Verify Service SID (for OTP) |
 | `TWILIO_FROM_NUMBER` | Twilio phone number |
 
-**Nexmo / Vonage**
+**Termii**
 | Variable | Purpose |
 |---|---|
-| `NEXMO_API_KEY` | API key |
-| `NEXMO_API_SECRET` | API secret |
-| `NEXMO_FROM_NUMBER` | Sender number |
+| `TERMII_API_KEY` | API key |
+| `TERMII_API_URL` | Optional, defaults to `https://v4.api.termii.com/` |
 
 ---
 
@@ -289,7 +288,7 @@ npx web-push generate-vapid-keys
 - [ ] `WEBAUTHN_ORIGIN` uses `https://`
 - [ ] At least one payment gateway is fully configured
 - [ ] `SENDGRID_API_KEY` or SMTP configured (not simulation)
-- [ ] `SMS_PROVIDER` set to `TWILIO` or `NEXMO` (not `SIMULATION`)
+- [ ] `SMS_PROVIDER` set to `TWILIO` or `TERMII` (not `SIMULATION`)
 - [ ] `ALLOW_EMAIL_SIMULATION=false`
 - [ ] `ALLOW_SMS_SIMULATION=false`
 - [ ] `ALLOW_MOCK_EXTERNAL_APIS=false`

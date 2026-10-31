@@ -31,6 +31,9 @@ jobs:
           VITE_APP_URL: https://w-commerce.app
         run: npm run build:production
 
+      - name: Verify PostgreSQL schema is in sync
+        run: node scripts/sync-postgres-schema.cjs --check
+
       - name: Verify Backend Syntax
         run: |
           node --check backend/server.cjs

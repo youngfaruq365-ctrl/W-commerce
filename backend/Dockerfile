@@ -13,8 +13,8 @@ RUN npm install
 COPY backend/ ./backend/
 COPY database/ ./database/
 
-# Generate Prisma client
-RUN npx prisma generate --schema=database/prisma/schema.prisma
+# Generate Prisma client from the PostgreSQL (production) schema
+RUN npx prisma generate --schema=database/prisma/postgres/schema.prisma
 
 # Set the Node environment to production
 ENV NODE_ENV=production
@@ -23,7 +23,7 @@ ENV PORT=5000
 # Expose backend port
 EXPOSE 5000
 
-# Start the Node.js backend
+# Apply pending DB migrations, then start the Node.js backend
 WORKDIR /app
-CMD ["node", "backend/server.cjs"]
+CMD ["sh", "-c", "npx prisma migrate deploy --schema=database/prisma/postgres/schema.prisma && node backend/server.cjs"]
 

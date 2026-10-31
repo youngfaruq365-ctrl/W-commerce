@@ -175,31 +175,15 @@ router.get('/google', (req, res, next) => {
 // Apple Sign In
 router.post('/apple', rateLimiters.login, authController.appleLogin);
 
-router.post('/verify-2fa', async (req, res) => {
-    try {
-        const { email, code } = req.body;
-        const prisma = require('../utils/prismaClient');
-        const user = await prisma.user.findUnique({ where: { email } });
-        if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-        
-        const jwt = require('jsonwebtoken');
-        const token = jwt.sign(
-            { id: user.id, role: user.role, email: user.email }, 
-            process.env.JWT_SECRET || 'dev_secret', 
-            { expiresIn: '24h' }
-        );
-        
-        res.cookie('token', token, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
-            maxAge: 24 * 60 * 60 * 1000
-        });
-        
-        res.json({ success: true, user, token });
-    } catch(err) {
-        res.status(500).json({ success: false, message: 'Server error' });
-    }
+// SECURITY: This endpoint previously issued a login token for any email without
+// verifying a code or password (account takeover). There is no server-side TOTP/OTP
+// secret store for login 2FA yet, so it must not issue sessions. Passkey (WebAuthn)
+// login is the supported second-factor flow. Re-enable only with real code verification.
+router.post('/verify-2fa', rateLimiters.login, (req, res) => {
+    res.status(501).json({
+        success: false,
+        message: 'Two-factor code login is not enabled. Please sign in with your password or a passkey.'
+    });
 });
 
 module.exports = router;

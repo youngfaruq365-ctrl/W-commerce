@@ -34,8 +34,8 @@ COPY scripts/ ./scripts/
 # Copy compiled frontend from builder stage
 COPY --from=frontend-builder /build/frontend/dist ./frontend/dist
 
-# Run Prisma generate (needs schema)
-RUN npx prisma generate --schema=database/prisma/schema.prisma
+# Generate the Prisma client from the PostgreSQL (production) schema
+RUN npx prisma generate --schema=database/prisma/postgres/schema.prisma
 
 # Create non-root user for security
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
@@ -45,4 +45,4 @@ USER appuser
 EXPOSE 5000
 
 # Migrate DB schema then start server
-CMD ["sh", "-c", "npx prisma migrate deploy --schema=database/prisma/schema.prisma && node backend/server.cjs"]
+CMD ["sh", "-c", "npx prisma migrate deploy --schema=database/prisma/postgres/schema.prisma && node backend/server.cjs"]

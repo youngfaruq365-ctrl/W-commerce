@@ -1,13 +1,13 @@
 /**
  * GlobalX SMS Notification Service
  * Handles SMS notifications for payment events
- * Supports multiple providers: Twilio, Nexmo, custom gateway
+ * Supports multiple providers: Twilio, Termii, custom gateway
  */
 
 const logger = require('../utils/logger');
 
 // SMS Provider Configuration
-// In production, set SMS_PROVIDER env var to 'twilio' or 'nexmo'.
+// In production, set SMS_PROVIDER env var to 'twilio' or 'termii'.
 // In development (NODE_ENV !== 'production'), defaults to 'mock' for local testing.
 const SMS_CONFIG = {
     provider: (process.env.SMS_PROVIDER || (process.env.NODE_ENV !== 'production' ? 'mock' : 'none')).toLowerCase(),
@@ -16,11 +16,6 @@ const SMS_CONFIG = {
         accountSid: process.env.TWILIO_ACCOUNT_SID,
         authToken: process.env.TWILIO_AUTH_TOKEN,
         fromNumber: process.env.TWILIO_FROM_NUMBER
-    },
-    nexmo: {
-        apiKey: process.env.NEXMO_API_KEY,
-        apiSecret: process.env.NEXMO_API_SECRET,
-        fromNumber: process.env.NEXMO_FROM_NUMBER
     },
     termii: {
         apiUrl: process.env.TERMII_API_URL || 'https://v4.api.termii.com/',
@@ -53,9 +48,6 @@ class SMSService {
             switch (SMS_CONFIG.provider) {
                 case 'twilio':
                     result = await this.sendViaTwilio(formattedNumber, message);
-                    break;
-                case 'nexmo':
-                    result = await this.sendViaNexmo(formattedNumber, message);
                     break;
                 case 'termii':
                     result = await this.sendViaTermii(formattedNumber, message);
@@ -118,39 +110,6 @@ class SMSService {
         } catch (error) {
             logger.error('Twilio SMS error:', error);
             return { success: false, message: error.message, provider: 'twilio' };
-        }
-    }
-    
-    /**
-     * Send SMS via Nexmo
-     */
-    static async sendViaNexmo(phoneNumber, message) {
-        try {
-            const Nexmo = require('nexmo');
-            const nexmo = new Nexmo({
-                apiKey: SMS_CONFIG.nexmo.apiKey,
-                apiSecret: SMS_CONFIG.nexmo.apiSecret
-            });
-            
-            return new Promise((resolve) => {
-                nexmo.sendSMS(
-                    SMS_CONFIG.nexmo.fromNumber,
-                    phoneNumber,
-                    message,
-                    (err, result) => {
-                        if (err) {
-                            logger.error('Nexmo SMS error:', err);
-                            resolve({ success: false, message: err.message, provider: 'nexmo' });
-                        } else {
-                            logger.info(`Nexmo SMS sent: ${result.messages[0]['message-id']}`);
-                            resolve({ success: true, id: result.messages[0]['message-id'], provider: 'nexmo' });
-                        }
-                    }
-                );
-            });
-        } catch (error) {
-            logger.error('Nexmo SMS error:', error);
-            return { success: false, message: error.message, provider: 'nexmo' };
         }
     }
     
